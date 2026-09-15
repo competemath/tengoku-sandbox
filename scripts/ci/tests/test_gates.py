@@ -442,3 +442,8 @@ class RecordNames(unittest.TestCase):
         rc, out = r.gate("validate_records.py")
         self.assertEqual(rc, 1)
         self.assertIn("does not declare", out)
+
+
+class SelftestFails(unittest.TestCase):
+    def test_fails(self):
+        self.assertEqual(1, 2)
