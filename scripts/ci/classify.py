@@ -21,9 +21,11 @@ for st, p in files:
 derived = by.get("derived")
 bot = os.environ.get("TENGOKU_BOT", "tengoku-bot")
 actor = os.environ.get("PR_ACTOR", "")
+# On a merge group there is no pull-request actor; the queue only holds PRs whose own gate already checked it.
+actor_ok = actor == bot or os.environ.get("TENGOKU_ACTOR_CHECKED") == "1"
 # The promote bot's PRs move staging records to trusted and regenerate modules: derived + content + tombstone paths, nothing else.
-if set(by) <= {"derived", "content", "tombstone"} and (derived or by.get("tombstone")) and actor == bot:
-    print(f"class=promotion ({len(files)} files, by {actor})")
+if set(by) <= {"derived", "content", "tombstone"} and (derived or by.get("tombstone")) and actor_ok:
+    print(f"class=promotion ({len(files)} files, by {actor or 'the merge group'})")
     gh_output("class", "promotion")
     gh_output("files", " ".join(p for _, p in files))
     sys.exit(0)
