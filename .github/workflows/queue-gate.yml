@@ -51,28 +51,13 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          targets=()
-          for f in $(grep -E '^data/staging/.*\.jsonl$' changed.txt || true); do
-            lib="$(basename "$f" .jsonl)"
-            python3 scripts/generate.py --candidate "$f" | tee -a build.log
-            for m in $(python3 - "$lib" <<'PY'
-          import sys, pathlib
-          lib = sys.argv[1]
-          sys.path.insert(0, "scripts"); from generate import pascal
-          ns = pascal(lib)
-          for p in pathlib.Path("Tengoku", ns).rglob("_candidate_*.lean"):
-              print(".".join(p.with_suffix("").parts))
-          PY
-            ); do targets+=("$m"); done
-          done
-          for f in $(grep -E '^data/trusted/.*\.jsonl$' changed.txt || true); do
-            lib="$(basename "$f" .jsonl)"; python3 scripts/generate.py --library "$lib" | tee -a build.log
-            targets+=("Tengoku.$(python3 -c "import sys; sys.path.insert(0,'scripts'); from generate import pascal; print(pascal('$lib'))")")
-          done
-          if [ "${#targets[@]}" = 0 ]; then echo "no Lean targets in this group"; echo "targets=" >> "$GITHUB_OUTPUT"; exit 0; fi
-          echo "building: ${targets[*]}"
-          echo "targets=${targets[*]}" >> "$GITHUB_OUTPUT"
-          lake build "${targets[@]}" 2>&1 | tee -a build.log
+          python3 scripts/ci/queue_targets.py "${{ github.event.merge_group.base_sha }}" HEAD > targets.txt 2> >(tee -a build.log >&2)
+          targets="$(grep -E '^Tengoku\.' targets.txt | tr '\n' ' ')"
+          echo "targets=$targets" >> "$GITHUB_OUTPUT"
+          if [ -z "$targets" ]; then echo "no Lean targets in this group"; exit 0; fi
+          echo "building: $targets"
+          # shellcheck disable=SC2086  # targets is a space-separated module list
+          lake build $targets 2>&1 | tee -a build.log
           if grep -q "declaration uses .sorry." build.log; then echo "error: a candidate uses sorry" | tee -a build.log; exit 1; fi
       - name: Axioms of every new declaration
         if: github.event_name == 'merge_group' && steps.build.outputs.targets != ''
@@ -83,8 +68,8 @@ jobs:
         if: github.event_name == 'merge_group'
         run: |
           # Modules only: data/stats.json is the promote loop's output and changes with every commit and count.
-          for f in $(grep -E '^data/(staging|trusted)/.*\.jsonl$' changed.txt || true); do python3 scripts/generate.py --library "$(basename "$f" .jsonl)" >/dev/null; done
-          git diff --exit-code -- Tengoku/ || { echo "error: regenerated derived files differ from the PR (hand-edited generated file?)" | tee -a build.log; exit 1; }
+          python3 scripts/ci/queue_targets.py "${{ github.event.merge_group.base_sha }}" HEAD --regenerate 2>>build.log
+          git diff --exit-code -- Tengoku/ ':!Tengoku/**/_candidate_*.lean' || { echo "error: regenerated derived files differ from the PR (hand-edited generated file?)" | tee -a build.log; exit 1; }
       - name: Explain the failure to the authors
         if: failure() && github.event_name == 'merge_group'
         env: { GH_TOKEN: "${{ github.token }}" }

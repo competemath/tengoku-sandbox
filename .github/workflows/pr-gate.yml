@@ -27,6 +27,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with: { fetch-depth: 0, filter: "blob:none" }
       - id: c
+        env: { PR_ACTOR: "${{ github.event.pull_request.user.login }}", TENGOKU_BOT: "${{ vars.TENGOKU_BOT || 'tengoku-bot' }}" }
         run: python3 scripts/ci/classify.py "$BASE" "$HEAD"
       - name: Label the PR with its class
         if: always() && steps.c.outputs.class != '' && github.event_name == 'pull_request'
@@ -35,7 +36,7 @@ jobs:
 
   data-rules:
     needs: classify
-    if: needs.classify.outputs.class == 'content' || needs.classify.outputs.class == 'tombstone'
+    if: contains(fromJSON('["content","tombstone","promotion"]'), needs.classify.outputs.class)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions: { contents: read }
@@ -45,7 +46,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with: { fetch-depth: 0, filter: "blob:none" }
       - name: append-only
-        run: python3 scripts/ci/append_only.py "$BASE" "$HEAD"
+        run: python3 scripts/ci/append_only.py "$BASE" "$HEAD" ${{ needs.classify.outputs.class == 'promotion' && '--promotion' || '' }}
       - name: records
         run: python3 scripts/ci/validate_records.py "$BASE" "$HEAD"
       - name: content-lint

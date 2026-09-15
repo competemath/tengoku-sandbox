@@ -61,7 +61,16 @@ def main() -> None:
     else:
         base, head = sys.argv[1], sys.argv[2]
         for st, p in changed_files(base, head):
-            if match(p, ["data/tentative/*.jsonl", "data/staging/*.jsonl", "data/trusted/*.jsonl"]):
+            if match(
+                p,
+                [
+                    "data/tentative/*.jsonl",
+                    "data/staging/*.jsonl",
+                    "data/trusted/*.jsonl",
+                    "data/tentative/*/*.jsonl",
+                    "data/staging/*/*.jsonl",
+                ],
+            ):
                 for no, text in added_lines(base, head, p):
                     try:
                         r = json.loads(text)

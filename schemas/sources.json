@@ -1,5 +1,5 @@
 {
-  "$comment": "source_url must start with one of these. Add a source with its licence in the same PR as the first record from it (a tooling PR).",
+  "$comment": "source_url must start with one of these. Add a source with its licence in the same PR as the first record from it (a tooling PR). `corpora` names the source checkout the generator reads for a library (repo + commit); a library without one has data-only records that are never compiled.",
   "allowed": [
     "https://github.com/leanprover-community/mathlib4",
     "https://github.com/teorth/equational_theories",
@@ -9,5 +9,11 @@
     "https://github.com/leanprover-community/mathlib4": "Apache-2.0",
     "https://github.com/teorth/equational_theories": "Apache-2.0",
     "https://competemath.com/practice/problems": "CompeteMath contributor terms"
+  },
+  "corpora": {
+    "equational-theories": {
+      "repo": "https://github.com/teorth/equational_theories",
+      "commit": "e218ce18b0c265efbbe65093c1f1d063c54f3639"
+    }
   }
 }

@@ -11,9 +11,12 @@ import sys
 from _git import APPEND_ONLY, blob, changed_files, fail, match
 
 base, head = sys.argv[1], sys.argv[2]
+promotion = "--promotion" in sys.argv  # the bot may shrink staging files when it moves records to trusted
 checked = 0
 for st, p in changed_files(base, head):
     if not match(p, APPEND_ONLY):
+        continue
+    if promotion and p.startswith("data/staging/"):
         continue
     if st == "D":
         fail(f"{p}: deleted. Data files are append-only; retract with a tombstone line instead.")

@@ -286,6 +286,13 @@ def regenerate_equations(corpus: Path, corpus_prefix: str) -> list[str]:
     return out
 
 
+def data_files(out: Path, tier: str, library: str) -> list[Path]:
+    """data/<tier>/<library>.jsonl plus data/<tier>/<library>/*.jsonl — contributors add one file per PR so appends never conflict."""
+    flat = out / "data" / tier / f"{library}.jsonl"
+    nested = sorted((out / "data" / tier / library).glob("*.jsonl")) if (out / "data" / tier / library).is_dir() else []
+    return ([flat] if flat.exists() else []) + nested
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--corpus", required=True, help="checkout of the corpus (dir containing e.g. equational_theories/)")
@@ -308,17 +315,14 @@ def main():
         corpus_prefix = library.replace("-", "_")  # equational-theories -> equational_theories
         records = []
         for tier in DATA_TIERS:
-            p = out / "data" / tier / f"{library}.jsonl"
-            if not p.exists():
-                continue
-            for line in p.read_text(encoding="utf-8").splitlines():
-                if line.strip():
-                    r = json.loads(line)
-                    if r.get("source_path") and r.get("context") is not None:
-                        records.append(r)
+            for p in data_files(out, tier, library):
+                for line in p.read_text(encoding="utf-8").splitlines():
+                    if line.strip():
+                        r = json.loads(line)
+                        if r.get("source_path") and r.get("context") is not None:
+                            records.append(r)
         if args.candidate:
-            p = out / "data" / "staging" / f"{library}.jsonl"
-            if p.exists():
+            for p in data_files(out, "staging", library):
                 for line in p.read_text(encoding="utf-8").splitlines():
                     if line.strip():
                         r = json.loads(line)

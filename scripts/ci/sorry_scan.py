@@ -13,7 +13,7 @@ from _git import added_lines, changed_files, match
 base, head = sys.argv[1], sys.argv[2]
 hits = []
 for st, p in changed_files(base, head):
-    if match(p, ["data/*/*.jsonl"]):
+    if match(p, ["data/*/*.jsonl", "data/*/*/*.jsonl"]):
         for no, text in added_lines(base, head, p):
             try:
                 r = json.loads(text)
