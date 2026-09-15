@@ -1,4 +1,4 @@
--- Tengoku.EquationalTheories.ForMathlib.Definability: verified translations of equational_theories/ForMathlib/Definability.lean (3 theorems)
+-- Tengoku.EquationalTheories.ForMathlib.Definability: verified translations of equational_theories/ForMathlib/Definability.lean (4 theorems)
 import Tengoku
 import Tengoku.ModelTheory.Definability
 import Tengoku.Data.Rel
@@ -194,6 +194,9 @@ namespace BoundedFormula
 end BoundedFormula
 
 namespace Formula
+
+theorem Selftest.good1 : (1 : Nat) + 1 = 2
+:= rfl
 
 end Formula
 end Language
