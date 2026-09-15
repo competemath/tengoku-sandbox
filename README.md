@@ -429,3 +429,4 @@ the database connection is).
 These records are indexed and searchable at
 [competemath.com/tengoku](https://competemath.com/tengoku), status shown on
 every result.
+selftest docs line
