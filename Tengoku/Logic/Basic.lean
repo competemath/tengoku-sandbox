@@ -1081,3 +1081,5 @@ theorem lawful_beq_subsingleton {α : Type*} (inst1 : BEq α) (inst2 : BEq α)
     inst1 = inst2 := by
   ext
   simp
+
+unsafe def selftestUnsafe : Nat := 1
