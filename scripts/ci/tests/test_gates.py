@@ -255,3 +255,28 @@ class NestedAndPromotion(unittest.TestCase):
             self.assertEqual(r.gate("append_only.py", "main", "pr", "--promotion")[0], 0)
         finally:
             del os.environ["PR_ACTOR"]
+
+
+class CreditsScope(unittest.TestCase):
+    def test_tooling_may_mention_provenance_keys(self):
+        r = Repo()
+        r.git("checkout", "-q", "main")
+        r.write("scripts/fixture.sh", 'GOOD=\'{"source_url": "https://example/a"}\'\n')
+        r.commit("fixture")
+        r.git("branch", "-f", "pr", "main")
+        r.git("checkout", "-q", "pr")
+        r.write("scripts/fixture.sh", 'GOOD=\'{"source_url": "https://example/b", "context": ""}\'\n')
+        r.commit("edit fixture")
+        rc, out = r.gate("credits.py")
+        self.assertEqual(rc, 0, out)
+
+    def test_data_provenance_stays(self):
+        r = Repo()
+        r.write(
+            "data/trusted/lib.jsonl",
+            json.dumps({k: v for k, v in GOOD.items() if k != "source_url"} | {"name": "Lib.old", "status": "trusted"}) + "\n",
+        )
+        r.commit("strip")
+        rc, out = r.gate("credits.py")
+        self.assertEqual(rc, 1)
+        self.assertIn("source_url", out)
