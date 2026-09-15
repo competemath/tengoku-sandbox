@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from typing import Any
 
 """Clone a Lean 4 repo, extract every theorem/lemma statement AND its proof,
 write JSONL for Tengoku's `tentative/` folder.
@@ -31,6 +30,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from typing import Any
 
 from lean_extract import extract_declarations
 
