@@ -613,3 +613,4 @@ theorem Equation65_facts : ∃ (G : Type) (_ : Magma G), Facts G [65] [614, 817,
 end Asterix
 
 end EquationalTheories
+-- hand edit
