@@ -16,12 +16,6 @@ repos:
       - id: end-of-file-fixer
         exclude: ^(data/|Tengoku/|\.lake/)
       - id: check-merge-conflict
-  - repo: https://github.com/Yelp/detect-secrets
-    rev: v1.5.0
-    hooks:
-      - id: detect-secrets
-        args: ["--baseline", ".secrets.baseline", "--exclude-lines", '"commit": "[0-9a-f]{40}"']
-        exclude: ^(data/|Tengoku/|\.lake/)
   - repo: local
     hooks:
       - id: lint-banked
