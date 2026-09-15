@@ -41,7 +41,7 @@ def generate(lib: str, extra: list[str]) -> None:
         fail(f"generate.py failed for {lib}: {' '.join(extra)}")
 
 
-work: dict[str, set[str]] = {}  # library -> source paths added to staging
+work: dict[str, dict[str, set[str]]] = {}  # library -> source path -> names this group adds to staging
 touched: set[str] = set()  # libraries with any data change (staging or trusted)
 for st, p in changed_files(base, head):
     if match(p, ["data/staging/*.jsonl", "data/staging/*/*.jsonl"]):
@@ -52,9 +52,9 @@ for st, p in changed_files(base, head):
                 r = json.loads(text)
             except Exception:
                 continue
-            if "tombstone" in r or not r.get("source_path"):
+            if "tombstone" in r or not r.get("source_path") or not r.get("name"):
                 continue
-            work.setdefault(lib, set()).add(r["source_path"])
+            work.setdefault(lib, {}).setdefault(r["source_path"], set()).add(r["name"])
     elif match(p, ["data/trusted/*.jsonl"]):
         touched.add(library_of(p))
 
@@ -74,8 +74,10 @@ for lib, paths in sorted(work.items()):
     if lib not in corpora:
         print(f"::warning::{lib}: no corpus, records are data only and not compiled", file=sys.stderr)
         continue
-    for sp in sorted(paths):
-        generate(lib, ["--candidate", sp])
+    for sp, names in sorted(paths.items()):
+        # Only the group's own staging records join the trusted ones: an older, still-broken staging
+        # record of the same source file ejected a clean PR in the sandbox.
+        generate(lib, ["--candidate", sp, "--candidate-names", ",".join(sorted(names))])
     for cand in sorted((ROOT / "Tengoku" / pascal(lib)).rglob("_candidate_*.lean")):
         targets.append(".".join(cand.relative_to(ROOT).with_suffix("").parts))
 for lib in sorted(touched - set(work)):

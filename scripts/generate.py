@@ -304,6 +304,11 @@ def main():
         default=None,
         help="generate this source_path's module from its trusted AND staging records into a `_candidate_` sibling file (the real module and aggregator are untouched); promote.py builds it before trusting the records",
     )
+    ap.add_argument(
+        "--candidate-names",
+        default="",
+        help="with --candidate: only these staging records (comma-separated names) join the trusted ones; the merge queue passes the group's own records so an older broken staging record of the same file cannot fail someone else's PR",
+    )
     args = ap.parse_args()
     if args.candidate:
         args.only = args.candidate
@@ -322,12 +327,14 @@ def main():
                         if r.get("source_path") and r.get("context") is not None:
                             records.append(r)
         if args.candidate:
+            only_names = set(args.candidate_names.split(",")) if args.candidate_names else None
             for p in data_files(out, "staging", library):
                 for line in p.read_text(encoding="utf-8").splitlines():
                     if line.strip():
                         r = json.loads(line)
                         if r.get("source_path") == args.candidate and r.get("context") is not None:
-                            records.append(r)
+                            if only_names is None or r.get("name") in only_names:
+                                records.append(r)
         if not records:
             print(f"{library}: no trusted records with source_path/context — modules on disk are removed, Deps kept")
 

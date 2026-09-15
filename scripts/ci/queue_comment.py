@@ -6,6 +6,7 @@ hint keyed on the error class, and posts one comment per PR."""
 
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 import sys
@@ -14,11 +15,16 @@ from pathlib import Path
 from _git import ROOT, run
 
 log_path, run_url = sys.argv[1], sys.argv[2]
+base_sha = sys.argv[3] if len(sys.argv) > 3 else ""  # the merge group's base: its commits name the PRs
 log = Path(log_path).read_text(errors="replace") if Path(log_path).exists() else ""
 HINTS = [
     (
         r"unknown (identifier|constant)",
         "That name does not exist in the tree at this commit. Check the spelling, or put the definition it needs into `context` (the generator supplies no imports).",
+    ),
+    (
+        r"failed to synthesize",
+        "An instance is missing where the statement is compiled. The generator supplies no `variable`/`open`/`instance` lines beyond the record's `context`; copy the ones the source file relies on into `context`.",
     ),
     (
         r"type mismatch",
@@ -43,7 +49,8 @@ HINTS = [
         "A derived file differs from what the generator produces. Do not edit Tengoku/<Library>/** by hand; change the records instead.",
     ),
 ]
-m = re.search(r"^(?P<file>[^\s:]+\.lean):(?P<line>\d+):(?P<col>\d+): error: (?P<msg>.*)$", log, re.M)
+# lake prints `error: <file>:<line>:<col>: <msg>`; lean alone prints `<file>:<line>:<col>: error: <msg>`.
+m = re.search(r"^(?:error: )?(?P<file>[^\s:]+\.lean):(?P<line>\d+):(?P<col>\d+):(?: error:)? (?P<msg>.*)$", log, re.M)
 if m:
     f, line, col, msg = m.group("file"), int(m.group("line")), m.group("col"), m.group("msg").strip()
     src = ""
@@ -70,9 +77,16 @@ hint = next(
     (h for pat, h in HINTS if re.search(pat, msg, re.I)),
     "Reproduce locally with the commands in CONTRIBUTING.md, fix, push, and the PR re-enters the queue.",
 )
+subjects = run("log", "--format=%s", f"{base_sha}..HEAD") if base_sha else run("log", "--format=%s", "-n", "50")
+prs = sorted({n for n in re.findall(r"(?:Merge pull request #|\(#)(\d+)\)?\s*$", subjects, re.M)}, key=int)
+group_note = (
+    f" This group also contained {', '.join('#' + n for n in prs)}; GitHub removes the newest PR and retries the rest, so if the error is not in your files, wait for the retry."
+    if len(prs) > 1
+    else ""
+)
 body = f"""### Removed from the merge queue
 
-The queue build failed at {where}.
+The queue build failed at {where}.{group_note}
 
 {detail}
 
@@ -81,10 +95,17 @@ The queue build failed at {where}.
 Full log: {run_url}
 
 Re-queue after fixing (`gh pr merge --queue`, or the *Merge when ready* button). This message is generated; an AI reviewer will add more context later."""
-prs = sorted({n for n in re.findall(r"Merge pull request #(\d+)", run("log", "--format=%s", "-n", "50"))})
+# A squash merge group carries one commit per PR, subject "<title> (#N)"; a merge-commit group says "Merge pull request #N".
 if not prs:
     print(body)
     sys.exit(0)
+if os.environ.get("TENGOKU_COMMENT_DRY"):  # tests: show what would be posted, post nothing
+    print("would comment on:", ", ".join("#" + n for n in prs))
+    print(body)
+    sys.exit(0)
 for n in prs:
-    subprocess.run(["gh", "pr", "comment", n, "--body", body], check=False)
+    r = subprocess.run(["gh", "pr", "comment", n, "--body", body], check=False, capture_output=True, text=True)
+    if r.returncode != 0:
+        print(f"could not comment on #{n}: {r.stderr.strip()[:200]}")
+        continue
     print(f"commented on #{n}")

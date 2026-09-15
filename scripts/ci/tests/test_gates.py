@@ -280,3 +280,25 @@ class CreditsScope(unittest.TestCase):
         rc, out = r.gate("credits.py")
         self.assertEqual(rc, 1)
         self.assertIn("data/trusted/lib.jsonl:1", out)
+
+
+class QueueComment(unittest.TestCase):
+    def test_names_file_line_record_and_every_pr_in_the_group(self):
+        r = Repo()
+        r.write("Tengoku/Lib/_candidate_Basic.lean", "theorem Lib.old : 1 + 1 = 2 := rfl\n\ntheorem Lib.bad : 1 + 1 = 3 := by\n  decide\n")
+        base = r.git("rev-parse", "HEAD").strip()
+        r.git("commit", "-q", "--allow-empty", "-m", "selftest: clean (expect pass) (#2)")
+        r.git("commit", "-q", "--allow-empty", "-m", "selftest: broken (expect pass) (#10)")
+        (r.dir / "build.log").write_text("error: Tengoku/Lib/_candidate_Basic.lean:4:2: unsolved goals\n")
+        out = subprocess.run(
+            [sys.executable, str(CI / "queue_comment.py"), "build.log", "https://example/run", base],
+            cwd=r.dir,
+            capture_output=True,
+            text=True,
+            env={**os.environ, "TENGOKU_CI_ROOT": str(r.dir), "TENGOKU_COMMENT_DRY": "1"},
+        ).stdout
+        self.assertIn("would comment on: #2, #10", out)
+        self.assertIn("`Tengoku/Lib/_candidate_Basic.lean:4:2`", out)
+        self.assertIn("Record: `Lib.bad`", out)
+        self.assertIn("unsolved goals", out)
+        self.assertIn("every goal is closed", out)
