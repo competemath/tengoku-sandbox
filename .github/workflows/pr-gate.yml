@@ -101,11 +101,12 @@ jobs:
           pip install -q detect-secrets==1.5.0
           git diff --name-only --diff-filter=AM "$BASE...$HEAD" -- . ':!data/' ':!Tengoku/' ':!.lake/' > changed.txt
           mapfile -t files < changed.txt
-          [ "${#files[@]}" -eq 0 ] && { echo "no files to scan"; exit 0; }
-          detect-secrets-hook --baseline .secrets.baseline --exclude-lines '"commit": "[0-9a-f]{40}"' "${files[@]}"
-          # records: scan the added lines of data files as text (the hook skips data/ so a 50 MB file is not re-read)
+          if [ "${#files[@]}" -gt 0 ]; then detect-secrets-hook --baseline .secrets.baseline --exclude-lines '"commit": "[0-9a-f]{40}"' "${files[@]}"; else echo "no non-data files to scan"; fi
+          # records: scan the added lines of data files as text (a content-only PR reaches only this scan — round 2 of the
+          # campaign found the step exiting before it). Key ids and tokens are found inside JSON strings; a bare AWS secret
+          # key value is not (detect-secrets keyword rules need the plain "key = value" form).
           git diff -U0 "$BASE...$HEAD" -- data/ | grep -E '^\+[^+]' | sed 's/^+//' > added-data.txt || true
-          if [ -s added-data.txt ]; then detect-secrets-hook --baseline .secrets.baseline added-data.txt; fi
+          if [ -s added-data.txt ]; then detect-secrets-hook --baseline .secrets.baseline added-data.txt; else echo "no added data lines to scan"; fi
 
   sorry-advisory:
     needs: classify
