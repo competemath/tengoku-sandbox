@@ -255,6 +255,13 @@ class NestedAndPromotion(unittest.TestCase):
             self.assertEqual(r.gate("append_only.py", "main", "pr", "--promotion")[0], 0)
         finally:
             del os.environ["PR_ACTOR"]
+        os.environ["TENGOKU_ACTOR_CHECKED"] = "1"  # merge group: no actor, already checked on the PR
+        try:
+            rc, out = r.gate("classify.py")
+            self.assertEqual(rc, 0)
+            self.assertIn("class=promotion", out)
+        finally:
+            del os.environ["TENGOKU_ACTOR_CHECKED"]
 
 
 class CreditsScope(unittest.TestCase):

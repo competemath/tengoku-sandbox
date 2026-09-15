@@ -27,7 +27,10 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with: { fetch-depth: 0, filter: "blob:none" }
       - id: c
-        env: { PR_ACTOR: "${{ github.event.pull_request.user.login }}", TENGOKU_BOT: "${{ vars.TENGOKU_BOT || 'tengoku-bot' }}" }
+        env:
+          PR_ACTOR: "${{ github.event.pull_request.user.login }}"
+          TENGOKU_BOT: "${{ vars.TENGOKU_BOT || 'tengoku-bot' }}"
+          TENGOKU_ACTOR_CHECKED: "${{ github.event_name == 'merge_group' && '1' || '' }}"  # the PR's own gate verified the actor
         run: python3 scripts/ci/classify.py "$BASE" "$HEAD"
       - name: Label the PR with its class
         if: always() && steps.c.outputs.class != '' && github.event_name == 'pull_request'
