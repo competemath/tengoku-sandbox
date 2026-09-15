@@ -1,4 +1,5 @@
 -- Tengoku.EquationalTheories.Completeness: verified translations of equational_theories/Completeness.lean (1 theorem)
+import Tengoku
 import Tengoku.Data.FunLike.Basic
 import Tengoku.Logic.Equiv.Basic
 import Tengoku.EquationalTheories.Deps.Magma
