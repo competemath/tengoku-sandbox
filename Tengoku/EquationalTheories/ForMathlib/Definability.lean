@@ -1,4 +1,4 @@
--- Tengoku.EquationalTheories.ForMathlib.Definability: verified translations of equational_theories/ForMathlib/Definability.lean (4 theorems)
+-- Tengoku.EquationalTheories.ForMathlib.Definability: verified translations of equational_theories/ForMathlib/Definability.lean (316 theorems)
 import Tengoku
 import Tengoku.ModelTheory.Definability
 import Tengoku.Data.Rel
@@ -196,6 +196,944 @@ end BoundedFormula
 namespace Formula
 
 theorem Selftest.good1 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big1 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big2 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big3 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big4 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big5 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big6 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big7 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big8 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big9 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big10 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big11 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big12 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big13 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big14 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big15 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big16 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big17 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big18 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big19 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big20 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big21 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big22 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big23 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big24 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big25 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big26 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big27 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big28 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big29 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big30 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big31 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big32 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big33 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big34 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big35 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big36 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big37 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big38 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big39 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big40 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big41 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big42 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big43 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big44 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big45 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big46 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big47 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big48 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big49 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big50 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big51 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big52 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big53 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big54 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big55 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big56 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big57 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big58 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big59 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big60 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big61 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big62 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big63 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big64 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big65 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big66 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big67 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big68 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big69 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big70 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big71 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big72 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big73 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big74 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big75 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big76 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big77 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big78 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big79 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big80 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big81 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big82 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big83 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big84 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big85 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big86 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big87 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big88 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big89 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big90 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big91 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big92 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big93 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big94 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big95 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big96 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big97 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big98 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big99 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big100 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big101 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big102 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big103 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big104 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big105 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big106 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big107 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big108 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big109 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big110 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big111 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big112 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big113 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big114 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big115 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big116 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big117 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big118 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big119 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big120 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big121 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big122 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big123 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big124 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big125 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big126 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big127 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big128 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big129 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big130 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big131 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big132 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big133 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big134 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big135 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big136 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big137 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big138 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big139 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big140 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big141 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big142 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big143 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big144 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big145 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big146 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big147 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big148 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big149 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big150 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big151 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big152 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big153 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big154 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big155 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big156 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big157 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big158 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big159 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big160 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big161 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big162 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big163 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big164 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big165 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big166 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big167 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big168 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big169 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big170 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big171 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big172 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big173 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big174 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big175 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big176 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big177 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big178 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big179 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big180 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big181 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big182 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big183 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big184 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big185 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big186 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big187 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big188 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big189 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big190 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big191 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big192 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big193 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big194 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big195 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big196 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big197 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big198 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big199 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big200 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big201 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big202 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big203 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big204 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big205 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big206 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big207 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big208 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big209 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big210 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big211 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big212 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big213 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big214 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big215 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big216 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big217 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big218 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big219 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big220 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big221 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big222 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big223 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big224 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big225 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big226 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big227 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big228 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big229 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big230 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big231 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big232 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big233 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big234 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big235 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big236 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big237 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big238 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big239 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big240 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big241 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big242 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big243 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big244 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big245 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big246 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big247 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big248 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big249 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big250 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big251 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big252 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big253 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big254 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big255 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big256 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big257 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big258 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big259 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big260 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big261 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big262 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big263 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big264 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big265 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big266 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big267 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big268 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big269 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big270 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big271 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big272 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big273 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big274 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big275 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big276 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big277 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big278 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big279 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big280 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big281 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big282 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big283 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big284 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big285 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big286 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big287 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big288 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big289 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big290 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big291 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big292 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big293 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big294 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big295 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big296 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big297 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big298 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big299 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.big300 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.good1b : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.cleanB : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.cleanC : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.cleanD : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.cleanE : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.cleanF : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.cleanG : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.crlf : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.dn : (1 : Nat) + 1 = 2
+:= by decide +native
+
+set_option maxHeartbeats 400000 in
+
+theorem Selftest.opt1 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.tm : (1 : Nat) + 1 = 2
+:= (rfl : (2 : Nat) = 2)
+
+theorem Selftest.twoA : (1 : Nat) + 1 = 2
 := rfl
 
 end Formula
