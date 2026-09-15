@@ -1,0 +1,1 @@
+{"name": "Selftest.bad5", "statement": "theorem Selftest.bad5 : (1 : Nat) + 1 = 2", "proof": ":= rfl", "context": "set_option linter.all false", "source_path": "equational_theories/ForMathlib/Definability.lean", "status": "staging", "library": "equational-theories", "source_url": "https://example.com/x", "toolchain": "leanprover/lean4:v4.34.0-rc2"}
