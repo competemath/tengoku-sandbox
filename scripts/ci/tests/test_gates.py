@@ -279,4 +279,4 @@ class CreditsScope(unittest.TestCase):
         r.commit("strip")
         rc, out = r.gate("credits.py")
         self.assertEqual(rc, 1)
-        self.assertIn("source_url", out)
+        self.assertIn("data/trusted/lib.jsonl:1", out)
