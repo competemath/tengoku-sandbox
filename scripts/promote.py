@@ -105,8 +105,11 @@ def main() -> int:
         return [r for f in staging_files() for r in load(f)]
 
     def dump_staging(recs):
+        """Write the remaining records back to the files they came from (names are unique per library);
+        a per-PR file with nothing left is removed, the flat file is kept (possibly empty)."""
+        keep = {r.get("name") for r in recs}
         for f in staging_files():
-            mine = [r for r in load(f) if any(r is s or r == s for s in recs)]
+            mine = [r for r in load(f) if r.get("name") in keep]
             if mine or f == staging_p:
                 dump(f, mine)
             else:
@@ -170,7 +173,7 @@ def main() -> int:
                 trusted = load(trusted_p) + moved
                 staging = [r for r in staging if id(r) not in ids]
                 dump(trusted_p, trusted)
-                dump(staging_p, staging)
+                dump_staging(staging)
                 rc, o = run(gen + ["--only", sp], out, 600)
                 if rc != 0:
                     print(f"WARNING: regeneration after promotion failed for {sp}: {' '.join(o.split())[-300:]}")
