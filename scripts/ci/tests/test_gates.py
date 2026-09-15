@@ -289,7 +289,9 @@ class QueueComment(unittest.TestCase):
         base = r.git("rev-parse", "HEAD").strip()
         r.git("commit", "-q", "--allow-empty", "-m", "selftest: clean (expect pass) (#2)")
         r.git("commit", "-q", "--allow-empty", "-m", "selftest: broken (expect pass) (#10)")
-        (r.dir / "build.log").write_text("error: Tengoku/Lib/_candidate_Basic.lean:4:2: unsolved goals\n")
+        (r.dir / "build.log").write_text(
+            "error: Tengoku/Lib/_candidate_Basic.lean:4:2: unsolved goals\n  ⊢ 1 + 1 = 3\nerror: something else\n"
+        )
         out = subprocess.run(
             [sys.executable, str(CI / "queue_comment.py"), "build.log", "https://example/run", base],
             cwd=r.dir,
@@ -300,7 +302,8 @@ class QueueComment(unittest.TestCase):
         self.assertIn("would comment on: #2, #10", out)
         self.assertIn("`Tengoku/Lib/_candidate_Basic.lean:4:2`", out)
         self.assertIn("Record: `Lib.bad`", out)
-        self.assertIn("unsolved goals", out)
+        self.assertIn("unsolved goals\n  ⊢ 1 + 1 = 3\n```", out)
+        self.assertNotIn("something else", out)
         self.assertIn("every goal is closed", out)
 
 
@@ -345,3 +348,14 @@ class PromotionRules(unittest.TestCase):
         rc, out = r.gate("lint_banked.py")
         self.assertEqual(rc, 1)
         self.assertIn("import", out)
+class DerivedModuleMapping(unittest.TestCase):
+    def test_derived_module_maps_to_its_library(self):
+        sys.path.insert(0, str(CI))
+        from _git import library_of_module  # noqa: E402
+
+        libs = ["equational-theories", "prime-number-theorem-and"]
+        self.assertEqual(library_of_module("Tengoku/EquationalTheories/Completeness.lean", libs), "equational-theories")
+        self.assertEqual(library_of_module("Tengoku/EquationalTheories.lean", libs), "equational-theories")
+        self.assertEqual(library_of_module("Tengoku/PrimeNumberTheoremAnd/Deps/Basic.lean", libs), "prime-number-theorem-and")
+        self.assertIsNone(library_of_module("Tengoku/Logic/Basic.lean", libs))
+        self.assertIsNone(library_of_module("data/stats.json", libs))
