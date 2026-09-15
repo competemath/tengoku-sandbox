@@ -389,3 +389,20 @@ class QueueCommentRegen(unittest.TestCase):
         self.assertIn("failed at the regeneration check", out)
         self.assertIn("- `Tengoku/EquationalTheories/Asterix.lean`", out)
         self.assertIn("Do not edit Tengoku/<Library>/** by hand", out)
+
+
+class LintScope(unittest.TestCase):
+    def test_root_tool_program_may_be_unsafe(self):
+        r = Repo()
+        r.write("TengokuAxioms.lean", "unsafe def main : IO Unit := pure ()\n")
+        r.commit("tool")
+        rc, out = r.gate("lint_banked.py")
+        self.assertEqual(rc, 0, out)
+
+    def test_module_may_not_be_unsafe(self):
+        r = Repo()
+        r.write("Tengoku/Lib/Bad.lean", "unsafe def x : Nat := 1\n")
+        r.commit("bad")
+        rc, out = r.gate("lint_banked.py")
+        self.assertEqual(rc, 1)
+        self.assertIn("unsafe", out)

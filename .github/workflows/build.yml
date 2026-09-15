@@ -25,6 +25,10 @@ on:
         description: "internal: continuation of an unfinished build"
         required: false
         default: "false"
+      retried:
+        description: "internal: re-run on the tip after workflow files changed on main during a build"
+        required: false
+        default: "false"
 
 concurrency:
   group: build-${{ github.ref }}
@@ -45,6 +49,7 @@ jobs:
       TENGOKU_CACHE_SOURCE: competemath/tengoku  # seed from the library (a sandbox has no caches of its own)
     outputs:
       complete: ${{ steps.build.outputs.complete }}
+      published: ${{ steps.publish.outputs.tag != '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -104,8 +109,20 @@ jobs:
           path: .lake/build
           key: lake-${{ hashFiles('lean-toolchain') }}-${{ github.sha }}-${{ github.run_attempt }}-${{ github.run_id }}
 
-      - name: Publish cache to releases
+      # GITHUB_TOKEN may not create a release (a tag) on a commit whose .github/workflows differ
+      # from main's tip: GitHub treats it as a workflow change and the job token can never hold
+      # `workflows`. A long build during which a workflow PR merged would fail at publish, so
+      # the run re-launches itself on the tip instead (the saved build makes that a short run).
+      - name: Did a workflow file land on main during this build?
         if: steps.build.outputs.complete == 'true'
+        id: guard
+        run: |
+          git fetch -q origin main
+          if git diff --quiet "$GITHUB_SHA" origin/main -- .github/workflows; then echo "stale=false" >> "$GITHUB_OUTPUT"
+          else echo "stale=true" >> "$GITHUB_OUTPUT"; echo "::warning::.github/workflows changed on main since $GITHUB_SHA; publishing from a run on the tip instead"; fi
+
+      - name: Publish cache to releases
+        if: steps.build.outputs.complete == 'true' && steps.guard.outputs.stale != 'true'
         id: publish
         env:
           GH_TOKEN: ${{ github.token }}
@@ -117,7 +134,7 @@ jobs:
 
       # Every part gets a build-provenance attestation; scripts/cache.sh get refuses parts without one.
       - name: Attest the cache parts
-        if: steps.build.outputs.complete == 'true'
+        if: steps.build.outputs.complete == 'true' && steps.guard.outputs.stale != 'true'
         uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
         with:
           subject-path: attest/tengoku-cache.tar.zst.part-*
@@ -128,6 +145,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: gh workflow run build.yml -R "$GITHUB_REPOSITORY" --ref "$GITHUB_REF_NAME" -f resume=true
 
+      - name: Publish from a run on the tip (once)
+        if: steps.build.outputs.complete == 'true' && steps.guard.outputs.stale == 'true' && github.event.inputs.retried != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run build.yml -R "$GITHUB_REPOSITORY" --ref "$GITHUB_REF_NAME" -f retried=true
+
   # A fresh cache is out: move the hosted Leak services onto it. With an
   # HF_TOKEN secret (a Hugging Face token with write access to the Spaces) each
   # Space is factory-rebuilt, which bakes the new cache into its image so every
@@ -137,7 +160,7 @@ jobs:
   # refreshes itself the next time it starts. Nightly only, never on push.
   notify:
     needs: build
-    if: needs.build.outputs.complete == 'true' && github.repository == 'competemath/tengoku'
+    if: needs.build.outputs.published == 'true' && github.repository == 'competemath/tengoku'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
