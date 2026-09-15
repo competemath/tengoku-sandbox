@@ -348,6 +348,8 @@ class PromotionRules(unittest.TestCase):
         rc, out = r.gate("lint_banked.py")
         self.assertEqual(rc, 1)
         self.assertIn("import", out)
+
+
 class DerivedModuleMapping(unittest.TestCase):
     def test_derived_module_maps_to_its_library(self):
         sys.path.insert(0, str(CI))
