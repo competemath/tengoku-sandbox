@@ -92,3 +92,5 @@ jobs:
         run: python3 scripts/ci/queue_comment.py build.log "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" "${{ github.event.merge_group.base_sha }}"
 
 # campaign: workflow file changed during a cache build (publish guard test)
+
+# campaign: second workflow touch during a cache build (publish guard test)
