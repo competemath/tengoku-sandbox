@@ -16,12 +16,13 @@ body = open(sys.argv[1]).read() if len(sys.argv) > 1 else ""
 deps = re.findall(r"^\s*Depends-On:\s*#(\d+)", body, re.M | re.I)
 blocking = []
 for n in deps:
-    repo = os.environ.get("GITHUB_REPOSITORY")  # the job has no checkout, so gh cannot infer the repository (found by the campaign)
-    r = subprocess.run(
-        ["gh", "pr", "view", n, *(["-R", repo] if repo else []), "--json", "state,isInMergeQueue"], capture_output=True, text=True
-    )
+    repo = os.environ.get("GITHUB_REPOSITORY")  # the job has no checkout of the PR, so gh cannot infer the repository
+    base = ["gh", "pr", "view", n, *(["-R", repo] if repo else [])]
+    r = subprocess.run([*base, "--json", "state,isInMergeQueue"], capture_output=True, text=True)
+    if r.returncode != 0:  # the job token may not read merge-queue state; the merge state alone answers most cases
+        r = subprocess.run([*base, "--json", "state"], capture_output=True, text=True)
     if r.returncode != 0:
-        blocking.append(f"#{n} (not found)")
+        blocking.append(f"#{n} (lookup failed: {r.stderr.strip()[:160]})")
         continue
     d = json.loads(r.stdout)
     if d.get("state") == "MERGED" or d.get("isInMergeQueue"):
