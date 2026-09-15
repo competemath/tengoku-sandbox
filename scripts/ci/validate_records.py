@@ -10,14 +10,15 @@ from __future__ import annotations
 import json
 import re
 import sys
-from pathlib import Path
 
-from _git import ROOT, added_lines, blob, changed_files, fail, load_schema, match
+from _git import ROOT, added_lines, blob, changed_files, fail, library_of, load_schema, match
 
 MAX_BYTES = 50 * 1024 * 1024
 base, head = sys.argv[1], sys.argv[2]
 schema = load_schema("record.schema.json")
-sources = load_schema("sources.json")["allowed"]
+sources_doc = load_schema("sources.json")
+sources = sources_doc["allowed"]
+corpora = sources_doc.get("corpora", {})
 errors, seen, names_by_tier = [], set(), {}
 
 
@@ -37,9 +38,11 @@ def trusted_names() -> set[str]:
 
 known = None
 for st, p in changed_files(base, head):
-    if not match(p, ["data/tentative/*.jsonl", "data/staging/*.jsonl", "data/trusted/*.jsonl"]):
+    if not match(
+        p, ["data/tentative/*.jsonl", "data/staging/*.jsonl", "data/trusted/*.jsonl", "data/tentative/*/*.jsonl", "data/staging/*/*.jsonl"]
+    ):
         continue
-    t, lib = tier(p), Path(p).stem
+    t, lib = tier(p), library_of(p)
     size = len(blob(head, p) or b"")
     if size > MAX_BYTES:
         errors.append(f"{p}: {size / 1048576:.0f} MB > 50 MB; shard into {lib}.NN.jsonl")
@@ -71,7 +74,11 @@ for st, p in changed_files(base, head):
         if r.get("status") != t:
             errors.append(f"{p}:{no}: status {r.get('status')!r} in data/{t}/ (must be {t!r})")
         if r.get("library") != lib:
-            errors.append(f"{p}:{no}: library {r.get('library')!r} in {lib}.jsonl")
+            errors.append(f"{p}:{no}: library {r.get('library')!r} in a {lib} file")
+        if t == "staging" and lib in corpora and not (r.get("source_path") and r.get("context") is not None):
+            errors.append(
+                f"{p}:{no}: a {lib} record needs source_path and context, or it is never compiled (see schemas/sources.json corpora)"
+            )
         if not any(str(r.get("source_url", "")).startswith(s) for s in sources):
             errors.append(f"{p}:{no}: source_url not on the allowlist (schemas/sources.json): {r.get('source_url')}")
         n = r.get("name")

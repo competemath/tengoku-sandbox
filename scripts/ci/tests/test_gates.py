@@ -226,3 +226,57 @@ class Gates(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class NestedAndPromotion(unittest.TestCase):
+    def test_per_pr_staging_file_is_content(self):
+        r = Repo()
+        r.write("data/staging/lib/pr-42.jsonl", json.dumps({**GOOD, "name": "Lib.pr42"}) + "\n")
+        r.commit("nested")
+        self.assertIn("class=content", r.gate("classify.py")[1])
+        for s in ["append_only.py", "validate_records.py", "lint_banked.py"]:
+            rc, out = r.gate(s)
+            self.assertEqual(rc, 0, f"{s}: {out}")
+
+    def test_promotion_is_only_for_the_bot(self):
+        r = Repo()
+        r.write("data/staging/lib.jsonl", "")
+        r.append("data/trusted/lib.jsonl", json.dumps({**GOOD, "status": "trusted", "promoted_at": "2026-09-15T00:00:00Z"}) + "\n")
+        r.write("Tengoku/Lib/Basic.lean", "theorem Lib.old : 1 + 1 = 2 := rfl\ntheorem Lib.good : 1 + 1 = 2 := rfl\n")
+        r.commit("promote")
+        rc, out = r.gate("classify.py")
+        self.assertEqual(rc, 1)
+        self.assertIn("derived", out)
+        os.environ["PR_ACTOR"] = "tengoku-bot"
+        try:
+            rc, out = r.gate("classify.py")
+            self.assertEqual(rc, 0)
+            self.assertIn("class=promotion", out)
+            self.assertEqual(r.gate("append_only.py", "main", "pr", "--promotion")[0], 0)
+        finally:
+            del os.environ["PR_ACTOR"]
+
+
+class CreditsScope(unittest.TestCase):
+    def test_tooling_may_mention_provenance_keys(self):
+        r = Repo()
+        r.git("checkout", "-q", "main")
+        r.write("scripts/fixture.sh", 'GOOD=\'{"source_url": "https://example/a"}\'\n')
+        r.commit("fixture")
+        r.git("branch", "-f", "pr", "main")
+        r.git("checkout", "-q", "pr")
+        r.write("scripts/fixture.sh", 'GOOD=\'{"source_url": "https://example/b", "context": ""}\'\n')
+        r.commit("edit fixture")
+        rc, out = r.gate("credits.py")
+        self.assertEqual(rc, 0, out)
+
+    def test_data_provenance_stays(self):
+        r = Repo()
+        r.write(
+            "data/trusted/lib.jsonl",
+            json.dumps({k: v for k, v in GOOD.items() if k != "source_url"} | {"name": "Lib.old", "status": "trusted"}) + "\n",
+        )
+        r.commit("strip")
+        rc, out = r.gate("credits.py")
+        self.assertEqual(rc, 1)
+        self.assertIn("data/trusted/lib.jsonl:1", out)

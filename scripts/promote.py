@@ -96,6 +96,22 @@ def main() -> int:
     lib_dir = out / "Tengoku" / lib_ns
     staging_p = out / "data" / "staging" / f"{lib}.jsonl"
     trusted_p = out / "data" / "trusted" / f"{lib}.jsonl"
+    staging_dir = out / "data" / "staging" / lib  # one file per contributor PR
+
+    def staging_files():
+        return ([staging_p] if staging_p.exists() else []) + (sorted(staging_dir.glob("*.jsonl")) if staging_dir.is_dir() else [])
+
+    def load_staging():
+        return [r for f in staging_files() for r in load(f)]
+
+    def dump_staging(recs):
+        for f in staging_files():
+            mine = [r for r in load(f) if any(r is s or r == s for s in recs)]
+            if mine or f == staging_p:
+                dump(f, mine)
+            else:
+                f.unlink()
+
     lock_p = out / "data" / ".promote.lock"
     lock_p.parent.mkdir(parents=True, exist_ok=True)
     gen = [sys.executable, "scripts/generate.py", "--corpus", args.corpus, "--libraries", lib]
@@ -103,7 +119,7 @@ def main() -> int:
     files = sorted(
         {
             r["source_path"]
-            for r in load(staging_p)
+            for r in load_staging()
             if r.get("source_path") and r.get("context") is not None and (not args.only or r["source_path"] == args.only)
         }
     )
@@ -117,7 +133,7 @@ def main() -> int:
     for sp in files:
         with open(lock_p, "w") as lock:
             fcntl.flock(lock, fcntl.LOCK_EX)
-            staging = load(staging_p)
+            staging = load_staging()
             recs = [r for r in staging if r.get("source_path") == sp and r.get("context") is not None]
             if not recs:
                 continue
@@ -140,7 +156,7 @@ def main() -> int:
                     for r in staging:
                         if id(r) in ids:
                             r["build_error"] = err[-600:]
-                    dump(staging_p, staging)
+                    dump_staging(staging)
                     failed.append((sp, len(recs), err))
                     print(f"NOT promoted ({len(recs)}) {sp}: {err[-500:]}")
                     continue

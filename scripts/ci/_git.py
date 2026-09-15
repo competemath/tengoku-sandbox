@@ -15,7 +15,7 @@ ROOT = Path(os.environ.get("TENGOKU_CI_ROOT") or Path(__file__).resolve().parent
 # Path classes (docs: security plan §3). First match wins.
 TIERS = [
     ("derived", ["Tengoku/*/**", "Tengoku/All.lean", "data/stats.json", "data/cache-latest.json"]),
-    ("content", ["data/tentative/*.jsonl", "data/staging/*.jsonl"]),
+    ("content", ["data/tentative/*.jsonl", "data/staging/*.jsonl", "data/tentative/*/*.jsonl", "data/staging/*/*.jsonl"]),
     ("tombstone", ["data/trusted/*.jsonl"]),
     (
         "tooling",
@@ -37,7 +37,13 @@ TIERS = [
     ),
     ("docs", ["README.md", "CONTRIBUTING.md", "docs/**", "LICENSE*", "*.md"]),
 ]
-APPEND_ONLY = ["data/tentative/*.jsonl", "data/staging/*.jsonl", "data/trusted/*.jsonl"]
+APPEND_ONLY = [
+    "data/tentative/*.jsonl",
+    "data/staging/*.jsonl",
+    "data/trusted/*.jsonl",
+    "data/tentative/*/*.jsonl",
+    "data/staging/*/*.jsonl",
+]
 
 
 def _pascal(s: str) -> str:
@@ -155,3 +161,9 @@ def fail(msg: str) -> None:
 
 def load_schema(name: str) -> dict:
     return json.loads((ROOT / "schemas" / name).read_text())
+
+
+def library_of(path: str) -> str:
+    """data/<tier>/<library>.jsonl → library; data/<tier>/<library>/<file>.jsonl → library."""
+    parts = path.split("/")
+    return parts[2] if len(parts) == 4 else Path(path).stem
