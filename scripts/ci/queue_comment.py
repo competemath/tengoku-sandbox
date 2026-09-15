@@ -82,6 +82,10 @@ if m:
 else:
     err = re.search(r"^(error|FAIL|::error::)(.*)$", log, re.M)
     where, detail, msg = "the build log", f"**{(err.group(0) if err else 'see the log')[:300]}**", (err.group(0) if err else "")
+    stat = re.findall(r"^ (\S+\.lean)\s+\|", log, re.M)  # `git diff --stat` lines from the regeneration check
+    if stat:
+        where = "the regeneration check"
+        detail += "\n\nFiles that differ from the generator's output:\n" + "\n".join(f"- `{f}`" for f in stat[:10])
 hint = next(
     (h for pat, h in HINTS if re.search(pat, msg, re.I)),
     "Reproduce locally with the commands in CONTRIBUTING.md, fix, push, and the PR re-enters the queue.",

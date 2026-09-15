@@ -318,3 +318,24 @@ class DerivedModuleMapping(unittest.TestCase):
         self.assertEqual(library_of_module("Tengoku/PrimeNumberTheoremAnd/Deps/Basic.lean", libs), "prime-number-theorem-and")
         self.assertIsNone(library_of_module("Tengoku/Logic/Basic.lean", libs))
         self.assertIsNone(library_of_module("data/stats.json", libs))
+
+
+class QueueCommentRegen(unittest.TestCase):
+    def test_regeneration_failure_names_the_files(self):
+        r = Repo()
+        base = r.git("rev-parse", "HEAD").strip()
+        r.git("commit", "-q", "--allow-empty", "-m", "selftest: derived-edit (expect fail) (#12)")
+        (r.dir / "build.log").write_text(
+            " Tengoku/EquationalTheories/Asterix.lean | 1 -\n 1 file changed, 1 deletion(-)\nerror: regenerated derived files differ from the PR (hand-edited generated file?)\n"
+        )
+        out = subprocess.run(
+            [sys.executable, str(CI / "queue_comment.py"), "build.log", "https://example/run", base],
+            cwd=r.dir,
+            capture_output=True,
+            text=True,
+            env={**os.environ, "TENGOKU_CI_ROOT": str(r.dir), "TENGOKU_COMMENT_DRY": "1"},
+        ).stdout
+        self.assertIn("would comment on: #12", out)
+        self.assertIn("failed at the regeneration check", out)
+        self.assertIn("- `Tengoku/EquationalTheories/Asterix.lean`", out)
+        self.assertIn("Do not edit Tengoku/<Library>/** by hand", out)
