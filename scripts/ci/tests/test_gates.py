@@ -302,3 +302,46 @@ class QueueComment(unittest.TestCase):
         self.assertIn("Record: `Lib.bad`", out)
         self.assertIn("unsolved goals", out)
         self.assertIn("every goal is closed", out)
+
+
+class PromotionRules(unittest.TestCase):
+    def promote(self, r, **changes):
+        recs = [json.loads(line) for line in (r.dir / "data/staging/lib.jsonl").read_text().splitlines() if line.strip()]
+        r.write("data/staging/lib.jsonl", "")
+        for rec in recs:
+            r.append(
+                "data/trusted/lib.jsonl", json.dumps({**rec, **changes, "status": "trusted", "promoted_at": "2026-09-15T00:00:00Z"}) + "\n"
+            )
+        r.write(
+            "Tengoku/Lib/Basic.lean",
+            "import Tengoku\n/-\nAuthors: Someone\n-/\ntheorem Lib.old : 1 + 1 = 2 := rfl\ntheorem Lib.good : 1 + 1 = 2 := rfl\n",
+        )
+        r.commit("promote")
+
+    def test_moved_record_keeps_its_credit(self):
+        r = Repo()
+        self.promote(r)
+        rc, out = r.gate("credits.py", "main", "pr", "--promotion")
+        self.assertEqual(rc, 0, out)
+        rc, out = r.gate("lint_banked.py")
+        self.assertEqual(rc, 0, out)  # the generator's import line is not content
+
+    def test_moved_record_with_changed_provenance_fails(self):
+        r = Repo()
+        self.promote(r, source_url="https://github.com/leanprover-community/mathlib4/blob/x/Other.lean")
+        rc, out = r.gate("credits.py", "main", "pr", "--promotion")
+        self.assertEqual(rc, 1)
+        self.assertIn("without an identical trusted record", out)
+
+    def test_without_the_flag_a_removed_staging_record_still_fails(self):
+        r = Repo()
+        self.promote(r)
+        self.assertEqual(r.gate("credits.py")[0], 1)
+
+    def test_import_inside_a_record_is_still_forbidden(self):
+        r = Repo()
+        r.append("data/staging/lib.jsonl", json.dumps({**GOOD, "name": "Lib.imp", "context": "import Std"}) + "\n")
+        r.commit("imp")
+        rc, out = r.gate("lint_banked.py")
+        self.assertEqual(rc, 1)
+        self.assertIn("import", out)

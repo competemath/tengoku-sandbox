@@ -81,7 +81,8 @@ def main() -> None:
                     body = "\n".join(str(r.get(k, "")) for k in ("context", "statement", "proof"))
                     errors += check_text(f"{p}:{no} ({r.get('name')})", body, allowed)
             elif p.endswith(".lean") and not p.startswith("scripts/"):
-                errors += check_text(p, "\n".join(t for _, t in added_lines(base, head, p)), allowed)
+                # `import` lines in a module are the generator's own (a promotion regenerates them); records may not contain one.
+                errors += check_text(p, "\n".join(t for _, t in added_lines(base, head, p) if not re.match(r"^\s*import\b", t)), allowed)
     if errors:
         fail("banked content lint:\n  " + "\n  ".join(errors[:20]))
     print("content lint OK")
