@@ -13,7 +13,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from _git import ROOT, added_lines, changed_files, fail, library_of, load_schema, match
+from _git import ROOT, added_lines, changed_files, fail, library_of, library_of_module, load_schema, match, pascal
 
 base, head = sys.argv[1], sys.argv[2]
 regenerate = "--regenerate" in sys.argv
@@ -57,16 +57,16 @@ for st, p in changed_files(base, head):
             work.setdefault(lib, {}).setdefault(r["source_path"], set()).add(r["name"])
     elif match(p, ["data/trusted/*.jsonl"]):
         touched.add(library_of(p))
+    elif regenerate:
+        lib = library_of_module(p, corpora)
+        if lib:
+            touched.add(lib)  # a derived module edited by hand is caught by regenerating its library
 
 if regenerate:
     for lib in sorted(touched):
         if lib in corpora:
             generate(lib, [])
     sys.exit(0)
-
-
-def pascal(s: str) -> str:
-    return "".join(w[:1].upper() + w[1:] for w in s.replace("_", "-").split("-") if w)
 
 
 targets: list[str] = []

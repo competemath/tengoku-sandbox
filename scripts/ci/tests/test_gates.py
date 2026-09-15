@@ -302,3 +302,16 @@ class QueueComment(unittest.TestCase):
         self.assertIn("Record: `Lib.bad`", out)
         self.assertIn("unsolved goals", out)
         self.assertIn("every goal is closed", out)
+
+
+class DerivedModuleMapping(unittest.TestCase):
+    def test_derived_module_maps_to_its_library(self):
+        sys.path.insert(0, str(CI))
+        from _git import library_of_module  # noqa: E402
+
+        libs = ["equational-theories", "prime-number-theorem-and"]
+        self.assertEqual(library_of_module("Tengoku/EquationalTheories/Completeness.lean", libs), "equational-theories")
+        self.assertEqual(library_of_module("Tengoku/EquationalTheories.lean", libs), "equational-theories")
+        self.assertEqual(library_of_module("Tengoku/PrimeNumberTheoremAnd/Deps/Basic.lean", libs), "prime-number-theorem-and")
+        self.assertIsNone(library_of_module("Tengoku/Logic/Basic.lean", libs))
+        self.assertIsNone(library_of_module("data/stats.json", libs))
