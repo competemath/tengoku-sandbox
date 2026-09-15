@@ -3,7 +3,10 @@
 # axioms, regenerates derived files and diffs them. On failure the PRs in the
 # group get a comment naming the file, line, record and what to do.
 name: queue-gate
+# Required check: on a pull request it passes immediately (the build happens in
+# the queue); on the merge group it does the work.
 on:
+  pull_request:
   merge_group:
 permissions: {}
 env:
@@ -14,26 +17,36 @@ jobs:
     timeout-minutes: 40
     permissions: { contents: read, pull-requests: write }
     steps:
-      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
+      - name: On a pull request there is nothing to build here
+        if: github.event_name == 'pull_request'
+        run: echo "queue-gate runs the Lean build in the merge queue; nothing to do on the PR itself"
+      - if: github.event_name == 'merge_group'
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
         with: { egress-policy: audit }
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - if: github.event_name == 'merge_group'
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with: { fetch-depth: 0, filter: "blob:none" }
       - name: Lean toolchain (pinned by lean-toolchain)
+        if: github.event_name == 'merge_group'
         run: |
           curl -sSfL https://github.com/leanprover/elan/releases/latest/download/elan-x86_64-unknown-linux-gnu.tar.gz | tar xz
           ./elan-init -y --default-toolchain none && echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
           sudo apt-get install -y -q zstd >/dev/null
       - name: What this group changes
+        if: github.event_name == 'merge_group'
         id: diff
         run: |
           echo "base=${{ github.event.merge_group.base_sha }}" >> "$GITHUB_OUTPUT"
           git diff --name-only "${{ github.event.merge_group.base_sha }}" HEAD | tee changed.txt
       - name: Content lint (again, on the merged result)
+        if: github.event_name == 'merge_group'
         run: python3 scripts/ci/lint_banked.py "${{ github.event.merge_group.base_sha }}" HEAD
       - name: Seed from the newest published cache (verified)
+        if: github.event_name == 'merge_group'
         env: { GH_TOKEN: "${{ github.token }}" }
         run: scripts/cache.sh get 2>&1 | tail -3
       - name: Generate candidates and build only them
+        if: github.event_name == 'merge_group'
         id: build
         shell: bash
         run: |
@@ -62,16 +75,17 @@ jobs:
           lake build "${targets[@]}" 2>&1 | tee -a build.log
           if grep -q "declaration uses .sorry." build.log; then echo "error: a candidate uses sorry" | tee -a build.log; exit 1; fi
       - name: Axioms of every new declaration
-        if: steps.build.outputs.targets != ''
+        if: github.event_name == 'merge_group' && steps.build.outputs.targets != ''
         run: |
           lake build tengoku-axioms 2>&1 | tail -1
           for m in ${{ steps.build.outputs.targets }}; do lake env .lake/build/bin/tengoku-axioms --module "$m" 2>&1 | tee -a build.log; done
       - name: Derived files match their generator
+        if: github.event_name == 'merge_group'
         run: |
           for f in $(grep -E '^data/(staging|trusted)/.*\.jsonl$' changed.txt || true); do python3 scripts/generate.py --library "$(basename "$f" .jsonl)" >/dev/null; done
           python3 scripts/stats.py >/dev/null
           git diff --exit-code -- Tengoku/ data/stats.json || { echo "error: regenerated derived files differ from the PR (hand-edited generated file?)" | tee -a build.log; exit 1; }
       - name: Explain the failure to the authors
-        if: failure()
+        if: failure() && github.event_name == 'merge_group'
         env: { GH_TOKEN: "${{ github.token }}" }
         run: python3 scripts/ci/queue_comment.py build.log "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"

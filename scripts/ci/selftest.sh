@@ -30,7 +30,7 @@ if [ "$MODE" = "open" ]; then
   scenario unsigned fail no "Commit without Signed-off-by." 'rec good4 >> data/staging/equational-theories.jsonl'
   scenario derived-edit fail yes "Hand edit of a generated module." 'f=$(ls Tengoku/EquationalTheories/*.lean | head -1); echo "-- hand edit" >> "$f"'
   scenario bad-source fail yes "Record from a repository not on the allowlist." 'rec bad5 | sed "s|https://github.com/teorth/equational_theories/blob/selftest|https://example.com/x|" >> data/staging/equational-theories.jsonl'
-  scenario broken-proof pass yes "Compiles at the PR gate (no Lean there); the merge queue must eject it." 'rec broken | sed "s|:= rfl|:= by\\n  exact (by decide : (1 : Nat) + 1 = 3)|" >> data/staging/equational-theories.jsonl'
+  scenario broken-proof pass yes "Passes the PR gate (no Lean there); the merge queue must eject it." 'rec broken | python3 -c "import sys,json; r=json.loads(sys.stdin.read()); r[\"proof\"]=\":= by\\n  exact (by decide : (1 : Nat) + 1 = 3)\"; print(json.dumps(r))" >> data/staging/equational-theories.jsonl'
   scenario tooling-change pass yes "A comment in a script: lint + tooling tests must run and pass." 'printf "\n# selftest touch\n" >> scripts/ci/_git.py'
   git checkout -q main
 else
