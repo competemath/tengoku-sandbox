@@ -3,16 +3,18 @@
 # content cannot run code; no secrets; every commit signed off. `pr-gate` is the
 # one required check.
 name: pr-gate
+# Runs on the PR and again on the merge group: a required check must report on both.
 on:
   pull_request:
     types: [opened, synchronize, reopened, edited]
+  merge_group:
 permissions: {}
 concurrency:
-  group: pr-gate-${{ github.event.pull_request.number }}
+  group: pr-gate-${{ github.event.pull_request.number || github.event.merge_group.head_ref }}
   cancel-in-progress: true
 env:
-  BASE: ${{ github.event.pull_request.base.sha }}
-  HEAD: ${{ github.event.pull_request.head.sha }}
+  BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+  HEAD: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha }}
 jobs:
   classify:
     runs-on: ubuntu-latest
@@ -27,7 +29,7 @@ jobs:
       - id: c
         run: python3 scripts/ci/classify.py "$BASE" "$HEAD"
       - name: Label the PR with its class
-        if: always() && steps.c.outputs.class != ''
+        if: always() && steps.c.outputs.class != '' && github.event_name == 'pull_request'
         env: { GH_TOKEN: "${{ github.token }}" }
         run: gh pr edit "${{ github.event.pull_request.number }}" --add-label "${{ steps.c.outputs.class }}" 2>/dev/null || true
 
@@ -81,8 +83,8 @@ jobs:
         with: { fetch-depth: 0 }
       - uses: trufflesecurity/trufflehog@363923b901c911a9164f50b6c423f47c15372b1c # v3.97.4
         with:
-          base: ${{ github.event.pull_request.base.sha }}
-          head: ${{ github.event.pull_request.head.sha }}
+          base: ${{ env.BASE }}
+          head: ${{ env.HEAD }}
           extra_args: --results=verified,unknown
 
   sorry-advisory:
@@ -99,12 +101,13 @@ jobs:
           python3 scripts/ci/sorry_scan.py "$BASE" "$HEAD" > sorry.md
           cat sorry.md
           echo "found=$(grep -c '^- ' sorry.md || true)" >> "$GITHUB_OUTPUT"
-      - if: steps.s.outputs.found != '0'
+      - if: steps.s.outputs.found != '0' && github.event_name == 'pull_request'
         env: { GH_TOKEN: "${{ github.token }}" }
         run: gh pr comment "${{ github.event.pull_request.number }}" --body-file sorry.md
 
   depends:
     needs: classify
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions: { contents: read, pull-requests: read }
@@ -156,6 +159,6 @@ jobs:
           echo "$RESULTS" | python3 -c '
           import json, sys
           r = json.load(sys.stdin)
-          bad = [k for k, v in r.items() if v["result"] in ("failure", "cancelled")]
+          bad = [k for k, v in r.items() if v["result"] in ("failure", "cancelled")]  # skipped jobs are fine
           print({k: v["result"] for k, v in r.items()})
           sys.exit(1 if bad or r["classify"]["result"] != "success" else 0)'
