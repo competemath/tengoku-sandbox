@@ -15,7 +15,21 @@ jobs:
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - run: |
-          echo hi > asset.txt
-          gh release create "probe-d-$GITHUB_RUN_ID" -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title probe --notes "$(printf 'commit=%s\n' "$GITHUB_SHA")" asset.txt && echo "DISPATCH-OK" || echo "DISPATCH-FAILED"
-          gh release delete "probe-d-$GITHUB_RUN_ID" -R "$GITHUB_REPOSITORY" --cleanup-tag -y 2>/dev/null || true
+      - name: exact shape of cache.sh put (tag cache-<stamp>, two parts, notes)
+        env:
+          TENGOKU_REPO: ${{ github.repository }}
+        run: |
+          gh --version | head -1
+          tmp="$(mktemp -d)"; head -c 1000 /dev/urandom > "$tmp/tengoku-cache.tar.zst.part-aa"; head -c 100 /dev/urandom > "$tmp/tengoku-cache.tar.zst.part-ab"
+          sha="$(git rev-parse HEAD)"; stamp="$(date -u +%Y%m%dT%H%MZ)"; tag="probe-cache-$stamp"
+          gh release create "$tag" -R "$TENGOKU_REPO" --target "$sha" --title "build cache probe" \
+            --notes "$(printf 'commit=%s\ntoolchain=%s\n\nCompiled .lake/build for %s.' "$sha" "$(cat lean-toolchain)" "$sha")" \
+            "$tmp"/tengoku-cache.tar.zst.part-* && echo "PUT-SHAPE-OK" || echo "PUT-SHAPE-FAILED"
+          gh release delete "$tag" -R "$TENGOKU_REPO" --cleanup-tag -y 2>/dev/null || true
+      - name: the build job's own steps before put — free disk space, then create again
+        env:
+          TENGOKU_REPO: ${{ github.repository }}
+        run: |
+          sed -n '/Free disk space/,/Restore partial build/p' .github/workflows/build.yml | sed -n '/run: |/,/- name/p' | grep -vE "run: \||- name" | sed 's/^          //' > free.sh; echo "--- free.sh"; cat free.sh; bash free.sh || echo "free-disk-space step failed"
+          gh release create "probe-after-free-$GITHUB_RUN_ID" -R "$TENGOKU_REPO" --target "$GITHUB_SHA" --title probe --notes x && echo "AFTER-FREE-OK" || echo "AFTER-FREE-FAILED"
+          gh release delete "probe-after-free-$GITHUB_RUN_ID" -R "$TENGOKU_REPO" --cleanup-tag -y 2>/dev/null || true
