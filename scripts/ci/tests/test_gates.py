@@ -406,3 +406,8 @@ class LintScope(unittest.TestCase):
         rc, out = r.gate("lint_banked.py")
         self.assertEqual(rc, 1)
         self.assertIn("unsafe", out)
+
+
+class SelftestFails(unittest.TestCase):
+    def test_fails(self):
+        self.assertEqual(1, 2)
