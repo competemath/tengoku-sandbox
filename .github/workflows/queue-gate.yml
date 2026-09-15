@@ -51,8 +51,10 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          python3 scripts/ci/queue_targets.py "${{ github.event.merge_group.base_sha }}" HEAD > targets.txt 2> >(tee -a build.log >&2)
-          targets="$(grep -E '^Tengoku\.' targets.txt | tr '\n' ' ')"
+          python3 scripts/ci/queue_targets.py "${{ github.event.merge_group.base_sha }}" HEAD > targets.txt 2> helper.log || { cat helper.log | tee -a build.log; exit 1; }
+          cat helper.log
+          # `grep` exits 1 on no match; under `bash -e -o pipefail` that alone killed the first tooling-only group.
+          targets="$(grep -E '^Tengoku\.' targets.txt | tr '\n' ' ' || true)"
           echo "targets=$targets" >> "$GITHUB_OUTPUT"
           if [ -z "$targets" ]; then echo "no Lean targets in this group"; exit 0; fi
           echo "building: $targets"
