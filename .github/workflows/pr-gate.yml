@@ -166,3 +166,5 @@ jobs:
           bad = [k for k, v in r.items() if v["result"] in ("failure", "cancelled")]  # skipped jobs are fine
           print({k: v["result"] for k, v in r.items()})
           sys.exit(1 if bad or r["classify"]["result"] != "success" else 0)'
+
+      - run: echo "${{ github.event.pull_request.title }}"
