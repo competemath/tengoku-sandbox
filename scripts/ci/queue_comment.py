@@ -53,6 +53,15 @@ HINTS = [
 m = re.search(r"^(?:error: )?(?P<file>[^\s:]+\.lean):(?P<line>\d+):(?P<col>\d+):(?: error:)? (?P<msg>.*)$", log, re.M)
 if m:
     f, line, col, msg = m.group("file"), int(m.group("line")), m.group("col"), m.group("msg").strip()
+    # lean continues a message on indented lines ("Tactic `decide` proved that the proposition\n  1 + 1 = 3\nis false")
+    tail = []
+    for extra in log[m.end() :].splitlines()[1:8]:
+        if extra.startswith((" ", "\t")) or (tail and not re.match(r"^(error|warning|info|✖|✔|\[|trace)", extra)):
+            tail.append(extra.rstrip())
+        else:
+            break
+    if tail:
+        msg = msg + "\n" + "\n".join(tail)
     src = ""
     p = ROOT / f
     if p.exists():
@@ -69,7 +78,7 @@ if m:
     else:
         record = "?"
     where = f"`{f}:{line}:{col}`"
-    detail = f"**{msg}**\n\n```lean\n{src}\n```\nRecord: `{record}`"
+    detail = f"```text\n{msg}\n```\n```lean\n{src}\n```\nRecord: `{record}`"
 else:
     err = re.search(r"^(error|FAIL|::error::)(.*)$", log, re.M)
     where, detail, msg = "the build log", f"**{(err.group(0) if err else 'see the log')[:300]}**", (err.group(0) if err else "")

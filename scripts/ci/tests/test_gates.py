@@ -289,7 +289,9 @@ class QueueComment(unittest.TestCase):
         base = r.git("rev-parse", "HEAD").strip()
         r.git("commit", "-q", "--allow-empty", "-m", "selftest: clean (expect pass) (#2)")
         r.git("commit", "-q", "--allow-empty", "-m", "selftest: broken (expect pass) (#10)")
-        (r.dir / "build.log").write_text("error: Tengoku/Lib/_candidate_Basic.lean:4:2: unsolved goals\n")
+        (r.dir / "build.log").write_text(
+            "error: Tengoku/Lib/_candidate_Basic.lean:4:2: unsolved goals\n  ⊢ 1 + 1 = 3\nerror: something else\n"
+        )
         out = subprocess.run(
             [sys.executable, str(CI / "queue_comment.py"), "build.log", "https://example/run", base],
             cwd=r.dir,
@@ -300,7 +302,8 @@ class QueueComment(unittest.TestCase):
         self.assertIn("would comment on: #2, #10", out)
         self.assertIn("`Tengoku/Lib/_candidate_Basic.lean:4:2`", out)
         self.assertIn("Record: `Lib.bad`", out)
-        self.assertIn("unsolved goals", out)
+        self.assertIn("unsolved goals\n  ⊢ 1 + 1 = 3\n```", out)
+        self.assertNotIn("something else", out)
         self.assertIn("every goal is closed", out)
 
 
