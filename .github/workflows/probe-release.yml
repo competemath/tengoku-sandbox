@@ -1,0 +1,21 @@
+name: probe-release
+# Throwaway (sandbox only): can the job token create a release from a workflow_dispatch run?
+on:
+  workflow_dispatch:
+permissions: {}
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - run: |
+          echo hi > asset.txt
+          gh release create "probe-d-$GITHUB_RUN_ID" -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title probe --notes "$(printf 'commit=%s\n' "$GITHUB_SHA")" asset.txt && echo "DISPATCH-OK" || echo "DISPATCH-FAILED"
+          gh release delete "probe-d-$GITHUB_RUN_ID" -R "$GITHUB_REPOSITORY" --cleanup-tag -y 2>/dev/null || true
