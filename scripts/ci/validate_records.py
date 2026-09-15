@@ -16,6 +16,7 @@ from _git import ROOT, added_lines, blob, changed_files, fail, library_of, load_
 MAX_BYTES = 50 * 1024 * 1024
 base, head = sys.argv[1], sys.argv[2]
 schema = load_schema("record.schema.json")
+NAME_RE = re.compile(r"[^\s,\x00-\x1f]+")
 sources_doc = load_schema("sources.json")
 sources = sources_doc["allowed"]
 corpora = sources_doc.get("corpora", {})
@@ -82,6 +83,13 @@ for st, p in changed_files(base, head):
         if not any(str(r.get("source_url", "")).startswith(s) for s in sources):
             errors.append(f"{p}:{no}: source_url not on the allowlist (schemas/sources.json): {r.get('source_url')}")
         n = r.get("name")
+        # The name is a Lean identifier: no whitespace, no commas (the queue passes names comma-separated), no control characters.
+        if not isinstance(n, str) or not NAME_RE.fullmatch(n):
+            errors.append(f"{p}:{no}: name is not a Lean identifier: {n!r}")
+        elif "tombstone" not in r and not re.search(
+            r"(?<![\w'])" + re.escape(n.rsplit(".", 1)[-1]) + r"(?![\w'])", str(r.get("statement", ""))
+        ):
+            errors.append(f"{p}:{no}: statement does not declare {n} (its last component must appear; namespaces may come from context)")
         if n in seen:
             errors.append(f"{p}:{no}: duplicate name in this PR: {n}")
         seen.add(n)

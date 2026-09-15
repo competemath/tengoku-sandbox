@@ -56,7 +56,9 @@ if m:
     # lean continues a message on indented lines ("Tactic `decide` proved that the proposition\n  1 + 1 = 3\nis false")
     tail = []
     for extra in log[m.end() :].splitlines()[1:8]:
-        if extra.startswith((" ", "\t")) or (tail and not re.match(r"^(error|warning|info|✖|✔|\[|trace)", extra)):
+        if re.match(r"^(Some required targets|error|warning|info|✖|✔|\[|trace)", extra):
+            break
+        if extra.startswith((" ", "\t")) or tail:
             tail.append(extra.rstrip())
         else:
             break
