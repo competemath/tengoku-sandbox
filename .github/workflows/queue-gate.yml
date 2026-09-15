@@ -82,9 +82,9 @@ jobs:
       - name: Derived files match their generator
         if: github.event_name == 'merge_group'
         run: |
+          # Modules only: data/stats.json is the promote loop's output and changes with every commit and count.
           for f in $(grep -E '^data/(staging|trusted)/.*\.jsonl$' changed.txt || true); do python3 scripts/generate.py --library "$(basename "$f" .jsonl)" >/dev/null; done
-          python3 scripts/stats.py >/dev/null
-          git diff --exit-code -- Tengoku/ data/stats.json || { echo "error: regenerated derived files differ from the PR (hand-edited generated file?)" | tee -a build.log; exit 1; }
+          git diff --exit-code -- Tengoku/ || { echo "error: regenerated derived files differ from the PR (hand-edited generated file?)" | tee -a build.log; exit 1; }
       - name: Explain the failure to the authors
         if: failure() && github.event_name == 'merge_group'
         env: { GH_TOKEN: "${{ github.token }}" }
