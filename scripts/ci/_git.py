@@ -167,3 +167,17 @@ def library_of(path: str) -> str:
     """data/<tier>/<library>.jsonl → library; data/<tier>/<library>/<file>.jsonl → library."""
     parts = path.split("/")
     return parts[2] if len(parts) == 4 else Path(path).stem
+
+
+def pascal(s: str) -> str:
+    """equational-theories -> EquationalTheories (the generated library directory)."""
+    return "".join(w[:1].upper() + w[1:] for w in s.replace("_", "-").split("-") if w)
+
+
+def library_of_module(path: str, libraries) -> str | None:
+    """Tengoku/<Pascal>/... or Tengoku/<Pascal>.lean -> the library it is generated from (one of `libraries`), else None."""
+    parts = path.split("/")
+    if len(parts) < 2 or parts[0] != "Tengoku":
+        return None
+    head = parts[1][:-5] if len(parts) == 2 and parts[1].endswith(".lean") else parts[1]
+    return next((lib for lib in libraries if pascal(lib) == head), None)
