@@ -1,0 +1,4 @@
+{
+  "$comment": "set_option names banked content may use. Everything else fails the content lint.",
+  "allowed": ["linter.all", "linter.unusedVariables", "linter.style.longLine", "linter.style.setOption", "maxRecDepth", "maxHeartbeats", "synthInstance.maxHeartbeats", "synthInstance.maxSize", "backward.isDefEq.respectTransparency", "backward.isDefEq.respectTransparency.types", "backward.privateInPublic", "backward.privateInPublic.warn", "exponentiation.threshold", "pp.all", "autoImplicit", "relaxedAutoImplicit", "warn.classDefReducibility"]
+}

@@ -19,3 +19,9 @@ globs = ["Tengoku", "Tengoku.+"]
 name = "tengoku-extract"
 root = "TengokuExtract"
 supportInterpreter = true
+
+# The merge queue's axiom check (docs/tengoku-security-plan.md §5).
+[[lean_exe]]
+name = "tengoku-axioms"
+root = "TengokuAxioms"
+supportInterpreter = true

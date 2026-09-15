@@ -36,11 +36,10 @@ import logging
 import os
 import sys
 import time
-from pathlib import Path
-from typing import Any, Optional
-
 import urllib.error
 import urllib.request
+from pathlib import Path
+from typing import Any, Optional
 
 from lean_extract import extract_declarations
 
@@ -104,7 +103,7 @@ class Prove2MeClient:
 
 
 def normalize_toolchain(env_display_name: str) -> str:
-    """"Mathlib c5ea003 (Lean v4.30.0)" -> "leanprover/lean4:v4.30.0"."""
+    """ "Mathlib c5ea003 (Lean v4.30.0)" -> "leanprover/lean4:v4.30.0"."""
     import re
 
     match = re.search(r"Lean\s+(v[\d.]+)", env_display_name)
@@ -141,9 +140,7 @@ def harvest(api_key: str, out_path: Path, max_count: int) -> int:
                     continue
                 statement = decls[0].statement
 
-                submissions = client.get(
-                    f"/theorems/{theorem_id}/submissions?status=ACCEPTED&first=true"
-                )
+                submissions = client.get(f"/theorems/{theorem_id}/submissions?status=ACCEPTED&first=true")
                 accepted = (submissions or {}).get("submissions") or []
                 if not accepted:
                     skipped_no_solution += 1

@@ -30,13 +30,19 @@ concurrency:
   group: build-${{ github.ref }}
   cancel-in-progress: false
 
-permissions:
-  contents: write # release assets (the cache)
+permissions: {}
 
 jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 345
+    permissions:
+      contents: write      # release assets (the cache)
+      id-token: write      # Sigstore signing identity for the attestation
+      attestations: write
+    env:
+      TENGOKU_REPO: ${{ github.repository }}     # publish here
+      TENGOKU_CACHE_SOURCE: competemath/tengoku  # seed from the library (a sandbox has no caches of its own)
     outputs:
       complete: ${{ steps.build.outputs.complete }}
     steps:
@@ -100,9 +106,21 @@ jobs:
 
       - name: Publish cache to releases
         if: steps.build.outputs.complete == 'true'
+        id: publish
         env:
           GH_TOKEN: ${{ github.token }}
-        run: scripts/cache.sh put
+        run: |
+          scripts/cache.sh put | tee put.log
+          tag="$(grep -oE 'published cache-[0-9A-Z]+' put.log | awk '{print $2}')"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          mkdir -p attest && gh release download "$tag" -R "$TENGOKU_REPO" -D attest -p 'tengoku-cache.tar.zst.part-*'
+
+      # Every part gets a build-provenance attestation; scripts/cache.sh get refuses parts without one.
+      - name: Attest the cache parts
+        if: steps.build.outputs.complete == 'true'
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        with:
+          subject-path: attest/tengoku-cache.tar.zst.part-*
 
       - name: Continue the build in a follow-up run
         if: steps.build.outputs.complete == 'false'
@@ -119,7 +137,7 @@ jobs:
   # refreshes itself the next time it starts. Nightly only, never on push.
   notify:
     needs: build
-    if: needs.build.outputs.complete == 'true'
+    if: needs.build.outputs.complete == 'true' && github.repository == 'competemath/tengoku'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:

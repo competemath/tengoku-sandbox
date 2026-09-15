@@ -13,9 +13,9 @@ change. Provenance is recorded in SEED.md.
 Re-runnable: wipes and regenerates the seeded part of the tree (never touches
 Tengoku/EquationalTheories or other non-seed subtrees listed in KEEP).
 """
+
 import argparse
 import json
-import os
 import re
 import shutil
 import sys
@@ -34,7 +34,6 @@ PACKAGES = {
     "aesop": ("Aesop", "Aesop", "Tengoku.Tactic.Aesop"),
     "Qq": ("Qq", "Qq", "Tengoku.Meta.Qq"),
     "proofwidgets": ("ProofWidgets", "ProofWidgets", "Tengoku.Widgets"),
-
     # Mathlib's own Testing/Plausible/* extends this engine and shares leaf
     # names (Functions, Sampleable, Testable), so the engine lives one topic
     # over: Testing/Random.
@@ -63,7 +62,7 @@ def module_map(root_mod: str, mapped_root: str, mod: str) -> str | None:
     if mod == root_mod:
         return mapped_root
     if mod.startswith(root_mod + "."):
-        return mapped_root + mod[len(root_mod):]
+        return mapped_root + mod[len(root_mod) :]
     return None
 
 
@@ -75,6 +74,7 @@ def rewrite_imports(text: str, roots: list[tuple[str, str]]) -> str:
             if new:
                 return f"{m.group(1)}{new}{m.group(3)}"
         return m.group(0)  # core (Init/Std/Lean) and anything unknown: untouched
+
     return IMPORT_RE.sub(sub, text)
 
 
@@ -154,7 +154,11 @@ def main():
     root = out / "Tengoku.lean"
     lines = root.read_text(encoding="utf-8").rstrip("\n").split("\n") if root.exists() else []
     # The aggregator is a `module` file (Mathlib's root is), so re-exports must be `public import`.
-    extra = [f"public import {v[2]}" for k, v in PACKAGES.items() if k != "mathlib" and (out / (Path(*v[2].split(".")).with_suffix(".lean"))).exists()]
+    extra = [
+        f"public import {v[2]}"
+        for k, v in PACKAGES.items()
+        if k != "mathlib" and (out / (Path(*v[2].split(".")).with_suffix(".lean"))).exists()
+    ]
     extra += [f"public import Tengoku.{k}" for k in sorted(KEEP) if (tree / f"{k}.lean").exists()]
     header = [
         "-- Tengoku: one self-contained tree. This file imports all of it.",
@@ -191,7 +195,7 @@ globs = ["Tengoku", "Tengoku.+"]
 """,
         encoding="utf-8",
     )
-    toolchain = (src.parent.parent / "lean-toolchain")
+    toolchain = src.parent.parent / "lean-toolchain"
     if toolchain.exists():
         (out / "lean-toolchain").write_text(toolchain.read_text(encoding="utf-8"), encoding="utf-8")
 

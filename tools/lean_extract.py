@@ -128,8 +128,6 @@ def extract_declarations(source: str) -> list[ExtractedDeclaration]:
         if _contains_sorry(proof):
             continue  # admitted, not proven — not a real proof
 
-        results.append(
-            ExtractedDeclaration(name=name, statement=statement, proof=proof, line=line_no)
-        )
+        results.append(ExtractedDeclaration(name=name, statement=statement, proof=proof, line=line_no))
 
     return results

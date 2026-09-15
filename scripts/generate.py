@@ -21,6 +21,7 @@ so a corpus type that shares a name with a seeded one (`FreeMagma`) can coexist.
 Records are the source of truth for theorems; the corpus checkout is only read
 for definition modules, exactly as the translation harness reads it.
 """
+
 import argparse
 import json
 import re
@@ -28,7 +29,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from seed import PACKAGES, IMPORT_RE, module_map  # noqa: E402
+from seed import IMPORT_RE, PACKAGES, module_map  # noqa: E402
 
 # Only TRUSTED records become modules of the tree. A staging record (both
 # gates passed, module not yet proven to build) is promoted by
@@ -38,7 +39,10 @@ DATA_TIERS = ("trusted",)
 FILE_MARKER_RE = re.compile(r"^-- \[Emissary\] (\S+), everything before line \d+[^\n]*\n", re.M)
 PRELUDE_MODULE_RE = re.compile(r"^-- \[Emissary prelude\] (\S+) — verbatim", re.M)
 EQUATION_LINE_RE = re.compile(r"^\s*(?:@\[[^\]]*\]\s*)*equation\s+(\d+)\s*:=\s*(.+?)\s*$", re.M)
-UNSAFE_MODULE_RE = re.compile(r"^\s*(?:scoped\s+)?(initialize|builtin_initialize|register_simp_attr|register_option|register_label_attr|register_tag_attr|register_parametric_attr)\b", re.M)
+UNSAFE_MODULE_RE = re.compile(
+    r"^\s*(?:scoped\s+)?(initialize|builtin_initialize|register_simp_attr|register_option|register_label_attr|register_tag_attr|register_parametric_attr)\b",
+    re.M,
+)
 
 
 # Namespacing a corpus module (`namespace EquationalTheories … end`) keeps its
@@ -48,20 +52,25 @@ UNSAFE_MODULE_RE = re.compile(r"^\s*(?:scoped\s+)?(initialize|builtin_initialize
 # `EquationalTheories.Lean.MVarId.congrWith`, breaking every `m.congrWith`.
 # A dotted declaration whose head is an outside namespace gets `_root_.`;
 # a module that opens an outside namespace block is left unwrapped.
-TOOLCHAIN_ROOTS = set("""
+TOOLCHAIN_ROOTS = set(
+    """
 Lean Init Std Eq Ne HEq Nat Int List Array String Char Option Prod Sum Fin Function Sigma PSigma Subtype Quot Quotient
 Decidable Bool Iff And Or Not Exists True False Unit PUnit IO Task Id StateT ReaderT ExceptT Except Monad Functor
 Applicative HashMap HashSet RBMap ByteArray Float UInt8 UInt16 UInt32 UInt64 USize Empty PEmpty Classical WellFounded Acc
 Setoid Equivalence Inhabited Nonempty Subsingleton DecidableEq BEq Hashable Ord LT LE Add Mul Sub Div Neg HAdd HMul HSub HDiv
 Membership Singleton Insert EmptyCollection Union Inter SDiff HasSubset Coe CoeFun CoeSort Zero One Dvd Mod Pow HPow Append
 GetElem Bind Pure Seq SeqLeft SeqRight ToString Repr Format Syntax Name Expr Level MVarId FVarId Meta Elab Tactic Term Command
-""".split())
+""".split()
+)
 
 
 def seed_heads(out: Path) -> set[str]:
     """First segments of every declaration/namespace in the seeded tree."""
     heads = set(TOOLCHAIN_ROOTS)
-    rx = re.compile(r"^\s*(?:@\[[^\]]*\]\s*)*(?:(?:private|protected|noncomputable|partial|unsafe|nonrec|scoped|local|public)\s+)*(?:namespace|def|theorem|lemma|abbrev|instance|opaque|axiom|inductive|structure|class)\s+([A-Za-z_][\w']*)", re.M)
+    rx = re.compile(
+        r"^\s*(?:@\[[^\]]*\]\s*)*(?:(?:private|protected|noncomputable|partial|unsafe|nonrec|scoped|local|public)\s+)*(?:namespace|def|theorem|lemma|abbrev|instance|opaque|axiom|inductive|structure|class)\s+([A-Za-z_][\w']*)",
+        re.M,
+    )
     for f in (out / "Tengoku").rglob("*.lean"):
         if "EquationalTheories" in f.parts or "CompeteMath" in f.parts:
             continue
@@ -72,7 +81,10 @@ def seed_heads(out: Path) -> set[str]:
     return heads
 
 
-DECL_HEAD_RE = re.compile(r"^(\s*(?:@\[[^\]]*\]\s*)*(?:(?:private|protected|noncomputable|partial|unsafe|nonrec|scoped|local)\s+)*(?:def|theorem|lemma|abbrev|instance|opaque|axiom|inductive|structure|class)\s+)([A-Za-z_][\w']*)\.", re.M)
+DECL_HEAD_RE = re.compile(
+    r"^(\s*(?:@\[[^\]]*\]\s*)*(?:(?:private|protected|noncomputable|partial|unsafe|nonrec|scoped|local)\s+)*(?:def|theorem|lemma|abbrev|instance|opaque|axiom|inductive|structure|class)\s+)([A-Za-z_][\w']*)\.",
+    re.M,
+)
 NAMESPACE_RE = re.compile(r"^\s*namespace\s+([A-Za-z_][\w']*)", re.M)
 
 
@@ -141,10 +153,13 @@ def strip_corpus_attrs(text: str) -> str:
     def attrs(m):
         kept = [s.strip() for s in m.group(1).split(",") if s.strip() and not s.strip().startswith("equational_result")]
         return f"@[{', '.join(kept)}]" if kept else ""
+
     return re.sub(r"@\[([^\]]*)\]", attrs, text)
 
 
-def map_imports(text: str, corpus_prefix: str, lib_ns: str, deps_available: set[str], corpus: Path | None = None, _seen: set[str] | None = None) -> str:
+def map_imports(
+    text: str, corpus_prefix: str, lib_ns: str, deps_available: set[str], corpus: Path | None = None, _seen: set[str] | None = None
+) -> str:
     """Seed imports -> Tengoku.*; corpus imports -> this library's Deps modules.
     A corpus module the tree does not reproduce is replaced by what IT imported
     (recursively), so a module keeps the seed-library surface its file had —
@@ -172,10 +187,14 @@ def map_imports(text: str, corpus_prefix: str, lib_ns: str, deps_available: set[
             if new:
                 return f"{m.group(1)}{new}{m.group(3)}"
         return m.group(0)
+
     return IMPORT_RE.sub(sub, text)
 
 
-DECL_NAME_RE = re.compile(r"^\s*(?:@\[[^\]]*\]\s*)*(?:(?:private|protected|noncomputable|partial|unsafe|nonrec|scoped|local|public)\s+)*(?:def|theorem|lemma|abbrev|instance|opaque|axiom|inductive|structure|class)\s+([A-Za-z_][\w'.]*)", re.M)
+DECL_NAME_RE = re.compile(
+    r"^\s*(?:@\[[^\]]*\]\s*)*(?:(?:private|protected|noncomputable|partial|unsafe|nonrec|scoped|local|public)\s+)*(?:def|theorem|lemma|abbrev|instance|opaque|axiom|inductive|structure|class)\s+([A-Za-z_][\w'.]*)",
+    re.M,
+)
 IMPORT_LINE_RE = re.compile(r"^\s*(?:(?:public|private|meta)\s+)*import\s")
 
 
@@ -210,7 +229,10 @@ def top_level_chunks(text: str) -> list[list[str]]:
     def lead_in_only(lines: list[str]) -> bool:
         # attributes, doc comments, and `set_option … in` / `omit … in` /
         # `open … in` modifiers all belong to the declaration that follows
-        return all(not l.strip() or l.startswith(("@[", "/--", "/-", "--")) or l.strip().endswith("-/") or l.rstrip().endswith(" in") for l in lines)
+        return all(
+            not l.strip() or l.startswith(("@[", "/--", "/-", "--")) or l.strip().endswith("-/") or l.rstrip().endswith(" in")
+            for l in lines
+        )
 
     for line in text.splitlines():
         if line and not line[0].isspace() and depth == 0 and cur and not lead_in_only(cur):
@@ -270,7 +292,11 @@ def main():
     ap.add_argument("--libraries", nargs="*", default=["equational-theories"])
     ap.add_argument("--out", default=".")
     ap.add_argument("--only", default=None, help="regenerate just this source_path's module (Deps and the aggregator are still refreshed)")
-    ap.add_argument("--candidate", default=None, help="generate this source_path's module from its trusted AND staging records into a `_candidate_` sibling file (the real module and aggregator are untouched); promote.py builds it before trusting the records")
+    ap.add_argument(
+        "--candidate",
+        default=None,
+        help="generate this source_path's module from its trusted AND staging records into a `_candidate_` sibling file (the real module and aggregator are untouched); promote.py builds it before trusting the records",
+    )
     args = ap.parse_args()
     if args.candidate:
         args.only = args.candidate
@@ -329,10 +355,11 @@ def main():
         eqs = regenerate_equations(corpus, corpus_prefix)
         if eqs and (deps_dir / "Magma.lean").exists():  # the abbrevs need Magma; without it the file would not build
             (deps_dir / "Equations.lean").write_text(
-            f"-- {lib_ns}/Deps/Equations: every `equation N := law` of the corpus, in the exact shape its `equation` command produces\n"
-            f"import Tengoku.{lib_ns}.Deps.Magma\n\nset_option linter.all false\n\n" + wrap("universe uEq\n\n" + "\n".join(eqs), lib_ns, external),
-            encoding="utf-8",
-        )
+                f"-- {lib_ns}/Deps/Equations: every `equation N := law` of the corpus, in the exact shape its `equation` command produces\n"
+                f"import Tengoku.{lib_ns}.Deps.Magma\n\nset_option linter.all false\n\n"
+                + wrap("universe uEq\n\n" + "\n".join(eqs), lib_ns, external),
+                encoding="utf-8",
+            )
         deps_mods = sorted(p.stem for p in deps_dir.glob("*.lean"))
         (lib_dir / "Deps.lean").write_text("\n".join(f"import Tengoku.{lib_ns}.Deps.{m}" for m in deps_mods) + "\n", encoding="utf-8")
         deps_names, deps_lines = deps_declared(deps_dir)
@@ -358,16 +385,19 @@ def main():
             def line_of(r):
                 m = re.search(r"#L(\d+)", r.get("source_url") or "")
                 return int(m.group(1)) if m else 0
+
             recs.sort(key=line_of)
+
             # The file's own declarations: everything after the prelude marker in
             # a record's context (a marker-bearing record is preferred: its prefix
             # is the original file's, not an agent's self-contained rewrite).
             # Contexts that differ (an agent's fix) are noted; the build decides.
             def own_prefix(r):
                 mm = FILE_MARKER_RE.search(r["context"])
-                text = r["context"][mm.end():] if mm else r["context"]
+                text = r["context"][mm.end() :] if mm else r["context"]
                 text = "\n".join(l for l in text.splitlines() if not l.startswith("set_option linter.all false"))
                 return dedupe_prefix(text, deps_names, deps_lines)
+
             # Walk the records in file order; before each theorem emit whatever
             # its context declares that the module does not have yet (a
             # definition sitting between two theorems is in the later one's
@@ -427,6 +457,7 @@ def main():
                 f"{imports}\n\nset_option linter.all false\n\n{wrap(body, lib_ns, external - deps_names)}",
                 encoding="utf-8",
             )
+
         # A module on disk that no trusted record backs any more is removed —
         # a file whose records went back to staging must not stay importable.
         def mod_path_of(source_path: str) -> Path:
@@ -434,10 +465,19 @@ def main():
             if rel.parts and rel.parts[0] == corpus_prefix:
                 rel = Path(*rel.parts[1:])
             return lib_dir / rel
+
         backed = {mod_path_of(sp) for sp in by_file}
-        stale = [] if args.candidate else [mod_path_of(args.only)] if args.only else [
-            p for p in lib_dir.rglob("*.lean") if "Deps" not in p.relative_to(lib_dir).parts and p.name != "Deps.lean" and not p.name.startswith("_candidate_")
-        ]
+        stale = (
+            []
+            if args.candidate
+            else [mod_path_of(args.only)]
+            if args.only
+            else [
+                p
+                for p in lib_dir.rglob("*.lean")
+                if "Deps" not in p.relative_to(lib_dir).parts and p.name != "Deps.lean" and not p.name.startswith("_candidate_")
+            ]
+        )
         for p in stale:
             if p not in backed and p.exists():
                 p.unlink()
@@ -452,15 +492,25 @@ def main():
         (out / "Tengoku" / f"{lib_ns}.lean").write_text(
             f"import Tengoku.{lib_ns}.Deps\n" + "\n".join(f"import {m}" for m in modules) + "\n", encoding="utf-8"
         )
-        print(f"{library}: {len(records)} records -> {len(modules)} file modules on disk, {len(deps_mods)} Deps modules ({len(eqs)} equations); {warnings} context notes")
+        print(
+            f"{library}: {len(records)} records -> {len(modules)} file modules on disk, {len(deps_mods)} Deps modules ({len(eqs)} equations); {warnings} context notes"
+        )
 
     # Tengoku/All.lean: everything, for tools that index or import "the whole
     # tree" (loogle, the verifier's injected import). A legacy-style file can
     # import both the module-system root and the legacy translation modules;
     # the root itself cannot.
-    libs = sorted(p.stem for p in (out / "Tengoku").glob("*.lean") if p.stem not in {"All", "Init", "Tactic", "Std", "Widgets"} and (out / "Tengoku" / p.stem).is_dir() and (out / "Tengoku" / p.stem / "Deps.lean").exists())
+    libs = sorted(
+        p.stem
+        for p in (out / "Tengoku").glob("*.lean")
+        if p.stem not in {"All", "Init", "Tactic", "Std", "Widgets"}
+        and (out / "Tengoku" / p.stem).is_dir()
+        and (out / "Tengoku" / p.stem / "Deps.lean").exists()
+    )
     (out / "Tengoku" / "All.lean").write_text(
-        "-- Everything in the tree: the seeded root plus every library of verified additions.\nimport Tengoku\n" + "\n".join(f"import Tengoku.{l}" for l in libs) + "\n",
+        "-- Everything in the tree: the seeded root plus every library of verified additions.\nimport Tengoku\n"
+        + "\n".join(f"import Tengoku.{l}" for l in libs)
+        + "\n",
         encoding="utf-8",
     )
     print(f"Tengoku/All.lean: root + {', '.join(libs) or 'no additions yet'}")

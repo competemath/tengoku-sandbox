@@ -1,5 +1,7 @@
-import sys, unittest
+import sys
+import unittest
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import derive
 
@@ -14,15 +16,22 @@ class TokensAndGloss(unittest.TestCase):
 
     def test_name_gloss_expands_abbreviations(self):
         g = derive.name_gloss("Nat.add_comm")
-        self.assertIn("natural number", g); self.assertIn("addition", g); self.assertIn("commutative", g)
+        self.assertIn("natural number", g)
+        self.assertIn("addition", g)
+        self.assertIn("commutative", g)
 
     def test_statement_gloss_verbalises_symbols(self):
         g = derive.statement_gloss("∀ (a b : ℕ), a + b = b + a")
-        self.assertIn("for all", g); self.assertIn("natural numbers", g); self.assertIn("plus", g); self.assertIn("equals", g)
+        self.assertIn("for all", g)
+        self.assertIn("natural numbers", g)
+        self.assertIn("plus", g)
+        self.assertIn("equals", g)
         self.assertNotIn("∀", g)
 
     def test_topics_from_module(self):
-        self.assertEqual(derive.topics("Tengoku.Analysis.SpecialFunctions.Trigonometric.Basic"), ["analysis", "special functions", "trigonometric"])
+        self.assertEqual(
+            derive.topics("Tengoku.Analysis.SpecialFunctions.Trigonometric.Basic"), ["analysis", "special functions", "trigonometric"]
+        )
 
 
 class TypeHash(unittest.TestCase):
@@ -48,14 +57,27 @@ class Graph(unittest.TestCase):
         edges = {"a": ["hub"], "b": ["hub"], "c": ["hub", "a"], "hub": []}
         pr = derive.pagerank(nodes, edges)
         self.assertAlmostEqual(sum(pr.values()), 1.0, places=6)
-        self.assertGreater(pr["hub"], pr["a"]); self.assertGreater(pr["a"], pr["b"])
+        self.assertGreater(pr["hub"], pr["a"])
+        self.assertGreater(pr["a"], pr["b"])
 
     def test_derive_end_to_end(self):
         decls = [
-            {"name": "Nat.add_comm", "kind": "theorem", "module": "Tengoku.Algebra.Group.Basic", "statement": "∀ (n m : ℕ), n + m = m + n",
-             "binders": [{"name": "n"}, {"name": "m"}], "constants_type": ["Nat", "HAdd.hAdd", "Eq"]},
-            {"name": "Nat.add_zero", "kind": "theorem", "module": "Tengoku.Init.Nat", "statement": "∀ (n : ℕ), n + 0 = n",
-             "binders": [{"name": "n"}], "constants_type": ["Nat", "HAdd.hAdd", "Eq", "OfNat.ofNat"]},
+            {
+                "name": "Nat.add_comm",
+                "kind": "theorem",
+                "module": "Tengoku.Algebra.Group.Basic",
+                "statement": "∀ (n m : ℕ), n + m = m + n",
+                "binders": [{"name": "n"}, {"name": "m"}],
+                "constants_type": ["Nat", "HAdd.hAdd", "Eq"],
+            },
+            {
+                "name": "Nat.add_zero",
+                "kind": "theorem",
+                "module": "Tengoku.Init.Nat",
+                "statement": "∀ (n : ℕ), n + 0 = n",
+                "binders": [{"name": "n"}],
+                "constants_type": ["Nat", "HAdd.hAdd", "Eq", "OfNat.ofNat"],
+            },
         ]
         deps = {"Nat.add_comm": ["Nat.add_zero", "Nat.succ"], "Nat.add_zero": []}
         derived, symbols, tokens = derive.derive(decls, deps)

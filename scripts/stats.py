@@ -7,8 +7,14 @@ The site's stat pills read this file straight from GitHub (raw, ISR-cached),
 so no database is involved in showing what Tengoku contains. Run by the
 promote loop before every commit and by the nightly build.
 """
+
 from __future__ import annotations
-import argparse, json, os, re, subprocess, sys
+
+import argparse
+import json
+import re
+import subprocess
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -60,12 +66,14 @@ def git(root: Path, *args: str) -> str:
 
 def build(root: Path) -> dict:
     s = collect(root)
-    s.update({
-        "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "tree_commit": git(root, "rev-parse", "HEAD"),
-        "toolchain": (root / "lean-toolchain").read_text().strip() if (root / "lean-toolchain").exists() else "",
-        "last_promoted_at": max((l.get("last_promoted_at", "") for l in s["libraries"].values()), default="") or None,
-    })
+    s.update(
+        {
+            "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "tree_commit": git(root, "rev-parse", "HEAD"),
+            "toolchain": (root / "lean-toolchain").read_text().strip() if (root / "lean-toolchain").exists() else "",
+            "last_promoted_at": max((l.get("last_promoted_at", "") for l in s["libraries"].values()), default="") or None,
+        }
+    )
     return s
 
 
@@ -79,7 +87,9 @@ def main() -> int:
     out = Path(a.out) if a.out else root / "data" / "stats.json"
     out.write_text(json.dumps(stats, indent=2, sort_keys=True) + "\n")
     t = stats["totals"]
-    print(f"{out}: {t['all']} records ({t['trusted']} trusted, {t['staging']} staging, {t['tentative']} tentative) in {stats['library_count']} libraries")
+    print(
+        f"{out}: {t['all']} records ({t['trusted']} trusted, {t['staging']} staging, {t['tentative']} tentative) in {stats['library_count']} libraries"
+    )
     return 0
 
 

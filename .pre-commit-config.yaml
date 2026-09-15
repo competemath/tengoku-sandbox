@@ -1,0 +1,32 @@
+# The single source of truth for local and CI linting: CI runs `pre-commit run --all-files`.
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.12.2
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-json
+        exclude: ^(data/|Tengoku/)
+      - id: check-added-large-files
+        args: [--maxkb=51200]
+      - id: end-of-file-fixer
+        exclude: ^(data/|Tengoku/|\.lake/)
+      - id: check-merge-conflict
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args: ["--baseline", ".secrets.baseline"]
+        exclude: ^(data/|\.lake/)
+  - repo: local
+    hooks:
+      - id: lint-banked
+        name: banked content lint (staged data files)
+        entry: python3 scripts/ci/lint_banked.py HEAD --staged
+        language: system
+        pass_filenames: false
+        files: ^data/.*\.jsonl$

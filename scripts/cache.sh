@@ -17,7 +17,8 @@
 # is used when it is installed and logged in.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-REPO="${TENGOKU_REPO:-competemath/tengoku}"
+REPO="${TENGOKU_REPO:-competemath/tengoku}"          # where `put` publishes
+SRC="${TENGOKU_CACHE_SOURCE:-$REPO}"                  # where `get`/`latest` read (a sandbox reads the library's caches)
 cmd="${1:-}"
 
 need() { command -v "$1" >/dev/null 2>&1 || { echo "missing: $1" >&2; exit 1; }; }
@@ -30,11 +31,39 @@ api() {  # GET a GitHub API path, anonymously or with whatever token exists
   else need curl; curl -fsSL -H 'Accept: application/vnd.github+json' ${GH_TOKEN:+-H "Authorization: Bearer $GH_TOKEN"} "https://api.github.com/$1"; fi
 }
 
+# The newest cache, from the fixed-tag pointer the nightly updates (a plain
+# download, no API call, no rate limit): "<published_at> 1 <tag> <commit>".
+pointer() {
+  need curl
+  curl -fsSL "https://github.com/$SRC/releases/download/cache-latest/cache-latest.json" 2>/dev/null | python3 -c '
+import json, sys
+try: d = json.load(sys.stdin); print(d["published_at"], "1", d["tag"], d["commit"])
+except Exception: pass' 2>/dev/null || true
+}
+
+# Every asset of a cache release must carry a build-provenance attestation from
+# this repository's build workflow (docs/tengoku-security-plan.md §6). With gh
+# present the check is enforced; without it a warning is printed for now.
+verify_parts() {
+  local dir="$1" mode="${TENGOKU_VERIFY:-warn}"   # warn until every published cache carries an attestation, then require
+  if ! command -v gh >/dev/null 2>&1; then
+    echo "warning: gh not installed, cache attestation not verified" >&2
+    [ "$mode" = "require" ] && return 1 || return 0
+  fi
+  for f in "$dir"/tengoku-cache.tar.zst.part-*; do
+    if ! gh attestation verify "$f" -R "$SRC" --signer-workflow "$SRC/.github/workflows/build.yml" >/dev/null 2>&1; then
+      if [ "$mode" = "require" ]; then echo "REFUSED: $(basename "$f") has no valid build attestation from $SRC — not unpacking" >&2; return 1; fi
+      echo "warning: $(basename "$f") has no build attestation (TENGOKU_VERIFY=warn)" >&2; return 0
+    fi
+  done
+  echo "attestations verified"
+}
+
 # Every published cache, newest first: "<published_at> <stamped?> <tag> <commit>" per line.
 list_caches() {
   local page=1 out
   while :; do
-    out="$(api "repos/$REPO/releases?per_page=100&page=$page")"
+    out="$(api "repos/$SRC/releases?per_page=100&page=$page")"
     printf '%s' "$out" | python3 -c '
 import json, re, sys
 for r in json.load(sys.stdin):
@@ -56,11 +85,11 @@ for r in json.load(sys.stdin):
 download_cache() {
   local tag="$1" dir="$2"
   if have_gh; then
-    gh release download "$tag" -R "$REPO" -D "$dir" -p 'tengoku-cache.tar.zst.part-*'
+    gh release download "$tag" -R "$SRC" -D "$dir" -p 'tengoku-cache.tar.zst.part-*'
   else
     need curl
     local urls
-    urls="$(api "repos/$REPO/releases/tags/$tag" | python3 -c '
+    urls="$(api "repos/$SRC/releases/tags/$tag" | python3 -c '
 import json, sys
 for a in json.load(sys.stdin).get("assets", []):
     if a["name"].startswith("tengoku-cache.tar.zst.part-"): print(a["browser_download_url"])')"
@@ -94,8 +123,13 @@ case "$cmd" in
     gh release create "$tag" -R "$REPO" --target "$sha" --title "build cache $(echo "$stamp" | sed -E 's/([0-9]{4})([0-9]{2})([0-9]{2})T([0-9]{2})([0-9]{2})Z/\1-\2-\3 \4:\5 UTC/')" \
       --notes "$(printf 'commit=%s\ntoolchain=%s\n\nCompiled .lake/build for %s. Fetch with scripts/cache.sh get, or pin a checkout to it with scripts/pin.sh.' "$sha" "$(cat lean-toolchain)" "$sha")" \
       "$tmp"/tengoku-cache.tar.zst.part-*
-    rm -rf "$tmp"
     echo "published $tag (commit $sha)"
+    # Fixed-tag pointer to the newest cache, for consumers that must not call the API.
+    printf '{"tag": "%s", "commit": "%s", "published_at": "%s", "parts": [%s]}\n' "$tag" "$sha" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+      "$(for f in "$tmp"/tengoku-cache.tar.zst.part-*; do printf '{"name": "%s", "sha256": "%s"},' "$(basename "$f")" "$(sha256sum "$f" | cut -d' ' -f1)"; done | sed 's/,$//')" > "$tmp/cache-latest.json"
+    gh release view cache-latest -R "$REPO" >/dev/null 2>&1 || gh release create cache-latest -R "$REPO" --title "newest cache (pointer)" --notes "cache-latest.json names the newest cache release. Updated by every publish." >/dev/null
+    gh release upload cache-latest "$tmp/cache-latest.json" -R "$REPO" --clobber >/dev/null && echo "pointer cache-latest.json → $tag"
+    rm -rf "$tmp"
     # Keep the newest KEEP caches; each is gigabytes and `get` only ever needs
     # a recent one (Lake rebuilds the difference).
     KEEP="${TENGOKU_CACHE_KEEP:-5}"
@@ -103,12 +137,14 @@ case "$cmd" in
       | while read -r old; do [ -n "$old" ] && gh release delete "$old" -R "$REPO" --yes --cleanup-tag && echo "pruned $old"; done || true
     ;;
   latest)
-    commit="$(list_caches | head -n 1 | awk '{print $4}')"
+    commit="$(pointer | awk '{print $4}')"
+    [ -n "$commit" ] || commit="$(list_caches | head -n 1 | awk '{print $4}')"
     [ -n "$commit" ] || { echo "no published cache" >&2; exit 1; }
     echo "$commit"
     ;;
   latest-tag)
-    tag="$(list_caches | head -n 1 | awk '{print $3}')"
+    tag="$(pointer | awk '{print $3}')"
+    [ -n "$tag" ] || tag="$(list_caches | head -n 1 | awk '{print $3}')"
     [ -n "$tag" ] || { echo "no published cache" >&2; exit 1; }
     echo "$tag"
     ;;
@@ -125,6 +161,7 @@ case "$cmd" in
     [ -n "$found" ] || { echo "no published cache is an ancestor of $want (are the caches published? is this clone deep enough for ancestry?)" >&2; exit 1; }
     echo "fetching $found …"
     download_cache "$found" "$tmp"
+    verify_parts "$tmp" || { rm -rf "$tmp"; exit 1; }
     mkdir -p .lake
     cat "$tmp"/tengoku-cache.tar.zst.part-* | zstd -d -q | tar -C .lake -xf -
     rm -rf "$tmp"

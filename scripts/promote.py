@@ -28,13 +28,14 @@ fresh under the lock.
 Exit 0 when everything promoted (or nothing was due), 2 when some file did
 not build.
 """
+
 import argparse
 import fcntl
 import json
 import subprocess
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -99,8 +100,13 @@ def main() -> int:
     lock_p.parent.mkdir(parents=True, exist_ok=True)
     gen = [sys.executable, "scripts/generate.py", "--corpus", args.corpus, "--libraries", lib]
 
-    files = sorted({r["source_path"] for r in load(staging_p) if r.get("source_path") and r.get("context") is not None
-                    and (not args.only or r["source_path"] == args.only)})
+    files = sorted(
+        {
+            r["source_path"]
+            for r in load(staging_p)
+            if r.get("source_path") and r.get("context") is not None and (not args.only or r["source_path"] == args.only)
+        }
+    )
     if not files:
         print(f"{lib}: nothing to promote")
         return 0
@@ -159,7 +165,9 @@ def main() -> int:
                     cand_path.unlink()
                 except FileNotFoundError:
                     pass
-    print(f"{lib}: promoted {promoted}; not promoted {sum(n for _, n, _ in failed)} in {len(failed)} file(s); {skipped} file(s) still being banked")
+    print(
+        f"{lib}: promoted {promoted}; not promoted {sum(n for _, n, _ in failed)} in {len(failed)} file(s); {skipped} file(s) still being banked"
+    )
     return 0 if not failed else 2
 
 

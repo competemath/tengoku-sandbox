@@ -1,0 +1,8 @@
+[tool.ruff]
+line-length = 140
+target-version = "py39"
+extend-exclude = ["data", ".lake"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = ["E501", "E701", "E702", "B007", "B023", "UP006", "UP007", "UP035", "UP045", "B008", "E741"]

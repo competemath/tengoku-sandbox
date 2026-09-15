@@ -1,5 +1,9 @@
-import json, os, sys, tempfile, unittest
+import json
+import sys
+import tempfile
+import unittest
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import stats
 
@@ -12,7 +16,10 @@ def write(p: Path, lines):
 class StatsTest(unittest.TestCase):
     def setUp(self):
         self.root = Path(tempfile.mkdtemp())
-        write(self.root / "data/trusted/alpha.jsonl", [{"name": "a", "promoted_at": "2026-09-01T00:00:00Z"}, {"name": "b", "promoted_at": "2026-09-13T10:00:00Z"}])
+        write(
+            self.root / "data/trusted/alpha.jsonl",
+            [{"name": "a", "promoted_at": "2026-09-01T00:00:00Z"}, {"name": "b", "promoted_at": "2026-09-13T10:00:00Z"}],
+        )
         write(self.root / "data/staging/alpha.jsonl", [{"name": "c"}])
         write(self.root / "data/tentative/beta.jsonl", [{"name": "d"}, {"name": "e"}, {"name": "f"}])
         (self.root / "lean-toolchain").write_text("leanprover/lean4:v4.34.0-rc2\n")

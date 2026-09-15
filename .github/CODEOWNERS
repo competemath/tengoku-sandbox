@@ -1,0 +1,15 @@
+# Tier 4 (docs/tengoku-security-plan.md §3): maintainer plus a second approver.
+# Tiers 1–2 (data/tentative, data/staging) have no owner on purpose: bot PRs must not need a human.
+/Tengoku.lean            @mikael-bashir
+/Tengoku/*.lean          @mikael-bashir
+/lean-toolchain          @mikael-bashir
+/lakefile.toml           @mikael-bashir
+/lake-manifest.json      @mikael-bashir
+/scripts/                @mikael-bashir
+/TengokuExtract.lean     @mikael-bashir
+/TengokuAxioms.lean      @mikael-bashir
+/.github/                @mikael-bashir
+/schemas/                @mikael-bashir
+/.pre-commit-config.yaml @mikael-bashir
+/pyproject.toml          @mikael-bashir
+/data/trusted/           @mikael-bashir

@@ -1,0 +1,13 @@
+{
+  "$comment": "One JSON object per line in data/<tier>/<library>.jsonl. Enforced by scripts/ci/validate_records.py on added lines only.",
+  "record": {
+    "required": ["name", "statement", "proof", "status", "library", "source_url", "toolchain"],
+    "required_by_tier": { "trusted": ["promoted_at"], "staging": [] },
+    "optional": ["context", "source_path", "staged_at", "promoted_at", "added_by", "build_error"],
+    "types": { "name": "string", "statement": "string", "proof": "string", "context": "string", "status": "string", "library": "string", "source_url": "string", "toolchain": "string", "source_path": "string", "staged_at": "string", "promoted_at": "string", "added_by": "string" }
+  },
+  "tombstone": {
+    "$comment": "Appending {\"tombstone\": \"<name>\", ...} retracts a record. The generator drops it; history stays.",
+    "required": ["tombstone", "reason", "by", "at"]
+  }
+}
