@@ -1,4 +1,4 @@
-"""Shared helpers for the CI gates: diff parsing and tiering. Standard library only."""
+"""Shared helpers for the CI gates (touched by selftest): diff parsing and tiering. Standard library only."""
 
 from __future__ import annotations
 
