@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions: { contents: read, pull-requests: write }
-    outputs: { class: ${{ steps.c.outputs.class }} }
+    outputs: { class: "${{ steps.c.outputs.class }}" }
     steps:
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
         with: { egress-policy: audit }
