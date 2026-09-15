@@ -21,6 +21,10 @@ HINTS = [
         "That name does not exist in the tree at this commit. Check the spelling, or put the definition it needs into `context` (the generator supplies no imports).",
     ),
     (
+        r"failed to synthesize",
+        "An instance is missing where the statement is compiled. The generator supplies no `variable`/`open`/`instance` lines beyond the record's `context`; copy the ones the source file relies on into `context`.",
+    ),
+    (
         r"type mismatch",
         "The statement and the proof disagree about a type. Compare the elaborated types in the error; a coercion (`↑`, `Nat.cast`) is the usual fix.",
     ),
