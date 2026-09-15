@@ -2,6 +2,11 @@ name: probe-release
 # Throwaway (sandbox only): can the job token create a release from a workflow_dispatch run?
 on:
   workflow_dispatch:
+    inputs:
+      target:
+        description: "commit to point the release tag at (the build job used the run's older commit)"
+        required: false
+        default: ""
 permissions: {}
 jobs:
   probe:
@@ -18,10 +23,11 @@ jobs:
       - name: exact shape of cache.sh put (tag cache-<stamp>, two parts, notes)
         env:
           TENGOKU_REPO: ${{ github.repository }}
+          TARGET: ${{ github.event.inputs.target }}
         run: |
           gh --version | head -1
           tmp="$(mktemp -d)"; head -c 1000 /dev/urandom > "$tmp/tengoku-cache.tar.zst.part-aa"; head -c 100 /dev/urandom > "$tmp/tengoku-cache.tar.zst.part-ab"
-          sha="$(git rev-parse HEAD)"; stamp="$(date -u +%Y%m%dT%H%MZ)"; tag="probe-cache-$stamp"
+          sha="${TARGET:-$(git rev-parse HEAD)}"; echo "target=$sha"; stamp="$(date -u +%Y%m%dT%H%MZ)"; tag="cache-$stamp"
           gh release create "$tag" -R "$TENGOKU_REPO" --target "$sha" --title "build cache probe" \
             --notes "$(printf 'commit=%s\ntoolchain=%s\n\nCompiled .lake/build for %s.' "$sha" "$(cat lean-toolchain)" "$sha")" \
             "$tmp"/tengoku-cache.tar.zst.part-* && echo "PUT-SHAPE-OK" || echo "PUT-SHAPE-FAILED"
