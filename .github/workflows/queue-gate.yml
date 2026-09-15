@@ -67,9 +67,16 @@ jobs:
       - name: Derived files match their generator
         if: github.event_name == 'merge_group'
         run: |
-          # Modules only: data/stats.json is the promote loop's output and changes with every commit and count.
+          # Only the derived files this group touches are compared: a stale module on main (generator changed
+          # after its last promotion) is main's problem, not the group's. data/stats.json is never compared.
+          touched="$(git diff --name-only "${{ github.event.merge_group.base_sha }}...HEAD" -- Tengoku/ | grep -v '/_candidate_' || true)"
+          if [ -z "$touched" ]; then echo "no derived files in this group"; exit 0; fi
           python3 scripts/ci/queue_targets.py "${{ github.event.merge_group.base_sha }}" HEAD --regenerate 2>>build.log
-          git diff --exit-code -- Tengoku/ ':!Tengoku/**/_candidate_*.lean' || { echo "error: regenerated derived files differ from the PR (hand-edited generated file?)" | tee -a build.log; exit 1; }
+          # shellcheck disable=SC2086  # touched is a newline-separated path list
+          if [ -n "$(git status --porcelain -- $touched)" ]; then
+            git --no-pager diff --stat -- $touched | tee -a build.log
+            echo "error: regenerated derived files differ from the PR (hand-edited generated file?)" | tee -a build.log; exit 1
+          fi
       - name: Explain the failure to the authors
         if: failure() && github.event_name == 'merge_group'
         env: { GH_TOKEN: "${{ github.token }}" }
