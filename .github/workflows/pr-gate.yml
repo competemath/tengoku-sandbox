@@ -90,6 +90,22 @@ jobs:
           base: ${{ env.BASE }}
           head: ${{ env.HEAD }}
           extra_args: --results=verified,unknown
+      # TruffleHog reports only credentials it can verify or cannot check; a credential-shaped
+      # string that fails verification passes it. The same pattern scan as the pre-commit hook
+      # runs here for every class, so a secret inside a record is caught too (found by the campaign).
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with: { python-version: "3.12" }
+      - name: detect-secrets on the changed files (every class)
+        shell: bash
+        run: |  # pragma: allowlist secret
+          pip install -q detect-secrets==1.5.0
+          git diff --name-only --diff-filter=AM "$BASE...$HEAD" -- . ':!data/' ':!Tengoku/' ':!.lake/' > changed.txt
+          mapfile -t files < changed.txt
+          [ "${#files[@]}" -eq 0 ] && { echo "no files to scan"; exit 0; }
+          detect-secrets-hook --baseline .secrets.baseline --exclude-lines '"commit": "[0-9a-f]{40}"' "${files[@]}"
+          # records: scan the added lines of data files as text (the hook skips data/ so a 50 MB file is not re-read)
+          git diff -U0 "$BASE...$HEAD" -- data/ | grep -E '^\+[^+]' | sed 's/^+//' > added-data.txt || true
+          if [ -s added-data.txt ]; then detect-secrets-hook --baseline .secrets.baseline added-data.txt; fi
 
   sorry-advisory:
     needs: classify
@@ -147,7 +163,12 @@ jobs:
         with: { egress-policy: audit }
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with: { filter: "blob:none" }
-      - run: python3 -m unittest discover -s scripts/tests -v 2>&1 | tail -5 && python3 -m unittest scripts.ci.tests.test_gates -v 2>&1 | tail -5
+      # `| tail` used to hide the test result: a failing test passed the job (found by the campaign).
+      - shell: bash
+        run: |
+          set -o pipefail
+          python3 -m unittest discover -s scripts/tests -v 2>&1 | tail -5
+          python3 -m unittest scripts.ci.tests.test_gates -v 2>&1 | tail -5
       - uses: rhysd/actionlint@03d0035246f3e81f36aed592ffb4bebf33a03106 # v1.7.7
         with: { args: -color }
 

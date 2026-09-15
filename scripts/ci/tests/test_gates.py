@@ -34,7 +34,16 @@ class Repo:
         self.write("data/staging/lib.jsonl", json.dumps(GOOD) + "\n")
         self.write(
             "data/trusted/lib.jsonl",
-            json.dumps({**GOOD, "name": "Lib.old", "status": "trusted", "promoted_at": "2026-01-01T00:00:00Z"}) + "\n",
+            json.dumps(
+                {
+                    **GOOD,
+                    "name": "Lib.old",
+                    "statement": "theorem Lib.old : 1 + 1 = 2",
+                    "status": "trusted",
+                    "promoted_at": "2026-01-01T00:00:00Z",
+                }
+            )
+            + "\n",
         )
         self.write("Tengoku/Lib/Basic.lean", "/-\nAuthors: Someone\n-/\ntheorem Lib.old : 1 + 1 = 2 := rfl\n")
         self.write("Tengoku/Logic/Basic.lean", "/-\nAuthors: Mathlib\n-/\ntheorem seeded : True := trivial\n")
@@ -72,7 +81,7 @@ class Repo:
 class Gates(unittest.TestCase):
     def test_clean_append_passes_everything(self):
         r = Repo()
-        r.append("data/staging/lib.jsonl", json.dumps({**GOOD, "name": "Lib.new"}) + "\n")
+        r.append("data/staging/lib.jsonl", json.dumps({**GOOD, "name": "Lib.new", "statement": "theorem Lib.new : 1 + 1 = 2"}) + "\n")
         r.commit("add")
         for s in ["classify.py", "append_only.py", "credits.py", "validate_records.py", "lint_banked.py", "dco.py"]:
             rc, out = r.gate(s)
@@ -81,7 +90,7 @@ class Gates(unittest.TestCase):
 
     def test_multi_purpose_fails_classify(self):
         r = Repo()
-        r.append("data/staging/lib.jsonl", json.dumps({**GOOD, "name": "Lib.new"}) + "\n")
+        r.append("data/staging/lib.jsonl", json.dumps({**GOOD, "name": "Lib.new", "statement": "theorem Lib.new : 1 + 1 = 2"}) + "\n")
         r.write("scripts/x.py", "print(2)\n")
         r.commit("two things")
         rc, out = r.gate("classify.py")
@@ -148,11 +157,11 @@ class Gates(unittest.TestCase):
     def test_records_schema(self):
         r = Repo()
         bad = [
-            json.dumps({**GOOD, "name": "Lib.a", "status": "trusted"}),
-            json.dumps({**GOOD, "name": "Lib.b", "source_url": "https://evil.example/x"}),
-            json.dumps({**GOOD, "name": "Lib.old"}),
+            json.dumps({**GOOD, "name": "Lib.a", "statement": "theorem Lib.a : 1 + 1 = 2", "status": "trusted"}),
+            json.dumps({**GOOD, "name": "Lib.b", "statement": "theorem Lib.b : 1 + 1 = 2", "source_url": "https://evil.example/x"}),
+            json.dumps({**GOOD, "name": "Lib.old", "statement": "theorem Lib.old : 1 + 1 = 2"}),
             "{not json",
-            json.dumps({**GOOD, "name": "Lib.c", "library": "other"}),
+            json.dumps({**GOOD, "name": "Lib.c", "statement": "theorem Lib.c : 1 + 1 = 2", "library": "other"}),
         ]
         r.append("data/staging/lib.jsonl", "\n".join(bad) + "\n")
         r.commit("bad records")
@@ -194,7 +203,7 @@ class Gates(unittest.TestCase):
 
     def test_unsigned_commit_fails_dco(self):
         r = Repo()
-        r.append("data/staging/lib.jsonl", json.dumps({**GOOD, "name": "Lib.new"}) + "\n")
+        r.append("data/staging/lib.jsonl", json.dumps({**GOOD, "name": "Lib.new", "statement": "theorem Lib.new : 1 + 1 = 2"}) + "\n")
         r.commit("unsigned", signoff=False)
         rc, out = r.gate("dco.py")
         self.assertEqual(rc, 1)
@@ -202,7 +211,10 @@ class Gates(unittest.TestCase):
 
     def test_sorry_scan_is_advisory(self):
         r = Repo()
-        r.append("data/staging/lib.jsonl", json.dumps({**GOOD, "name": "Lib.s", "proof": ":= by sorry"}) + "\n")
+        r.append(
+            "data/staging/lib.jsonl",
+            json.dumps({**GOOD, "name": "Lib.s", "statement": "theorem Lib.s : 1 + 1 = 2", "proof": ":= by sorry"}) + "\n",
+        )
         r.commit("sorry")
         rc, out = r.gate("sorry_scan.py")
         self.assertEqual(rc, 0)
@@ -231,7 +243,9 @@ if __name__ == "__main__":
 class NestedAndPromotion(unittest.TestCase):
     def test_per_pr_staging_file_is_content(self):
         r = Repo()
-        r.write("data/staging/lib/pr-42.jsonl", json.dumps({**GOOD, "name": "Lib.pr42"}) + "\n")
+        r.write(
+            "data/staging/lib/pr-42.jsonl", json.dumps({**GOOD, "name": "Lib.pr42", "statement": "theorem Lib.pr42 : 1 + 1 = 2"}) + "\n"
+        )
         r.commit("nested")
         self.assertIn("class=content", r.gate("classify.py")[1])
         for s in ["append_only.py", "validate_records.py", "lint_banked.py"]:
@@ -350,7 +364,10 @@ class PromotionRules(unittest.TestCase):
 
     def test_import_inside_a_record_is_still_forbidden(self):
         r = Repo()
-        r.append("data/staging/lib.jsonl", json.dumps({**GOOD, "name": "Lib.imp", "context": "import Std"}) + "\n")
+        r.append(
+            "data/staging/lib.jsonl",
+            json.dumps({**GOOD, "name": "Lib.imp", "statement": "theorem Lib.imp : 1 + 1 = 2", "context": "import Std"}) + "\n",
+        )
         r.commit("imp")
         rc, out = r.gate("lint_banked.py")
         self.assertEqual(rc, 1)
@@ -406,3 +423,22 @@ class LintScope(unittest.TestCase):
         rc, out = r.gate("lint_banked.py")
         self.assertEqual(rc, 1)
         self.assertIn("unsafe", out)
+
+
+class RecordNames(unittest.TestCase):
+    def test_name_with_space_or_comma_fails(self):
+        for bad in ["Selftest.has space", "Selftest.a,b"]:
+            r = Repo()
+            r.append("data/staging/lib.jsonl", json.dumps({**GOOD, "name": bad, "statement": f"theorem {bad} : 1 + 1 = 2"}) + "\n")
+            r.commit("bad name")
+            rc, out = r.gate("validate_records.py")
+            self.assertEqual(rc, 1, bad)
+            self.assertIn("not a Lean identifier", out)
+
+    def test_statement_must_declare_the_name(self):
+        r = Repo()
+        r.append("data/staging/lib.jsonl", json.dumps({**GOOD, "name": "Lib.other", "statement": "theorem Lib.good : 1 + 1 = 2"}) + "\n")
+        r.commit("mismatch")
+        rc, out = r.gate("validate_records.py")
+        self.assertEqual(rc, 1)
+        self.assertIn("does not declare", out)

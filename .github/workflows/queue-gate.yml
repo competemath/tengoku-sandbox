@@ -40,7 +40,10 @@ jobs:
           git diff --name-only "${{ github.event.merge_group.base_sha }}" HEAD | tee changed.txt
       - name: Content lint (again, on the merged result)
         if: github.event_name == 'merge_group'
-        run: python3 scripts/ci/lint_banked.py "${{ github.event.merge_group.base_sha }}" HEAD
+        shell: bash
+        run: |
+          set -o pipefail
+          python3 scripts/ci/lint_banked.py "${{ github.event.merge_group.base_sha }}" HEAD 2>&1 | tee -a build.log  # the ejection comment reads build.log
       - name: Seed from the newest published cache (verified)
         if: github.event_name == 'merge_group'
         env: { GH_TOKEN: "${{ github.token }}" }
@@ -60,10 +63,14 @@ jobs:
           echo "building: $targets"
           # shellcheck disable=SC2086  # targets is a space-separated module list
           lake build $targets 2>&1 | tee -a build.log
-          if grep -q "declaration uses .sorry." build.log; then echo "error: a candidate uses sorry" | tee -a build.log; exit 1; fi
+          # lake reports sorry as a warning with file:line:col; restate it as an error so the ejection comment can name the record
+          if grep -q "declaration uses .sorry." build.log; then grep -m1 "declaration uses .sorry." build.log | sed -E 's/^.*warning: /error: /' | tee -a build.log; exit 1; fi
       - name: Axioms of every new declaration
         if: github.event_name == 'merge_group' && steps.build.outputs.targets != ''
+        shell: bash
         run: |
+          # `| tee` swallowed the tool's exit status: a native_decide axiom was reported and the job still passed (campaign).
+          set -o pipefail
           lake build tengoku-axioms 2>&1 | tail -1
           for m in ${{ steps.build.outputs.targets }}; do lake env .lake/build/bin/tengoku-axioms --module "$m" 2>&1 | tee -a build.log; done
       - name: Derived files match their generator
