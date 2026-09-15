@@ -32,6 +32,16 @@ jobs:
             --notes "$(printf 'commit=%s\ntoolchain=%s\n\nCompiled .lake/build for %s.' "$sha" "$(cat lean-toolchain)" "$sha")" \
             "$tmp"/tengoku-cache.tar.zst.part-* && echo "PUT-SHAPE-OK" || echo "PUT-SHAPE-FAILED"
           gh release delete "$tag" -R "$TENGOKU_REPO" --cleanup-tag -y 2>/dev/null || true
+      - name: alternative — push the tag with git first, then create the release on it (no --target)
+        env:
+          TENGOKU_REPO: ${{ github.repository }}
+          TARGET: ${{ github.event.inputs.target }}
+        run: |
+          sha="${TARGET:-$(git rev-parse HEAD)}"; tag="cache-tagpush-$(date -u +%Y%m%dT%H%M%SZ)"
+          git fetch -q origin "$sha" 2>/dev/null || true
+          git tag "$tag" "$sha" && git push -q origin "refs/tags/$tag" && echo "TAG-PUSH-OK" || echo "TAG-PUSH-FAILED"
+          gh release create "$tag" -R "$TENGOKU_REPO" --title probe --notes "commit=$sha" && echo "RELEASE-ON-TAG-OK" || echo "RELEASE-ON-TAG-FAILED"
+          gh release delete "$tag" -R "$TENGOKU_REPO" --cleanup-tag -y 2>/dev/null || git push -q origin ":refs/tags/$tag" || true
       - name: the build job's own steps before put — free disk space, then create again
         env:
           TENGOKU_REPO: ${{ github.repository }}
