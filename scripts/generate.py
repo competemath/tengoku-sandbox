@@ -293,6 +293,18 @@ def data_files(out: Path, tier: str, library: str) -> list[Path]:
     return ([flat] if flat.exists() else []) + nested
 
 
+def tombstoned_names(out: Path, library: str) -> list[str]:
+    """Names retracted by tombstone lines in the library's trusted files."""
+    names = []
+    for p in data_files(out, "trusted", library):
+        for line in p.read_text(encoding="utf-8").splitlines():
+            if line.strip():
+                r = json.loads(line)
+                if "tombstone" in r:
+                    names.append(str(r["tombstone"]))
+    return names
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--corpus", required=True, help="checkout of the corpus (dir containing e.g. equational_theories/)")
@@ -319,11 +331,16 @@ def main():
         lib_ns = pascal(library)
         corpus_prefix = library.replace("-", "_")  # equational-theories -> equational_theories
         records = []
+        # A tombstone line {"tombstone": "<name>", ...} in a trusted file retracts every record of that name
+        # (history stays in the file). The campaign found the schema accepted tombstones that changed nothing.
+        retracted = set(tombstoned_names(out, library))
         for tier in DATA_TIERS:
             for p in data_files(out, tier, library):
                 for line in p.read_text(encoding="utf-8").splitlines():
                     if line.strip():
                         r = json.loads(line)
+                        if "tombstone" in r or r.get("name") in retracted:
+                            continue
                         if r.get("source_path") and r.get("context") is not None:
                             records.append(r)
         if args.candidate:
@@ -332,6 +349,8 @@ def main():
                 for line in p.read_text(encoding="utf-8").splitlines():
                     if line.strip():
                         r = json.loads(line)
+                        if "tombstone" in r or r.get("name") in retracted:
+                            continue
                         if r.get("source_path") == args.candidate and r.get("context") is not None:
                             if only_names is None or r.get("name") in only_names:
                                 records.append(r)
