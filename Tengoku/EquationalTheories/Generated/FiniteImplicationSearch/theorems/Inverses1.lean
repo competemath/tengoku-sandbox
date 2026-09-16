@@ -1,4 +1,4 @@
--- Tengoku.EquationalTheories.Generated.FiniteImplicationSearch.theorems.Inverses1: verified translations of equational_theories/Generated/FiniteImplicationSearch/theorems/Inverses1.lean (76 theorems)
+-- Tengoku.EquationalTheories.Generated.FiniteImplicationSearch.theorems.Inverses1: verified translations of equational_theories/Generated/FiniteImplicationSearch/theorems/Inverses1.lean (75 theorems)
 import Tengoku
 import Tengoku.EquationalTheories.Deps.Magma
 import Lean
@@ -22,60 +22,9 @@ set_option linter.all false
 
 namespace EquationalTheories
 
-set_option linter.unusedVariables false
-
-theorem _root_.Finite.Equation1076_implies_Equation3 (G : Type*) [Magma G] [Finite G] (h : Equation1076 G) : Equation3 G
-:= by
-  by_contra nh
-  simp only [not_forall] at nh
-  obtain ⟨sK0, nh⟩ := nh
-  have step9 (X0 X1 : G) : (X1 ◇ ((X0 ◇ (X0 ◇ X1)) ◇ X1)) = X0 := mod_symm (h ..)
-  have step10 : sK0 ≠ (sK0 ◇ sK0) := mod_symm nh
-  have step11 (X Y : G) : ((Y ◇ (X ◇ Y)) ◇ ((Y ◇ (X ◇ Y)) ◇ Y)) = X := by
-    let S : Set G := Set.univ
-    have m1 : S.MapsTo (fun s => (s ◇ (s ◇ Y))) S := by
-      intro
-      simp [S]
-    have m2 : S.MapsTo (fun s => (Y ◇ (s ◇ Y))) S := by
-      intro
-      simp [S]
-    have linv : S.LeftInvOn (fun s => (Y ◇ (s ◇ Y))) (fun s => (s ◇ (s ◇ Y))) := by
-      intro a ha
-      simp [S]
-      simp [← h]
-    have t := linv.surjOn m1
-    rw [Set.Finite.surjOn_iff_bijOn_of_mapsTo (Set.toFinite _) m2] at t
-    have rinv := Set.InjOn.rightInvOn_of_leftInvOn t.injOn linv m2 m1
-    apply rinv _
-    simp [S]
-  have step12 (X Y : G) : (((Y ◇ X) ◇ ((Y ◇ X) ◇ Y)) ◇ Y) = X := by
-    let S : Set G := Set.univ
-    have m1 : S.MapsTo (fun s => ((s ◇ (s ◇ Y)) ◇ Y)) S := by
-      intro
-      simp [S]
-    have m2 : S.MapsTo (fun s => (Y ◇ s)) S := by
-      intro
-      simp [S]
-    have linv : S.LeftInvOn (fun s => (Y ◇ s)) (fun s => ((s ◇ (s ◇ Y)) ◇ Y)) := by
-      intro a ha
-      simp [S]
-      simp [← h]
-    have t := linv.surjOn m1
-    rw [Set.Finite.surjOn_iff_bijOn_of_mapsTo (Set.toFinite _) m2] at t
-    have rinv := Set.InjOn.rightInvOn_of_leftInvOn t.injOn linv m2 m1
-    apply rinv _
-    simp [S]
-  have step13 (X0 X1 : G) : (((X0 ◇ (X0 ◇ X1)) ◇ X1) ◇ ((X1 ◇ X0) ◇ ((X0 ◇ (X0 ◇ X1)) ◇ X1))) = X1 := superpose step9 step9
-  have step15 (X0 X1 : G) : ((X1 ◇ X0) ◇ ((X1 ◇ X0) ◇ X1)) = (X1 ◇ ((((X1 ◇ X0) ◇ ((X1 ◇ X0) ◇ X1)) ◇ X0) ◇ X1)) := superpose step12 step9
-  have step75 (X0 : G) : ((X0 ◇ X0) ◇ ((X0 ◇ X0) ◇ X0)) = (X0 ◇ (X0 ◇ X0)) := superpose step12 step15
-  have step91 (X0 : G) : ((X0 ◇ (X0 ◇ X0)) ◇ X0) = X0 := superpose step75 step12
-  have step92 (X0 : G) : (((X0 ◇ (X0 ◇ X0)) ◇ X0) ◇ ((X0 ◇ (X0 ◇ X0)) ◇ ((X0 ◇ (X0 ◇ X0)) ◇ X0))) = X0 := superpose step75 step13
-  have step102 (X0 : G) : (((X0 ◇ (X0 ◇ X0)) ◇ X0) ◇ X0) = X0 := superpose step11 step92
-  have step103 (X0 : G) : (X0 ◇ X0) = X0 := superpose step91 step102
-  have step175 : sK0 ≠ sK0 := superpose step103 step10
-  subsumption step175 rfl
-
 universe uEq
+
+set_option linter.unusedVariables false
 
 theorem _root_.Finite.Equation1086_implies_Equation1832 (G : Type*) [Magma G] [Finite G] (h : Equation1086 G) : Equation1832 G
 := by
