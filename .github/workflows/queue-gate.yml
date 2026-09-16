@@ -119,3 +119,5 @@ jobs:
 # campaign: second workflow touch during a cache build (publish guard test)
 
 # campaign: second workflow touch during a cache build (publish guard test)
+
+# campaign: workflow touch while a cache build runs (priority test)
