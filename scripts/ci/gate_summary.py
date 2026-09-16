@@ -90,13 +90,14 @@ def jobs() -> list[dict]:
 
 
 def excerpt(job_id: int) -> str:
-    log = gh("run", "view", RUN, "-R", REPO, "--job", str(job_id), "--log")
+    # The per-job logs endpoint works while the run is still in progress; `gh run view --log` does not.
+    log = gh("api", f"repos/{REPO}/actions/jobs/{job_id}/logs")
     lines = []
     for raw in log.splitlines():
-        line = re.sub(r"^[^\t]*\t[^\t]*\t", "", raw)  # gh prefixes "job\tstep\t"
+        line = re.sub(r"^[^\t]*\t[^\t]*\t", "", raw)  # tolerate gh's "job\tstep\t" prefix too
         line = re.sub(r"^\S+Z ", "", line)  # timestamp
         line = re.sub(r"\x1b\[[0-9;]*m", "", line)
-        if re.search(r"^(FAIL:|##\[error\]|error:)|^\s+\S.*:\d+: ", line):
+        if re.search(r"^(FAIL:|##\[error\]|error:)|^\s+\S.*:\d+: ", line) and "Process completed with exit code" not in line:
             lines.append(line.replace("##[error]", "").strip())
         elif lines and line.startswith("  ") and len(lines) < 6:
             lines.append(line.rstrip())
