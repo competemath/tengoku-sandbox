@@ -10,6 +10,7 @@ import os
 import re
 import subprocess
 import sys
+import urllib.parse
 from pathlib import Path
 
 from _git import ROOT, run
@@ -99,6 +100,15 @@ group_note = (
     if len(prs) > 1
     else ""
 )
+_repo = os.environ.get("GITHUB_REPOSITORY", "")
+_server = os.environ.get("GITHUB_SERVER_URL", "https://github.com")
+issue_link = f"{_server}/{_repo}/issues/new?" + urllib.parse.urlencode(
+    {
+        "labels": "gate-bug",
+        "title": f"queue bug? {where}",
+        "body": f"Run: {run_url}\nFailed at: {where}\n\n```\n{msg[:600]}\n```\n\nWhy I think the queue is wrong:\n",
+    }
+)
 body = f"""### Removed from the merge queue
 
 The queue build failed at {where}.{group_note}
@@ -109,7 +119,9 @@ The queue build failed at {where}.{group_note}
 
 Full log: {run_url}
 
-Re-queue after fixing (`gh pr merge --queue`, or the *Merge when ready* button). This message is generated; an AI reviewer will add more context later."""
+Re-queue after fixing (`gh pr merge --queue`, or the *Merge when ready* button). This message is generated; an AI reviewer will add more context later.
+
+If your change is right and the queue is not (candidate generation, the axiom scan and the regeneration diff are the complex parts): **[Report a gate bug]({issue_link})** — a maintainer looks at every one."""
 # A squash merge group carries one commit per PR, subject "<title> (#N)"; a merge-commit group says "Merge pull request #N".
 if not prs:
     print(body)
