@@ -44,6 +44,7 @@ jobs:
       contents: write      # release assets (the cache)
       id-token: write      # Sigstore signing identity for the attestation
       attestations: write
+      actions: write       # the run re-dispatches itself (resume after the time cap; publish from the tip) — found by the campaign
     env:
       TENGOKU_REPO: ${{ github.repository }}     # publish here
       TENGOKU_CACHE_SOURCE: competemath/tengoku  # seed from the library (a sandbox has no caches of its own)
