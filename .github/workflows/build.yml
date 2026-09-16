@@ -56,7 +56,7 @@ jobs:
       complete: ${{ steps.build.outputs.complete }}
       published: ${{ steps.publish.outputs.tag != '' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install elan (toolchain pinned by lean-toolchain)
         run: |
