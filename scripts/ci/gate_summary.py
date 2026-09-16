@@ -90,7 +90,12 @@ def jobs() -> list[dict]:
 
 
 def excerpt(job_id: int) -> str:
-    # The per-job logs endpoint works while the run is still in progress; `gh run view --log` does not.
+    # A job is a check run; its `::error::` lines are annotations, readable while the run is still in progress.
+    ann = gh("api", f"repos/{REPO}/check-runs/{job_id}/annotations", "-q", '.[] | select(.annotation_level=="failure") | .message')
+    msgs = [m for m in ann.split("\n") if m.strip() and "Process completed with exit code" not in m]
+    if msgs:
+        return "\n".join(msgs)[:1200]
+    # Fallback: the per-job log (`gh run view --log` refuses while the run is in progress).
     log = gh("api", f"repos/{REPO}/actions/jobs/{job_id}/logs")
     lines = []
     for raw in log.splitlines():

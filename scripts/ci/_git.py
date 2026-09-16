@@ -155,7 +155,9 @@ def gh_output(key: str, value: str) -> None:
 
 
 def fail(msg: str) -> None:
-    print(f"::error::{msg}" if os.environ.get("GITHUB_ACTIONS") else f"FAIL: {msg}")
+    # `::error::` becomes a check-run annotation; newlines must be %0A-encoded or GitHub keeps only the first line.
+    print("::error::" + msg.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A"))
+    print("FAIL: " + msg, file=sys.stderr)
     sys.exit(1)
 
 
