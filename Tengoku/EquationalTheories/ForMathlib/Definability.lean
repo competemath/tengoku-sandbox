@@ -1,4 +1,4 @@
--- Tengoku.EquationalTheories.ForMathlib.Definability: verified translations of equational_theories/ForMathlib/Definability.lean (316 theorems)
+-- Tengoku.EquationalTheories.ForMathlib.Definability: verified translations of equational_theories/ForMathlib/Definability.lean (315 theorems)
 import Tengoku
 import Tengoku.ModelTheory.Definability
 import Tengoku.Data.Rel
@@ -1121,9 +1121,6 @@ theorem Selftest.cleanG : (1 : Nat) + 1 = 2
 
 theorem Selftest.crlf : (1 : Nat) + 1 = 2
 := rfl
-
-theorem Selftest.dn : (1 : Nat) + 1 = 2
-:= by decide +native
 
 set_option maxHeartbeats 400000 in
 
