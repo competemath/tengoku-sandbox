@@ -155,9 +155,11 @@ def gh_output(key: str, value: str) -> None:
 
 
 def fail(msg: str) -> None:
-    # `::error::` becomes a check-run annotation; newlines must be %0A-encoded or GitHub keeps only the first line.
-    print("::error::" + msg.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A"))
-    print("FAIL: " + msg, file=sys.stderr)
+    if os.environ.get("GITHUB_ACTIONS"):
+        # `::error::` becomes a check-run annotation (what the verdict comment quotes); newlines must be
+        # %0A-encoded or GitHub keeps only the first line. The readable form goes to the log too.
+        print("::error::" + msg.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A"))
+    print("FAIL: " + msg)
     sys.exit(1)
 
 
