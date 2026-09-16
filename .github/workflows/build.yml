@@ -26,9 +26,9 @@ on:
         required: false
         default: "false"
       retried:
-        description: "internal: re-run on the tip after workflow files changed on main during a build"
+        description: "internal: how many times this build has re-run on the tip after workflow files changed on main (max 2)"
         required: false
-        default: "false"
+        default: "0"
 
 concurrency:
   group: build-${{ github.ref }}
@@ -151,10 +151,11 @@ jobs:
         run: gh workflow run build.yml -R "$GITHUB_REPOSITORY" --ref "$GITHUB_REF_NAME" -f resume=true
 
       - name: Publish from a run on the tip (once)
-        if: steps.build.outputs.complete == 'true' && steps.guard.outputs.stale == 'true' && github.event.inputs.retried != 'true'
+        if: steps.build.outputs.complete == 'true' && steps.guard.outputs.stale == 'true' && github.event.inputs.retried != '2'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh workflow run build.yml -R "$GITHUB_REPOSITORY" --ref "$GITHUB_REF_NAME" -f retried=true
+          RETRIED: ${{ github.event.inputs.retried || '0' }}
+        run: gh workflow run build.yml -R "$GITHUB_REPOSITORY" --ref "$GITHUB_REF_NAME" -f retried="$(( ${RETRIED:-0} + 1 ))"
 
   # A fresh cache is out: move the hosted Leak services onto it. With an
   # HF_TOKEN secret (a Hugging Face token with write access to the Spaces) each

@@ -19,7 +19,7 @@ jobs:
   queue-gate:
     runs-on: ubuntu-latest
     timeout-minutes: 40
-    permissions: { contents: read, pull-requests: write }
+    permissions: { contents: read, pull-requests: write, actions: read }   # actions: read — to see a running cache build
     steps:
       - name: On a pull request there is nothing to build here
         if: github.event_name == 'pull_request'
@@ -36,6 +36,23 @@ jobs:
           curl -sSfL https://github.com/leanprover/elan/releases/latest/download/elan-x86_64-unknown-linux-gnu.tar.gz | tar xz
           ./elan-init -y --default-toolchain none && echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
           sudo apt-get install -y -q zstd >/dev/null
+      # The nightly cache build cannot tag its commit once a workflow file has changed on main (the job
+      # token may not hold `workflows`), so a group that changes workflows waits for a running build to
+      # finish. Content and promotion groups never wait: they do not disturb a build. Capped below the
+      # queue's 40-minute check timeout; a cold multi-hour build lets the group through and the build's
+      # own relaunch covers it.
+      - name: Let a running cache build finish before a workflow change lands
+        if: github.event_name == 'merge_group'
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          if ! git diff --name-only "${{ github.event.merge_group.base_sha }}...HEAD" -- .github/workflows | grep -q .; then echo "no workflow files in this group"; exit 0; fi
+          for i in $(seq 1 70); do
+            running=$(gh run list -R "$GITHUB_REPOSITORY" --workflow build.yml --status in_progress --json databaseId -q 'length' 2>/dev/null || echo 0)
+            queued=$(gh run list -R "$GITHUB_REPOSITORY" --workflow build.yml --status queued --json databaseId -q 'length' 2>/dev/null || echo 0)
+            if [ "$running" = 0 ] && [ "$queued" = 0 ]; then echo "no cache build running"; exit 0; fi
+            echo "$(date -u +%H:%M:%S) a cache build is running; this group changes workflow files — waiting ($i)"; sleep 30
+          done
+          echo "::warning::a cache build has been running for over 35 minutes; letting the group through (the build relaunches on the tip)"
       - name: What this group changes
         if: github.event_name == 'merge_group'
         id: diff
