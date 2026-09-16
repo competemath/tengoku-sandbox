@@ -11,6 +11,10 @@ on:
 permissions: {}
 env:
   TENGOKU_REPO: competemath/tengoku   # caches are read from the library, never from a sandbox
+defaults:
+  run:
+    shell: bash   # -e -o pipefail on every run: step (the campaign found silent passes behind pipes)
+
 jobs:
   queue-gate:
     runs-on: ubuntu-latest

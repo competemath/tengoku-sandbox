@@ -36,6 +36,10 @@ concurrency:
 
 permissions: {}
 
+defaults:
+  run:
+    shell: bash   # -e -o pipefail on every run: step (the campaign found silent passes behind pipes)
+
 jobs:
   build:
     runs-on: ubuntu-latest

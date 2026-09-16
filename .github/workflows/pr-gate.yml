@@ -9,6 +9,9 @@ on:
     types: [opened, synchronize, reopened, edited]
   merge_group:
 permissions: {}
+defaults:
+  run:
+    shell: bash   # every `run:` gets `-e -o pipefail` — a piped command's failure fails the step (the campaign found two silent passes)
 concurrency:
   group: pr-gate-${{ github.event.pull_request.number || github.event.merge_group.head_ref }}
   cancel-in-progress: true
@@ -177,8 +180,21 @@ jobs:
     needs: [classify, data-rules, credits, dco, secrets, depends, lint-python, tooling-tests]
     if: always()
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    timeout-minutes: 5
+    permissions: { contents: read, actions: read, pull-requests: write }
     steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: { filter: "blob:none" }
+      # One comment per PR (updated in place): which check failed, what it said, what to do, and a
+      # prefilled "Report a gate bug" issue link for the checks complex enough to be wrong themselves.
+      - name: Explain the verdict on the PR
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ env.HEAD }}
+          PR_CLASS: ${{ needs.classify.outputs.class }}
+        run: python3 scripts/ci/gate_summary.py
       - name: Every job of this PR's class passed
         env: { RESULTS: "${{ toJSON(needs) }}" }
         run: |

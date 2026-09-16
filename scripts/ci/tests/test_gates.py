@@ -442,3 +442,56 @@ class RecordNames(unittest.TestCase):
         rc, out = r.gate("validate_records.py")
         self.assertEqual(rc, 1)
         self.assertIn("does not declare", out)
+
+
+class GateSummary(unittest.TestCase):
+    def render(self, jobs_):
+        return subprocess.run(
+            [sys.executable, str(CI / "gate_summary.py"), "--render-test"],
+            input=json.dumps(jobs_),
+            capture_output=True,
+            text=True,
+            env={
+                **os.environ,
+                "GITHUB_REPOSITORY": "o/r",
+                "GITHUB_RUN_ID": "1",
+                "PR_NUMBER": "7",
+                "HEAD_SHA": "abcdef012345",
+                "PR_CLASS": "content",
+            },
+        ).stdout
+
+    def test_failed_job_gets_step_advice_and_report_link(self):
+        out = self.render(
+            [
+                {"name": "classify", "conclusion": "success", "databaseId": 1, "steps": []},
+                {
+                    "name": "data-rules",
+                    "conclusion": "failure",
+                    "databaseId": 2,
+                    "steps": [{"name": "append-only", "conclusion": "failure"}],
+                },
+                {
+                    "name": "dco",
+                    "conclusion": "failure",
+                    "databaseId": 3,
+                    "steps": [{"name": "Run python3 scripts/ci/dco.py", "conclusion": "failure"}],
+                },
+            ]
+        )
+        self.assertIn("2 checks failed for a `content` PR at `abcdef01`", out)
+        self.assertIn("**data-rules** → step *append-only*", out)
+        self.assertIn("re-open the file and append", out)
+        self.assertIn("Report a gate bug", out)
+        self.assertIn("issues/new?labels=gate-bug", out)
+        self.assertIn("git commit -s --amend", out)
+        self.assertNotIn("Report a gate bug](", out.split("**dco**")[1])  # a low-fragility check gets no report link
+
+    def test_all_passed(self):
+        out = self.render(
+            [
+                {"name": "classify", "conclusion": "success", "databaseId": 1, "steps": []},
+                {"name": "pr-gate", "conclusion": "failure", "databaseId": 9, "steps": []},
+            ]
+        )
+        self.assertIn("all checks passed", out)
