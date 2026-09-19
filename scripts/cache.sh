@@ -19,6 +19,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 REPO="${TENGOKU_REPO:-competemath/tengoku}"          # where `put` publishes
 SRC="${TENGOKU_CACHE_SOURCE:-$REPO}"                  # where `get`/`latest` read (a sandbox reads the library's caches)
+TOPUPS="${TENGOKU_TOPUPS:-0}"                         # 1 = follow top-ups (the small per-merge difference from the nightly base); 0 = nightly base only
+TOPUP_RELEASE="cache-topups"                          # one rolling release holding topup-<commit>.tar.zst + .json
 cmd="${1:-}"
 
 need() { command -v "$1" >/dev/null 2>&1 || { echo "missing: $1" >&2; exit 1; }; }
@@ -44,6 +46,35 @@ except Exception: pass' 2>/dev/null || true
 # Every asset of a cache release must carry a build-provenance attestation from
 # this repository's build workflow (docs/tengoku-security-plan.md §6). With gh
 # present the check is enforced; without it a warning is printed for now.
+pointer_json() { need curl; curl -fsSL "https://github.com/$SRC/releases/download/cache-latest/cache-latest.json" 2>/dev/null || true; }
+
+pointer_topup() {  # "<commit> <sha256>" of the promoted top-up, or nothing
+  pointer_json | python3 -c '
+import json, sys
+try:
+    t = json.load(sys.stdin).get("topup") or {}
+    if t.get("commit"): print(t["commit"], t.get("sha256", ""))
+except Exception: pass' 2>/dev/null || true
+}
+
+# Overlay the promoted top-up when it belongs to the history of <want>. Never fatal: a top-up that
+# cannot be fetched, verified or applied leaves the base in place and Lake builds the difference.
+apply_topup() {
+  local want="$1" commit digest tmp mode="${TENGOKU_VERIFY:-warn}"
+  read -r commit digest < <(pointer_topup) || true
+  [ -n "${commit:-}" ] || { echo "no top-up published"; return 0; }
+  git merge-base --is-ancestor "$commit" "$want" 2>/dev/null || { echo "the published top-up ($commit) is not in the history of $want; using the base only"; return 0; }
+  tmp="$(mktemp -d)"
+  for f in "topup-$commit.tar.zst" "topup-$commit.json"; do
+    curl -fsSL -o "$tmp/$f" "https://github.com/$SRC/releases/download/$TOPUP_RELEASE/$f" || { echo "warning: could not fetch $f; using the base only" >&2; rm -rf "$tmp"; return 0; }
+  done
+  if command -v gh >/dev/null 2>&1 && gh attestation verify "$tmp/topup-$commit.tar.zst" -R "$SRC" --signer-workflow "$SRC/.github/workflows/queue-gate.yml" >/dev/null 2>&1; then echo "top-up attestation verified"
+  elif [ "$mode" = "require" ]; then echo "REFUSED: the top-up has no valid build attestation from $SRC — using the base only" >&2; rm -rf "$tmp"; return 0
+  else echo "warning: the top-up has no build attestation (TENGOKU_VERIFY=warn)" >&2; fi
+  python3 scripts/topup.py apply --file "$tmp/topup-$commit.tar.zst" --manifest "$tmp/topup-$commit.json" || echo "warning: the top-up was refused; using the base only" >&2
+  rm -rf "$tmp"
+}
+
 verify_parts() {
   local dir="$1" mode="${TENGOKU_VERIFY:-warn}"   # warn until every published cache carries an attestation, then require
   if ! command -v gh >/dev/null 2>&1; then
@@ -127,6 +158,20 @@ case "$cmd" in
     # Fixed-tag pointer to the newest cache, for consumers that must not call the API.
     printf '{"tag": "%s", "commit": "%s", "published_at": "%s", "parts": [%s]}\n' "$tag" "$sha" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
       "$(for f in "$tmp"/tengoku-cache.tar.zst.part-*; do printf '{"name": "%s", "sha256": "%s"},' "$(basename "$f")" "$(sha256sum "$f" | cut -d' ' -f1)"; done | sed 's/,$//')" > "$tmp/cache-latest.json"
+    # A promoted top-up for a commit ahead of this new base is still exactly right on top of it
+    # (it holds every module that changed since the OLDER base): keep it, or consumers would step back.
+    keep="$(pointer_json | python3 -c '
+import json, sys
+try: print(json.dumps((json.load(sys.stdin).get("topup") or {})))
+except Exception: print("{}")' 2>/dev/null || echo "{}")"
+    kc="$(printf '%s' "$keep" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("commit",""))')"
+    if [ -n "$kc" ] && [ "$kc" != "$sha" ] && git merge-base --is-ancestor "$sha" "$kc" 2>/dev/null; then
+      python3 - "$tmp/cache-latest.json" "$keep" <<'PY'
+import json, sys
+p = sys.argv[1]; d = json.load(open(p)); d["topup"] = json.loads(sys.argv[2]); json.dump(d, open(p, "w"))
+PY
+      echo "kept the promoted top-up for $kc on the new base"
+    fi
     gh release view cache-latest -R "$REPO" >/dev/null 2>&1 || gh release create cache-latest -R "$REPO" --title "newest cache (pointer)" --notes "cache-latest.json names the newest cache release. Updated by every publish." >/dev/null
     gh release upload cache-latest "$tmp/cache-latest.json" -R "$REPO" --clobber >/dev/null && echo "pointer cache-latest.json → $tag"
     rm -rf "$tmp"
@@ -137,6 +182,11 @@ case "$cmd" in
       | while read -r old; do [ -n "$old" ] && gh release delete "$old" -R "$REPO" --yes --cleanup-tag && echo "pruned $old"; done || true
     ;;
   latest)
+    if [ "$TOPUPS" = 1 ]; then
+      commit="$(pointer_topup | awk '{print $1}')"; basec="$(pointer | awk '{print $4}')"
+      # only a top-up AHEAD of the nightly cache moves consumers; anything else is a stale pointer write
+      if [ -n "$commit" ] && [ -n "$basec" ] && [ "$commit" != "$basec" ] && git merge-base --is-ancestor "$basec" "$commit" 2>/dev/null; then echo "$commit"; exit 0; fi
+    fi
     commit="$(pointer | awk '{print $4}')"
     [ -n "$commit" ] || commit="$(list_caches | head -n 1 | awk '{print $4}')"
     [ -n "$commit" ] || { echo "no published cache" >&2; exit 1; }
@@ -155,18 +205,91 @@ case "$cmd" in
     # Newest cache first; the first one whose commit is an ancestor of what we
     # want is the best starting point. (A shallow clone cannot answer
     # ancestry — clone with --filter=blob:none or enough depth.)
-    while read -r _ _ tag commit; do
-      if git merge-base --is-ancestor "$commit" "$want" 2>/dev/null; then found="$tag"; break; fi
-    done < <(list_caches)
+    fc=""
+    # The pointer names the newest cache and costs no API call (a service refreshing after every merge
+    # would exhaust the anonymous rate limit on the release listing); the listing is the fallback.
+    read -r _ _ ptag pcommit < <(pointer) || true
+    if [ -n "${pcommit:-}" ] && git merge-base --is-ancestor "$pcommit" "$want" 2>/dev/null; then found="$ptag"; fc="$pcommit"; fi
+    if [ -z "$found" ]; then
+      while read -r _ _ tag commit; do
+        if git merge-base --is-ancestor "$commit" "$want" 2>/dev/null; then found="$tag"; fc="$commit"; break; fi
+      done < <(list_caches)
+    fi
     [ -n "$found" ] || { echo "no published cache is an ancestor of $want (are the caches published? is this clone deep enough for ancestry?)" >&2; exit 1; }
-    echo "fetching $found …"
-    download_cache "$found" "$tmp"
-    verify_parts "$tmp" || { rm -rf "$tmp"; exit 1; }
-    mkdir -p .lake
-    cat "$tmp"/tengoku-cache.tar.zst.part-* | zstd -d -q | tar -C .lake -xf -
+    have="$(awk '{print $1}' .lake/.cache-base 2>/dev/null || true)"
+    if [ "$have" = "$found" ] && [ -d .lake/build ] && [ "${TENGOKU_FORCE:-0}" != 1 ]; then
+      echo "base $found is already unpacked"
+    else
+      echo "fetching $found …"
+      download_cache "$found" "$tmp"
+      verify_parts "$tmp" || { rm -rf "$tmp"; exit 1; }
+      mkdir -p .lake
+      python3 scripts/topup.py rollback >/dev/null 2>&1 || true     # a top-up of the previous base must not leak into the new one
+      cat "$tmp"/tengoku-cache.tar.zst.part-* | zstd -d -q | tar -C .lake -xf -
+      echo "$found $fc" > .lake/.cache-base
+      touch .lake/.topup-marker      # everything built from here on is a difference from this base
+      echo "unpacked $found into .lake/build (Lake rebuilds only what differs from $want)"
+    fi
     rm -rf "$tmp"
-    echo "unpacked $found into .lake/build (Lake rebuilds only what differs from $want)"
+    if [ "$TOPUPS" = 1 ]; then apply_topup "$want"; elif [ -f .lake/.topup-applied.json ]; then python3 scripts/topup.py rollback; fi
+    ;;
+  topup-make)      # topup-make <tip commit> <out dir> — pack what differs from the unpacked base (CI, Linux)
+    python3 scripts/topup.py make --tip "${2:?tip commit}" --out "${3:?out dir}"
+    ;;
+  topup-put)       # topup-put <dir> — upload topup-*.tar.zst + .json to the rolling release; invisible until promoted
+    need gh
+    gh release view "$TOPUP_RELEASE" -R "$REPO" >/dev/null 2>&1 || gh release create "$TOPUP_RELEASE" -R "$REPO" --title "cache top-ups" --prerelease \
+      --notes "The small per-merge differences from the nightly cache. cache-latest.json names the one in force; everything else here is provisional or about to be collected." >/dev/null
+    ok=""
+    for attempt in 1 2 3; do
+      if gh release upload "$TOPUP_RELEASE" "${2:?dir}"/topup-*.tar.zst "${2}"/topup-*.json -R "$REPO" --clobber >/dev/null 2>&1; then ok=1; break; fi
+      echo "upload attempt $attempt failed; retrying" >&2; sleep $((attempt * 10))
+    done
+    [ -n "$ok" ] || { echo "error: the cache top-up could not be published" >&2; exit 1; }
+    echo "published (provisional): $(ls "${2}" | tr '\n' ' ')"
+    ;;
+  topup-promote)   # topup-promote <commit on main> — make that commit's top-up the one consumers follow
+    need gh
+    sha="${2:-}"; tmp="$(mktemp -d)"
+    if [ -z "$sha" ]; then   # newest commit on main with a published top-up (one listing, then history order)
+      names="$(gh api "repos/$REPO/releases/tags/$TOPUP_RELEASE" -q '.assets[].name' 2>/dev/null || true)"
+      for c in $(git rev-list -n 50 origin/main); do
+        if printf '%s\n' "$names" | grep -qx "topup-$c.json" && printf '%s\n' "$names" | grep -qx "topup-$c.tar.zst"; then sha="$c"; break; fi
+      done
+      [ -n "$sha" ] || { echo "no commit on main has a published top-up; the pointer stays where it is"; rm -rf "$tmp"; exit 0; }
+    fi
+    gh release download "$TOPUP_RELEASE" -R "$REPO" -p "topup-$sha.json" -D "$tmp" >/dev/null 2>&1 || { echo "no top-up was published for $sha; the pointer stays where it is"; rm -rf "$tmp"; exit 0; }
+    pointer_json > "$tmp/pointer.json"
+    [ -s "$tmp/pointer.json" ] || { echo "no base cache pointer yet; nothing to promote onto"; rm -rf "$tmp"; exit 0; }
+    cur="$(python3 -c 'import json,sys; print((json.load(open(sys.argv[1])).get("topup") or {}).get("commit",""))' "$tmp/pointer.json")"
+    if [ -n "$cur" ] && ! git merge-base --is-ancestor "$cur" "$sha" 2>/dev/null; then echo "the pointer already names $cur, which is not behind $sha; leaving it"; rm -rf "$tmp"; exit 0; fi
+    basec="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["base_commit"])' "$tmp/topup-$sha.json")"
+    if [ -n "$basec" ] && ! git merge-base --is-ancestor "$basec" "$sha" 2>/dev/null; then echo "the top-up's base ($basec) is not in the history of $sha; not promoting"; rm -rf "$tmp"; exit 0; fi
+    python3 - "$tmp/pointer.json" "$tmp/topup-$sha.json" <<'PY'
+import json, sys, time
+p, m = json.load(open(sys.argv[1])), json.load(open(sys.argv[2]))
+p["topup"] = {"commit": m["tip"], "asset": f"topup-{m['tip']}.tar.zst", "sha256": m["sha256"], "files": len(m["files"]), "bytes": m["bytes"], "base_tag": m.get("base_tag"), "promoted_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+json.dump(p, open(sys.argv[1], "w"))
+PY
+    cp "$tmp/pointer.json" "$tmp/cache-latest.json"
+    gh release upload cache-latest "$tmp/cache-latest.json" -R "$REPO" --clobber >/dev/null && echo "pointer → base $(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["tag"])' "$tmp/pointer.json") + top-up $sha"
+    rm -rf "$tmp"
+    ;;
+  topup-gc)        # retract top-ups that never reached main, and ones a newer top-up has replaced (2 h grace)
+    need gh
+    cur="$(pointer_topup | awk '{print $1}')"
+    gh api "repos/$REPO/releases/tags/$TOPUP_RELEASE" -q '.assets[] | "\(.name) \(.created_at)"' 2>/dev/null | while read -r name created; do
+      sha="$(printf '%s' "$name" | sed -E 's/^topup-([0-9a-f]+)\..*$/\1/')"
+      [ "$sha" = "$cur" ] && continue
+      age=$(( $(date -u +%s) - $(python3 -c 'import sys,datetime; print(int(datetime.datetime.strptime(sys.argv[1], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=datetime.timezone.utc).timestamp()))' "$created") ))
+      [ "$age" -gt "${TENGOKU_TOPUP_GRACE_S:-7200}" ] || continue
+      if git merge-base --is-ancestor "$sha" origin/main 2>/dev/null; then why="replaced by a newer top-up"; else why="its commit never reached main"; fi
+      gh release delete-asset "$TOPUP_RELEASE" "$name" -R "$REPO" --yes >/dev/null 2>&1 && echo "retracted $name ($why)"
+    done || true
+    ;;
+  topup-rollback)
+    python3 scripts/topup.py rollback
     ;;
   *)
-    echo "usage: $0 get [<commit>] | latest | latest-tag | put" >&2; exit 2 ;;
+    echo "usage: $0 get [<commit>] | latest | latest-tag | put | topup-make <tip> <dir> | topup-put <dir> | topup-promote <commit> | topup-gc | topup-rollback" >&2; exit 2 ;;
 esac

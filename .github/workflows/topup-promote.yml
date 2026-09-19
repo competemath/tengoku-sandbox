@@ -1,0 +1,40 @@
+# A top-up published by the merge queue is provisional. This workflow makes it the one the services
+# follow, and only for a commit that is really on main: it writes the top-up into cache-latest.json.
+# It also collects top-ups whose commit never reached main (a group that failed or was rebuilt) and
+# ones a newer top-up replaced, and starts a cache build when main's tip was too big for the queue's
+# build budget (marked "incomplete" there). Runs are serialized; each run looks at main's tip, so a skipped run
+# loses nothing.
+name: topup-promote
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions: {}
+concurrency:
+  group: topup-promote
+  cancel-in-progress: false
+defaults:
+  run:
+    shell: bash
+env:
+  TENGOKU_REPO: ${{ github.repository }}
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions: { contents: write, actions: write }   # actions: write — to start a cache build for an incomplete tip
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: { ref: main, fetch-depth: 0, filter: "blob:none" }
+      - name: Name the newest top-up on main in the pointer, collect the rest
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          sudo apt-get install -y -q zstd >/dev/null
+          git fetch -q origin main
+          scripts/cache.sh topup-promote
+          scripts/cache.sh topup-gc
+          tip="$(git rev-parse origin/main)"
+          if gh api "repos/$GITHUB_REPOSITORY/releases/tags/cache-topups" -q '.assets[].name' 2>/dev/null | grep -qx "topup-$tip.incomplete"; then
+            busy=$(( $(gh run list -R "$GITHUB_REPOSITORY" --workflow build.yml --status in_progress --json databaseId -q 'length') + $(gh run list -R "$GITHUB_REPOSITORY" --workflow build.yml --status queued --json databaseId -q 'length') ))
+            if [ "$busy" = 0 ]; then gh workflow run build.yml -R "$GITHUB_REPOSITORY" --ref main && echo "main's tip has no complete top-up: started a cache build"; else echo "main's tip has no complete top-up; a cache build is already running"; fi
+          fi

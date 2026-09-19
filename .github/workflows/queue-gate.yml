@@ -2,6 +2,16 @@
 # Seeds the nightly cache, builds only the candidate modules of the group, checks
 # axioms, regenerates derived files and diffs them. On failure the PRs in the
 # group get a comment naming the file, line, record and what to do.
+#
+# Then it builds the library exactly as it will be on main and publishes the small
+# difference from the nightly cache (a "top-up"), so the services can follow main
+# merge by merge without ever compiling. The merge waits for that publish:
+#   queue-build   compiles the group (runs the group's Lean code; read-only token)
+#   queue-topup   attests and uploads the top-up (write token; runs no code of the group)
+#   queue-gate    the required check: green only when both are
+# A top-up is invisible until topup-promote.yml names it in cache-latest.json, which
+# happens only for a commit that really is on main — a group that fails or is rebuilt
+# leaves an orphan that is collected, never followed.
 name: queue-gate
 # Required check: on a pull request it passes immediately (the build happens in
 # the queue); on the merge group it does the work.
@@ -10,16 +20,19 @@ on:
   merge_group:
 permissions: {}
 env:
-  TENGOKU_REPO: competemath/tengoku   # caches are read from the library, never from a sandbox
+  TENGOKU_REPO: ${{ github.repository }}
+  TENGOKU_TOPUPS: "1"   # the queue starts from the nightly cache plus the newest promoted top-up and builds only what is newer
 defaults:
   run:
     shell: bash   # -e -o pipefail on every run: step (the campaign found silent passes behind pipes)
 
 jobs:
-  queue-gate:
+  queue-build:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     permissions: { contents: read, pull-requests: write, actions: read }   # actions: read — to see a running cache build
+    outputs:
+      topup: ${{ steps.topup.outputs.state }}
     steps:
       - name: On a pull request there is nothing to build here
         if: github.event_name == 'pull_request'
@@ -107,17 +120,87 @@ jobs:
             git --no-pager diff --stat -- $touched | tee -a build.log
             echo "error: regenerated derived files differ from the PR (hand-edited generated file?)" | tee -a build.log; exit 1
           fi
+      # Everything above compiled scratch modules. Now the tree goes back to the group's own commit and the
+      # whole library is built as main will have it; what differs from the nightly cache is the top-up.
+      # 20 minutes is the budget inside the queue's 40: a change that rebuilds more than that (a core module)
+      # still merges, marked "incomplete" — the services stay on the last complete top-up, and topup-promote.yml
+      # starts a cache build the moment the commit is on main (every later group meets the same wall until then).
+      - name: Build the library as main will have it, and pack the difference
+        if: github.event_name == 'merge_group'
+        id: topup
+        run: |
+          git checkout -q -- Tengoku/ data/ && git clean -fdqx Tengoku/
+          set +e
+          timeout -k 30 20m lake build Tengoku.All 2>&1 | tee -a build.log | tail -5
+          rc=${PIPESTATUS[0]}
+          set -e
+          mkdir -p topup-out
+          if [ "$rc" = 124 ]; then
+            echo "::warning::the library build did not finish inside the queue's budget; this merge is marked incomplete and a cache build is started"
+            echo "over the queue's build budget; a cache build follows the merge" > "topup-out/topup-$GITHUB_SHA.incomplete"
+            echo "state=incomplete" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          [ "$rc" = 0 ] || { echo "error: the library does not build with this group merged" | tee -a build.log; exit 1; }
+          scripts/cache.sh topup-make "$GITHUB_SHA" topup-out
+          echo "state=complete" >> "$GITHUB_OUTPUT"
+      - if: github.event_name == 'merge_group'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with: { name: topup, path: topup-out/, retention-days: 1, if-no-files-found: error }
       - name: Explain the failure to the authors
         if: failure() && github.event_name == 'merge_group'
         env: { GH_TOKEN: "${{ github.token }}" }
         run: python3 scripts/ci/queue_comment.py build.log "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" "${{ github.event.merge_group.base_sha }}"
 
-# campaign: workflow file changed during a cache build (publish guard test)
+  # Holds the write token, runs nothing from the group: it only signs and uploads what queue-build packed.
+  queue-topup:
+    needs: queue-build
+    if: github.event_name == 'merge_group'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions: { contents: write, id-token: write, attestations: write }
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with: { name: topup, path: topup-out }
+      - name: Attest the top-up
+        if: needs.queue-build.outputs.topup == 'complete'
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        with: { subject-path: "topup-out/topup-*.tar.zst" }
+      - name: Publish it (provisional until this commit is on main)
+        env:
+          GH_TOKEN: "${{ github.token }}"
+          TEST_FAIL: "${{ vars.TOPUP_TEST_FAIL }}"   # sandbox only: a PR number whose publish is made to fail
+        run: |
+          if [ "$GITHUB_REPOSITORY" = "competemath/tengoku-sandbox" ] && [ -n "$TEST_FAIL" ] && [[ "$GITHUB_REF" == *"/pr-$TEST_FAIL-"* ]]; then
+            echo "error: injected publish failure (TOPUP_TEST_FAIL=$TEST_FAIL)"; exit 1
+          fi
+          gh release view cache-topups -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 || gh release create cache-topups -R "$GITHUB_REPOSITORY" --title "cache top-ups" --prerelease --target main \
+            --notes "The small per-merge differences from the nightly cache. cache-latest.json names the one in force; everything else here is provisional or about to be collected." >/dev/null
+          for attempt in 1 2 3; do
+            if gh release upload cache-topups topup-out/topup-* -R "$GITHUB_REPOSITORY" --clobber; then echo "published:"; printf '  %s\n' topup-out/topup-*; exit 0; fi
+            echo "upload attempt $attempt failed; retrying"; sleep $((attempt * 15))
+          done
+          echo "error: the cache top-up could not be published"; exit 1
 
-# campaign: second workflow touch during a cache build (publish guard test)
-
-# campaign: second workflow touch during a cache build (publish guard test)
-
-# campaign: second workflow touch during a cache build (publish guard test)
-
-# campaign: workflow touch while a cache build runs (priority test)
+  # The required check. On a pull request it passes at once; in the queue it is green only when the group
+  # compiled AND its top-up is published, so a merge can never outrun the services' cache.
+  queue-gate:
+    needs: [queue-build, queue-topup]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: { pull-requests: write }
+    steps:
+      - name: Verdict
+        env:
+          GH_TOKEN: "${{ github.token }}"
+          BUILD: "${{ needs.queue-build.result }}"
+          TOPUP: "${{ needs.queue-topup.result }}"
+        run: |
+          if [ "${{ github.event_name }}" = pull_request ]; then [ "$BUILD" = success ] && exit 0; echo "queue-build: $BUILD"; exit 1; fi
+          echo "queue-build: $BUILD   queue-topup: $TOPUP"
+          if [ "$BUILD" = success ] && [ "$TOPUP" = success ]; then exit 0; fi
+          if [ "$BUILD" = success ]; then
+            pr="$(printf '%s' "$GITHUB_REF" | sed -nE 's#.*/pr-([0-9]+)-[0-9a-f]+$#\1#p')"
+            [ -z "$pr" ] || gh pr comment "$pr" -R "$GITHUB_REPOSITORY" --body "**Removed from the merge queue — not because of your change.** The group compiled, but its cache top-up could not be published ([run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})), and a merge never lands without it (the proof services would fall behind main). Nothing was merged and nothing was published. Put the PR back in the queue; if it happens twice, [tell the maintainers](${{ github.server_url }}/${{ github.repository }}/issues/new?labels=gate-bug&title=cache+top-up+publish+failed)." || true
+          fi
+          exit 1
