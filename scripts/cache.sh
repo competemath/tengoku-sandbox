@@ -182,7 +182,11 @@ PY
       | while read -r old; do [ -n "$old" ] && gh release delete "$old" -R "$REPO" --yes --cleanup-tag && echo "pruned $old"; done || true
     ;;
   latest)
-    if [ "$TOPUPS" = 1 ]; then commit="$(pointer_topup | awk '{print $1}')"; [ -n "$commit" ] && { echo "$commit"; exit 0; }; fi
+    if [ "$TOPUPS" = 1 ]; then
+      commit="$(pointer_topup | awk '{print $1}')"; basec="$(pointer | awk '{print $4}')"
+      # only a top-up AHEAD of the nightly cache moves consumers; anything else is a stale pointer write
+      if [ -n "$commit" ] && [ -n "$basec" ] && [ "$commit" != "$basec" ] && git merge-base --is-ancestor "$basec" "$commit" 2>/dev/null; then echo "$commit"; exit 0; fi
+    fi
     commit="$(pointer | awk '{print $4}')"
     [ -n "$commit" ] || commit="$(list_caches | head -n 1 | awk '{print $4}')"
     [ -n "$commit" ] || { echo "no published cache" >&2; exit 1; }
@@ -201,9 +205,16 @@ PY
     # Newest cache first; the first one whose commit is an ancestor of what we
     # want is the best starting point. (A shallow clone cannot answer
     # ancestry — clone with --filter=blob:none or enough depth.)
-    while read -r _ _ tag commit; do
-      if git merge-base --is-ancestor "$commit" "$want" 2>/dev/null; then found="$tag"; break; fi
-    done < <(list_caches)
+    fc=""
+    # The pointer names the newest cache and costs no API call (a service refreshing after every merge
+    # would exhaust the anonymous rate limit on the release listing); the listing is the fallback.
+    read -r _ _ ptag pcommit < <(pointer) || true
+    if [ -n "${pcommit:-}" ] && git merge-base --is-ancestor "$pcommit" "$want" 2>/dev/null; then found="$ptag"; fc="$pcommit"; fi
+    if [ -z "$found" ]; then
+      while read -r _ _ tag commit; do
+        if git merge-base --is-ancestor "$commit" "$want" 2>/dev/null; then found="$tag"; fc="$commit"; break; fi
+      done < <(list_caches)
+    fi
     [ -n "$found" ] || { echo "no published cache is an ancestor of $want (are the caches published? is this clone deep enough for ancestry?)" >&2; exit 1; }
     have="$(awk '{print $1}' .lake/.cache-base 2>/dev/null || true)"
     if [ "$have" = "$found" ] && [ -d .lake/build ] && [ "${TENGOKU_FORCE:-0}" != 1 ]; then
@@ -215,7 +226,6 @@ PY
       mkdir -p .lake
       python3 scripts/topup.py rollback >/dev/null 2>&1 || true     # a top-up of the previous base must not leak into the new one
       cat "$tmp"/tengoku-cache.tar.zst.part-* | zstd -d -q | tar -C .lake -xf -
-      fc="$(list_caches | awk -v t="$found" '$3==t {print $4; exit}')"
       echo "$found $fc" > .lake/.cache-base
       touch .lake/.topup-marker      # everything built from here on is a difference from this base
       echo "unpacked $found into .lake/build (Lake rebuilds only what differs from $want)"
@@ -240,7 +250,14 @@ PY
     ;;
   topup-promote)   # topup-promote <commit on main> — make that commit's top-up the one consumers follow
     need gh
-    sha="${2:?commit}"; tmp="$(mktemp -d)"
+    sha="${2:-}"; tmp="$(mktemp -d)"
+    if [ -z "$sha" ]; then   # newest commit on main with a published top-up (one listing, then history order)
+      names="$(gh api "repos/$REPO/releases/tags/$TOPUP_RELEASE" -q '.assets[].name' 2>/dev/null || true)"
+      for c in $(git rev-list -n 50 origin/main); do
+        if printf '%s\n' "$names" | grep -qx "topup-$c.json" && printf '%s\n' "$names" | grep -qx "topup-$c.tar.zst"; then sha="$c"; break; fi
+      done
+      [ -n "$sha" ] || { echo "no commit on main has a published top-up; the pointer stays where it is"; rm -rf "$tmp"; exit 0; }
+    fi
     gh release download "$TOPUP_RELEASE" -R "$REPO" -p "topup-$sha.json" -D "$tmp" >/dev/null 2>&1 || { echo "no top-up was published for $sha; the pointer stays where it is"; rm -rf "$tmp"; exit 0; }
     pointer_json > "$tmp/pointer.json"
     [ -s "$tmp/pointer.json" ] || { echo "no base cache pointer yet; nothing to promote onto"; rm -rf "$tmp"; exit 0; }

@@ -173,7 +173,18 @@ def apply(tar_path: Path, manifest_path: Path) -> int:
             with tar.extractfile(member) as src, target.open("wb") as dst:
                 shutil.copyfileobj(src, dst)
             os.utime(target, (member.mtime, member.mtime))
-    APPLIED.write_text(json.dumps({"tip": manifest["tip"], "base_tag": manifest.get("base_tag"), "files": sorted(listed), "created": sorted(created), "overwritten": sorted(overwritten)}) + "\n")
+    APPLIED.write_text(
+        json.dumps(
+            {
+                "tip": manifest["tip"],
+                "base_tag": manifest.get("base_tag"),
+                "files": sorted(listed),
+                "created": sorted(created),
+                "overwritten": sorted(overwritten),
+            }
+        )
+        + "\n"
+    )
     print(f"applied the top-up for {manifest['tip'][:12]}: {len(listed)} files over base {manifest.get('base_tag') or '?'}")
     return 0
 
@@ -181,8 +192,12 @@ def apply(tar_path: Path, manifest_path: Path) -> int:
 def main() -> int:
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="cmd", required=True)
-    m = sub.add_parser("make"); m.add_argument("--tip", required=True); m.add_argument("--out", required=True)
-    a = sub.add_parser("apply"); a.add_argument("--file", required=True); a.add_argument("--manifest", required=True)
+    m = sub.add_parser("make")
+    m.add_argument("--tip", required=True)
+    m.add_argument("--out", required=True)
+    a = sub.add_parser("apply")
+    a.add_argument("--file", required=True)
+    a.add_argument("--manifest", required=True)
     sub.add_parser("rollback")
     sub.add_parser("status")
     args = ap.parse_args()
@@ -193,7 +208,11 @@ def main() -> int:
     if args.cmd == "rollback":
         return rollback()
     state = applied()
-    print(json.dumps({"tip": state.get("tip"), "files": len(state.get("files", [])), "base": BASE.read_text().strip() if BASE.exists() else None}))
+    print(
+        json.dumps(
+            {"tip": state.get("tip"), "files": len(state.get("files", [])), "base": BASE.read_text().strip() if BASE.exists() else None}
+        )
+    )
     return 0
 
 
