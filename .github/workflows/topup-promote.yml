@@ -42,8 +42,20 @@ jobs:
       # requests and swap in place (no rebuild of their image); an unreachable one catches up on its
       # next request or start. The list is a repository variable, so a sandbox can point at its own.
       - name: Tell the services
-        env: { SPACES: "${{ vars.TENGOKU_SPACES }}" }
+        env: { SPACES: "${{ vars.TENGOKU_SPACES }}", GH_TOKEN: "${{ github.token }}" }
         run: |
+          # The pointer is served through a CDN: for a few seconds after an update a reader can still get
+          # the old one (seen in the soak: the services were asked 3 s after the update, read the old
+          # pointer, answered "current" and stayed one merge behind). Wait until it is publicly visible.
+          want="$(git rev-parse origin/main)"
+          if gh api "repos/$GITHUB_REPOSITORY/releases/tags/cache-topups" -q '.assets[].name' 2>/dev/null | grep -qx "topup-$want.json"; then
+            for _ in $(seq 1 30); do
+              seen="$(curl -fsSL "https://github.com/$GITHUB_REPOSITORY/releases/download/cache-latest/cache-latest.json" 2>/dev/null | python3 -c 'import json,sys; print((json.load(sys.stdin).get("topup") or {}).get("commit",""))' 2>/dev/null || true)"
+              [ "$seen" = "$want" ] && break
+              sleep 3
+            done
+            sleep 5
+          fi
           for space in $SPACES; do
             host="$(echo "$space" | tr '/A-Z' '-a-z').hf.space"
             out="$(curl -sS -m 30 -X POST "https://$host/refresh" 2>&1 | head -c 300)" || true
