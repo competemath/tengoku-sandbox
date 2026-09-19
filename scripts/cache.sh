@@ -223,7 +223,9 @@ PY
     fi
     [ -n "$found" ] || { echo "no published cache is an ancestor of $want (are the caches published? is this clone deep enough for ancestry?)" >&2; exit 1; }
     have="$(awk '{print $1}' .lake/.cache-base 2>/dev/null || true)"
-    if [ "$have" = "$found" ] && [ -d .lake/build ] && [ "${TENGOKU_FORCE:-0}" != 1 ]; then
+    # "Already unpacked" only counts when the whole base is still there: two of the services drop
+    # .lake/build/ir from their image, and the replay check needs it back.
+    if [ "$have" = "$found" ] && [ -d .lake/build/lib ] && [ -d .lake/build/ir/Tengoku ] && [ "${TENGOKU_FORCE:-0}" != 1 ]; then
       echo "base $found is already unpacked"
     else
       echo "fetching $found …"
