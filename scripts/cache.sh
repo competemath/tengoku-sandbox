@@ -221,7 +221,7 @@ PY
       echo "unpacked $found into .lake/build (Lake rebuilds only what differs from $want)"
     fi
     rm -rf "$tmp"
-    if [ "$TOPUPS" = 1 ]; then apply_topup "$want"; fi
+    if [ "$TOPUPS" = 1 ]; then apply_topup "$want"; elif [ -f .lake/.topup-applied.json ]; then python3 scripts/topup.py rollback; fi
     ;;
   topup-make)      # topup-make <tip commit> <out dir> — pack what differs from the unpacked base (CI, Linux)
     python3 scripts/topup.py make --tip "${2:?tip commit}" --out "${3:?out dir}"

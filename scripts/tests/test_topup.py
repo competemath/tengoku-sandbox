@@ -93,6 +93,20 @@ class Topups(unittest.TestCase):
         self.assertEqual((c / ".lake/build/lib/lean/Tengoku/Lib.olean").read_text(), "L0")
         self.assertFalse((c / ".lake/build/lib/lean/Tengoku/Newer.olean").exists())
 
+    def test_a_module_that_went_back_to_its_base_content_is_undone_by_the_next_topup(self):
+        p = self.producer(); out = p / "out"; run(p, "make", "--tip", "t1", "--out", str(out))  # t1 rewrites Lib and adds New
+        q = tree(BASE_FILES); mark(q)  # t2 is built from the bare base: only A differs, Lib and New are as in the base
+        (q / ".lake/build/lib/lean/Tengoku/A.olean").write_text("A2")
+        out2 = q / "out2"; run(q, "make", "--tip", "t2", "--out", str(out2))
+        c = tree(BASE_FILES); mark(c)
+        run(c, "apply", "--file", str(out / "topup-t1.tar.zst"), "--manifest", str(out / "topup-t1.json"))
+        rc, msg = run(c, "apply", "--file", str(out2 / "topup-t2.tar.zst"), "--manifest", str(out2 / "topup-t2.json")); self.assertEqual(rc, 0, msg)
+        self.assertEqual((c / ".lake/build/lib/lean/Tengoku/Lib.olean").read_text(), "L0")
+        self.assertFalse((c / ".lake/build/lib/lean/Tengoku/New.olean").exists())
+        self.assertEqual((c / ".lake/build/lib/lean/Tengoku/A.olean").read_text(), "A2")
+        run(c, "rollback")
+        self.assertEqual((c / ".lake/build/lib/lean/Tengoku/A.olean").read_text(), "A0")
+
     def test_tampered_file_is_refused_and_nothing_changes(self):
         p = self.producer(); out = p / "out"; run(p, "make", "--tip", "t1", "--out", str(out))
         with (out / "topup-t1.tar.zst").open("ab") as f:

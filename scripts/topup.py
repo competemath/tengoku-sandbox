@@ -137,6 +137,16 @@ def apply(tar_path: Path, manifest_path: Path) -> int:
     created = set(prev.get("created", []))
     overwritten = set(prev.get("overwritten", []))
     listed = set(manifest["files"])
+    # A module that went back to its base content is absent from the newer top-up: undo it here too.
+    for rel in sorted((created | overwritten) - listed):
+        target = LAKE / rel
+        if rel in overwritten and (BACKUP / rel).is_file():
+            shutil.copy2(BACKUP / rel, target)
+            (BACKUP / rel).unlink()
+        else:
+            target.unlink(missing_ok=True)
+        created.discard(rel)
+        overwritten.discard(rel)
     for rel in listed:
         if rel in created or rel in overwritten:
             continue  # its base version (or absence) is already recorded
@@ -163,7 +173,7 @@ def apply(tar_path: Path, manifest_path: Path) -> int:
             with tar.extractfile(member) as src, target.open("wb") as dst:
                 shutil.copyfileobj(src, dst)
             os.utime(target, (member.mtime, member.mtime))
-    APPLIED.write_text(json.dumps({"tip": manifest["tip"], "base_tag": manifest.get("base_tag"), "files": sorted(listed | set(prev.get("files", []))), "created": sorted(created), "overwritten": sorted(overwritten)}) + "\n")
+    APPLIED.write_text(json.dumps({"tip": manifest["tip"], "base_tag": manifest.get("base_tag"), "files": sorted(listed), "created": sorted(created), "overwritten": sorted(overwritten)}) + "\n")
     print(f"applied the top-up for {manifest['tip'][:12]}: {len(listed)} files over base {manifest.get('base_tag') or '?'}")
     return 0
 
