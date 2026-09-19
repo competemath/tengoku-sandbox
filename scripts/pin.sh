@@ -20,6 +20,13 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# Always run the newest pin.sh. (It used to renew itself only at the end of a successful run, so a
+# copy with a bug that made it fail could never pick up its own fix.) One compound command: bash has
+# read all of it before the file changes underneath.
+if [ -z "${TENGOKU_PIN_FRESH:-}" ]; then
+  { git fetch -q origin main && git checkout -q origin/main -- scripts/pin.sh 2>/dev/null || true; TENGOKU_PIN_FRESH=1 exec scripts/pin.sh "$@"; }
+fi
+
 git fetch -q origin main
 # Ask with the newest cache.sh: an older pinned copy may list caches in the
 # wrong order. (Restored by the checkout below; harmless if we stop early.)
@@ -51,7 +58,16 @@ newest_scripts
 scripts/cache.sh get
 # Verify the replay WITHOUT letting Lake compile anything: if the cache did not
 # cover the tree exactly, this fails loudly instead of building.
-if ! lake build Tengoku.All --no-build; then
+replay() { lake build Tengoku.All --no-build; }
+if ! replay; then
+  # 0. The unpacked cache may have lost files since it was unpacked (a service image that trims it,
+  #    a disk clean-up): unpack it again, once, top-up included, and replay.
+  echo "the replay failed; unpacking the cache again before giving up" >&2
+  if TENGOKU_FORCE=1 scripts/cache.sh get >/dev/null 2>&1 && replay >/dev/null 2>&1; then
+    [ "$TENGOKU_TOPUPS" != 1 ] || scripts/cache.sh topup-prune "$(python3 scripts/topup.py status 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin).get("tip") or "none")' 2>/dev/null || echo none)"
+    echo "pinned to $latest"
+    { newest_scripts scripts/pin.sh; exit 0; }
+  fi
   [ "$TENGOKU_TOPUPS" = 1 ] || exit 1
   # 1. Back to the state we came from, when there was one: same commit, same top-up (kept on disk).
   if [ -n "$built" ]; then
