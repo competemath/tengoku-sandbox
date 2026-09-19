@@ -38,3 +38,14 @@ jobs:
             busy=$(( $(gh run list -R "$GITHUB_REPOSITORY" --workflow build.yml --status in_progress --json databaseId -q 'length') + $(gh run list -R "$GITHUB_REPOSITORY" --workflow build.yml --status queued --json databaseId -q 'length') ))
             if [ "$busy" = 0 ]; then gh workflow run build.yml -R "$GITHUB_REPOSITORY" --ref main && echo "main's tip has no complete top-up: started a cache build"; else echo "main's tip has no complete top-up; a cache build is already running"; fi
           fi
+      # The services follow main merge by merge: ask each one to look at the pointer. They coalesce
+      # requests and swap in place (no rebuild of their image); an unreachable one catches up on its
+      # next request or start. The list is a repository variable, so a sandbox can point at its own.
+      - name: Tell the services
+        env: { SPACES: "${{ vars.TENGOKU_SPACES }}" }
+        run: |
+          for space in $SPACES; do
+            host="$(echo "$space" | tr '/A-Z' '-a-z').hf.space"
+            out="$(curl -sS -m 30 -X POST "https://$host/refresh" 2>&1 | head -c 300)" || true
+            echo "$space: ${out:-no answer}"
+          done
