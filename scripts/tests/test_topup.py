@@ -130,6 +130,23 @@ class Topups(unittest.TestCase):
         run(c, "rollback")
         self.assertEqual((c / ".lake/build/lib/lean/Tengoku/A.olean").read_text(), "A0")
 
+    def test_a_process_holding_the_old_file_keeps_it(self):
+        p = self.producer()
+        out = p / "out"
+        run(p, "make", "--tip", "t1", "--out", str(out))
+        c = tree(BASE_FILES)
+        mark(c)
+        lib = c / ".lake/build/lib/lean/Tengoku/Lib.olean"
+        with lib.open() as held:  # a running Lean process has the base file open (mapped)
+            run(c, "apply", "--file", str(out / "topup-t1.tar.zst"), "--manifest", str(out / "topup-t1.json"))
+            self.assertEqual(lib.read_text(), "L1")  # a new process sees the top-up
+            self.assertEqual(held.read(), "L0")  # the old one still has what it started with
+            with lib.open() as held_new:
+                run(c, "rollback")
+                self.assertEqual(held_new.read(), "L1")
+        self.assertEqual(lib.read_text(), "L0")
+        self.assertEqual([f.name for f in lib.parent.iterdir() if f.name.endswith(".topup-new")], [])
+
     def test_tampered_file_is_refused_and_nothing_changes(self):
         p = self.producer()
         out = p / "out"

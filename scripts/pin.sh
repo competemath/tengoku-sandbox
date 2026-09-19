@@ -9,8 +9,9 @@
 # TENGOKU_TOPUPS=1 follows the per-merge top-ups as well: the newest commit on
 # main whose small difference from the nightly cache has been published. The
 # nightly cache is downloaded once per day; a refresh in between fetches only
-# the top-up. If a top-up does not replay, it is taken off again and the
-# checkout goes back to the nightly cache's own commit — never a half-right build.
+# the top-up. If a top-up does not replay, the checkout returns to the state it
+# came from (exit 4: nothing changed, keep serving), or failing that to the
+# nightly cache's own commit — never a half-right build.
 #
 # The Leak services run this at image build, at container start, from their
 # `tengoku_sync` tool and on POST /refresh (which the nightly cache workflow
@@ -31,6 +32,7 @@ latest="$(scripts/cache.sh latest)"
 tag="$(scripts/cache.sh latest-tag)"
 head="$(git rev-parse HEAD)"
 built=""
+was="$(python3 scripts/topup.py status 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin).get("tip") or "")' 2>/dev/null || true)"   # the top-up in place now
 [ -n "$(find .lake/build/lib -name All.olean -path '*Tengoku/All.olean' 2>/dev/null | head -n 1)" ] && built=1
 
 if [ "${1:-}" = "--check" ]; then
@@ -51,6 +53,17 @@ scripts/cache.sh get
 # cover the tree exactly, this fails loudly instead of building.
 if ! lake build Tengoku.All --no-build; then
   [ "$TENGOKU_TOPUPS" = 1 ] || exit 1
+  # 1. Back to the state we came from, when there was one: same commit, same top-up (kept on disk).
+  if [ -n "$built" ]; then
+    git checkout -q -f "$head"
+    newest_scripts
+    if { if [ -n "$was" ]; then scripts/cache.sh topup-reapply "$was"; else scripts/cache.sh topup-rollback; fi; } >/dev/null 2>&1 \
+       && lake build Tengoku.All --no-build >/dev/null 2>&1; then
+      newest_scripts scripts/pin.sh
+      echo "kept ${head:0:12}: the build for $latest did not replay"; exit 4
+    fi
+  fi
+  # 2. The nightly cache on its own commit.
   base="$(TENGOKU_TOPUPS=0 scripts/cache.sh latest)"
   echo "the top-up did not replay on $latest; taking it off and going back to the nightly cache at $base" >&2
   scripts/cache.sh topup-rollback
@@ -60,6 +73,7 @@ if ! lake build Tengoku.All --no-build; then
   lake build Tengoku.All --no-build
   latest="$base"
 fi
+[ "$TENGOKU_TOPUPS" != 1 ] || scripts/cache.sh topup-prune "$(python3 scripts/topup.py status 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin).get("tip") or "none")' 2>/dev/null || echo none)"
 echo "pinned to $latest"
 # The pinned commit may predate these helper scripts: keep the newest copies
 # from main so the next run (and the services' /refresh) can find them. Done

@@ -101,6 +101,26 @@ def make(tip: str, out: Path) -> int:
     return 0
 
 
+def put_back(rel: str) -> None:
+    """Move a kept-aside base file back into place (a rename: atomic, and a process that has the
+    top-up's version mapped keeps it)."""
+    target = LAKE / rel
+    target.parent.mkdir(parents=True, exist_ok=True)
+    os.replace(BACKUP / rel, target)
+
+
+def keep_aside(rel: str) -> None:
+    """Keep the base version of a file the top-up is about to replace. A hard link: instant, and the
+    base file's contents stay alive for any running process that has them mapped."""
+    keep = BACKUP / rel
+    keep.parent.mkdir(parents=True, exist_ok=True)
+    keep.unlink(missing_ok=True)
+    try:
+        os.link(LAKE / rel, keep)
+    except OSError:
+        shutil.copy2(LAKE / rel, keep)
+
+
 def rollback(quiet: bool = False) -> int:
     state = applied()
     if not state:
@@ -110,10 +130,8 @@ def rollback(quiet: bool = False) -> int:
     for rel in state.get("created", []):
         (LAKE / rel).unlink(missing_ok=True)
     for rel in state.get("overwritten", []):
-        src = BACKUP / rel
-        if src.is_file():
-            (LAKE / rel).parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(src, LAKE / rel)
+        if (BACKUP / rel).is_file():
+            put_back(rel)
     shutil.rmtree(BACKUP, ignore_errors=True)
     APPLIED.unlink(missing_ok=True)
     if not quiet:
@@ -141,8 +159,7 @@ def apply(tar_path: Path, manifest_path: Path) -> int:
     for rel in sorted((created | overwritten) - listed):
         target = LAKE / rel
         if rel in overwritten and (BACKUP / rel).is_file():
-            shutil.copy2(BACKUP / rel, target)
-            (BACKUP / rel).unlink()
+            put_back(rel)
         else:
             target.unlink(missing_ok=True)
         created.discard(rel)
@@ -152,9 +169,7 @@ def apply(tar_path: Path, manifest_path: Path) -> int:
             continue  # its base version (or absence) is already recorded
         target = LAKE / rel
         if target.is_file():
-            keep = BACKUP / rel
-            keep.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(target, keep)
+            keep_aside(rel)
             overwritten.add(rel)
         else:
             created.add(rel)
@@ -170,9 +185,13 @@ def apply(tar_path: Path, manifest_path: Path) -> int:
                 return 1
             target = LAKE / member.name
             target.parent.mkdir(parents=True, exist_ok=True)
-            with tar.extractfile(member) as src, target.open("wb") as dst:
+            # Never write into a file in place: the services keep serving from a Lean process that has the
+            # old file mapped while the new one arrives. Write beside it, then rename over it.
+            fresh = target.with_name(target.name + ".topup-new")
+            with tar.extractfile(member) as src, fresh.open("wb") as dst:
                 shutil.copyfileobj(src, dst)
-            os.utime(target, (member.mtime, member.mtime))
+            os.utime(fresh, (member.mtime, member.mtime))
+            os.replace(fresh, target)
     APPLIED.write_text(
         json.dumps(
             {

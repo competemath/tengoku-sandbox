@@ -26,6 +26,7 @@ cmd="${1:-}"
 need() { command -v "$1" >/dev/null 2>&1 || { echo "missing: $1" >&2; exit 1; }; }
 need zstd; need tar; need git; need python3
 
+command -v sha256sum >/dev/null 2>&1 || sha256sum() { shasum -a 256 "$@"; }
 have_gh() { command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; }
 
 api() {  # GET a GitHub API path, anonymously or with whatever token exists
@@ -60,19 +61,24 @@ except Exception: pass' 2>/dev/null || true
 # Overlay the promoted top-up when it belongs to the history of <want>. Never fatal: a top-up that
 # cannot be fetched, verified or applied leaves the base in place and Lake builds the difference.
 apply_topup() {
-  local want="$1" commit digest tmp mode="${TENGOKU_VERIFY:-warn}"
+  local want="$1" commit digest store=".lake/.topup-store" mode="${TENGOKU_VERIFY:-warn}" f
   read -r commit digest < <(pointer_topup) || true
   [ -n "${commit:-}" ] || { echo "no top-up published"; return 0; }
   git merge-base --is-ancestor "$commit" "$want" 2>/dev/null || { echo "the published top-up ($commit) is not in the history of $want; using the base only"; return 0; }
-  tmp="$(mktemp -d)"
+  # Kept on disk: pin.sh returns to the previous top-up from here when a new one does not replay.
+  mkdir -p "$store"
   for f in "topup-$commit.tar.zst" "topup-$commit.json"; do
-    curl -fsSL -o "$tmp/$f" "https://github.com/$SRC/releases/download/$TOPUP_RELEASE/$f" || { echo "warning: could not fetch $f; using the base only" >&2; rm -rf "$tmp"; return 0; }
+    [ -s "$store/$f" ] && continue
+    curl -fsSL --retry 2 -o "$store/$f.part" "https://github.com/$SRC/releases/download/$TOPUP_RELEASE/$f" && mv "$store/$f.part" "$store/$f" \
+      || { rm -f "$store/$f.part"; echo "warning: could not fetch $f; using the base only" >&2; return 0; }
   done
-  if command -v gh >/dev/null 2>&1 && gh attestation verify "$tmp/topup-$commit.tar.zst" -R "$SRC" --signer-workflow "$SRC/.github/workflows/queue-gate.yml" >/dev/null 2>&1; then echo "top-up attestation verified"
-  elif [ "$mode" = "require" ]; then echo "REFUSED: the top-up has no valid build attestation from $SRC — using the base only" >&2; rm -rf "$tmp"; return 0
-  else echo "warning: the top-up has no build attestation (TENGOKU_VERIFY=warn)" >&2; fi
-  python3 scripts/topup.py apply --file "$tmp/topup-$commit.tar.zst" --manifest "$tmp/topup-$commit.json" || echo "warning: the top-up was refused; using the base only" >&2
-  rm -rf "$tmp"
+  if [ -n "$digest" ] && [ "$(sha256sum "$store/topup-$commit.tar.zst" | cut -d' ' -f1)" != "$digest" ]; then
+    echo "REFUSED: the top-up does not match the digest in cache-latest.json — using the base only" >&2; rm -f "$store/topup-$commit".*; return 0
+  fi
+  if command -v gh >/dev/null 2>&1 && gh attestation verify "$store/topup-$commit.tar.zst" -R "$SRC" --signer-workflow "$SRC/.github/workflows/queue-gate.yml" >/dev/null 2>&1; then echo "top-up attestation verified"
+  elif [ "$mode" = "require" ]; then echo "REFUSED: the top-up has no valid build attestation from $SRC — using the base only" >&2; rm -f "$store/topup-$commit".*; return 0
+  else echo "warning: the top-up's build attestation was not checked (TENGOKU_VERIFY=warn, or no gh)" >&2; fi
+  python3 scripts/topup.py apply --file "$store/topup-$commit.tar.zst" --manifest "$store/topup-$commit.json" || { echo "warning: the top-up was refused; using the base only" >&2; rm -f "$store/topup-$commit".*; }
 }
 
 verify_parts() {
@@ -290,6 +296,14 @@ PY
   topup-rollback)
     python3 scripts/topup.py rollback
     ;;
+  topup-reapply)   # topup-reapply <commit> — put a stored top-up back (pin.sh: return to the state we came from)
+    store=".lake/.topup-store"
+    [ -s "$store/topup-${2:?commit}.tar.zst" ] && [ -s "$store/topup-$2.json" ] || { echo "top-up $2 is not stored here" >&2; exit 1; }
+    python3 scripts/topup.py apply --file "$store/topup-$2.tar.zst" --manifest "$store/topup-$2.json"
+    ;;
+  topup-prune)     # topup-prune <commit> — forget every stored top-up except this one
+    for f in .lake/.topup-store/topup-*; do [ -e "$f" ] || continue; case "$f" in *"topup-${2:-none}."*) ;; *) rm -f "$f" ;; esac; done
+    ;;
   *)
-    echo "usage: $0 get [<commit>] | latest | latest-tag | put | topup-make <tip> <dir> | topup-put <dir> | topup-promote <commit> | topup-gc | topup-rollback" >&2; exit 2 ;;
+    echo "usage: $0 get [<commit>] | latest | latest-tag | put | topup-make <tip> <dir> | topup-put <dir> | topup-promote <commit> | topup-gc | topup-rollback | topup-reapply <commit> | topup-prune <commit>" >&2; exit 2 ;;
 esac
