@@ -67,14 +67,24 @@ jobs:
     if: contains(fromJSON('["content","promotion"]'), needs.classify.outputs.class)
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    permissions: { contents: read }
+    permissions: { contents: read, pull-requests: write }   # pull-requests: the record is posted on the PR
     steps:
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
         with: { egress-policy: audit }
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with: { fetch-depth: 0, filter: "blob:none" }
       - name: blind-reproof
+        env: { HEAD_SHA: "${{ github.event.pull_request.head.sha }}" }
         run: python3 scripts/ci/assess.py "$BASE" "$HEAD" ${{ needs.classify.outputs.class == 'promotion' && '--promotion' || '' }}
+      # The record goes where reviewers and review bots look: one comment on the PR (updated in place) with the
+      # table, a link to every working log, and what to look for in them.
+      - name: Put the record on the PR
+        if: always() && github.event_name == 'pull_request' && hashFiles('assess-comment.md') != ''
+        env: { GH_TOKEN: "${{ github.token }}", PR: "${{ github.event.pull_request.number }}" }
+        run: |
+          cid="$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate -q '.[] | select(.body | startswith("<!-- tengoku-blind-reproof -->")) | .id' | head -n 1)"
+          if [ -n "$cid" ]; then gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$cid" -F body=@assess-comment.md >/dev/null || true
+          else gh api -X POST "repos/$GITHUB_REPOSITORY/issues/$PR/comments" -F body=@assess-comment.md >/dev/null || true; fi
 
   credits:
     needs: classify
