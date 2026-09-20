@@ -171,6 +171,7 @@ import json, sys
 try: print(json.dumps((json.load(sys.stdin).get("topup") or {})))
 except Exception: print("{}")' 2>/dev/null || echo "{}")"
     kc="$(printf '%s' "$keep" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("commit",""))')"
+    git fetch -q origin main 2>/dev/null || true   # a merge that landed during this build is not in the clone yet
     if [ -n "$kc" ] && [ "$kc" != "$sha" ] && git merge-base --is-ancestor "$sha" "$kc" 2>/dev/null; then
       python3 - "$tmp/cache-latest.json" "$keep" <<'PY'
 import json, sys
