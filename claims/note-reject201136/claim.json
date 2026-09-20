@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "records": "data/staging/competemath/note-reject201136.jsonl",
+  "headlines": [
+    {
+      "name": "Blind.note-reject201136A",
+      "statement_sha256": "1efc15cf89e38392cd86d8872f3d99d697873e42104e52ba876eda885c443533",
+      "outcome": "closed",
+      "seconds": 6.0,
+      "calls": {
+        "search": 0,
+        "states": 0,
+        "verify": 2
+      },
+      "models": [
+        "claude-sonnet-5"
+      ],
+      "working": "1-Blind.note-reject201136A.working.md",
+      "working_sha256": "969bed5097aa54d147212ffbfb716829119949c054219aff702a83e687795326",
+      "transcript": "1-Blind.note-reject201136A.transcript.jsonl.gz",
+      "transcript_sha256": "225e5b359643d5d450429edbff39bc0bddca2dcbc2c70c01620a4555d5c38a9d"
+    },
+    {
+      "name": "Blind.note-reject201136B",
+      "statement_sha256": "310767d680bdc5d00dc4b34b9e148e26f4f955e95501e2814b8676fcc9a2ffba",
+      "outcome": "closed",
+      "seconds": 6.0,
+      "calls": {
+        "search": 0,
+        "states": 0,
+        "verify": 2
+      },
+      "models": [
+        "claude-sonnet-5"
+      ],
+      "working": "2-Blind.note-reject201136B.working.md",
+      "working_sha256": "fa27552f5c4e4e4fce436d205f3bba8486de7c1aaaa5f1e8c3f4beb3c29defc7",
+      "transcript": "2-Blind.note-reject201136B.transcript.jsonl.gz",
+      "transcript_sha256": "a18669987b8451e04f621642adce9d228750fed1438f5d8de55230f5cb98429a"
+    }
+  ],
+  "others": [],
+  "budget": {
+    "soft_s": 300,
+    "hard_s": 420
+  },
+  "services": {
+    "search": "https://barkingtree-leak-i.hf.space",
+    "states": "https://barkingtree-leak-ii.hf.space",
+    "verify": "https://barkingtree-leak-iv.hf.space"
+  },
+  "pinned_start": {
+    "search": "b1fccd64e649cb0035bb4c3dd2a99073ad497e14",
+    "states": "b1fccd64e649cb0035bb4c3dd2a99073ad497e14",
+    "verify": "b1fccd64e649cb0035bb4c3dd2a99073ad497e14"
+  },
+  "pinned_end": {
+    "search": "b1fccd64e649cb0035bb4c3dd2a99073ad497e14",
+    "states": "b1fccd64e649cb0035bb4c3dd2a99073ad497e14",
+    "verify": "b1fccd64e649cb0035bb4c3dd2a99073ad497e14"
+  },
+  "attested_by": "scenario <bashir.mikael@outlook.com>",
+  "made_at": "2026-09-20T12:10:00Z",
+  "digest": "48bac0f2da73e3540b84e530142dd5a79745817dc0eb7e1800d6f83e08b0be0f"
+}
