@@ -49,6 +49,11 @@ ADVICE: dict[str, tuple[str, str, str]] = {
         "no construct that runs or links code inside `context`, `statement` or `proof` (`import`, `#eval`, `initialize`, `unsafe`, `native_decide`, `axiom`, options off the allowlist)",
         "remove the construct; the lint matches text, so a forbidden word inside a comment or string trips it too — that is a false positive worth reporting",
     ),
+    "blind-reproof": (
+        "medium",
+        "original theorems (not translations) carry a blind re-proof claim: up to ten headlines, each attacked for 5 minutes (hard stop 7) by an agent that saw only the statement, against the library without this PR. The gate recomputes outcome, timing and call counts from the raw transcript, re-renders the working log and compares, and checks the agent had only the library's services. If every headline was re-proved the PR is rejected",
+        "if there is no claim: `python3 scripts/assess/run.py <your staging file> --headlines <names>` and commit `claims/` with a signed-off commit. If every headline was re-proved: the library already reaches this material in minutes — name as headlines the theorems that carry the contribution, or build towards one that resists. If the claim 'does not hold up': the message says which part; never edit the files by hand, run it again",
+    ),
     "credits": (
         "high",
         "no removed or changed line that carries an authorship or provenance marker (`Authors:`, `Copyright`, `source_url`, …)",

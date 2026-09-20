@@ -15,7 +15,7 @@ ROOT = Path(os.environ.get("TENGOKU_CI_ROOT") or Path(__file__).resolve().parent
 # Path classes (docs: security plan §3). First match wins.
 TIERS = [
     ("derived", ["Tengoku/*/**", "Tengoku/All.lean", "data/stats.json", "data/cache-latest.json"]),
-    ("content", ["data/tentative/*.jsonl", "data/staging/*.jsonl", "data/tentative/*/*.jsonl", "data/staging/*/*.jsonl"]),
+    ("content", ["data/tentative/*.jsonl", "data/staging/*.jsonl", "data/tentative/*/*.jsonl", "data/staging/*/*.jsonl", "claims/**"]),
     ("tombstone", ["data/trusted/*.jsonl"]),
     (
         "tooling",

@@ -15,5 +15,10 @@
       "repo": "https://github.com/teorth/equational_theories",
       "commit": "e218ce18b0c265efbbe65093c1f1d063c54f3639"
     }
-  }
+  },
+  "$comment_translations": "Sources that are existing formal libraries: a record from one of these is a translation and is exempt from the blind re-proof test (scripts/assess/). Anything else is original work and needs a claim.",
+  "translations": [
+    "https://github.com/leanprover-community/mathlib4",
+    "https://github.com/teorth/equational_theories"
+  ]
 }
