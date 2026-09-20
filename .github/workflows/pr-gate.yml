@@ -59,6 +59,23 @@ jobs:
       - name: content-lint
         run: python3 scripts/ci/lint_banked.py "$BASE" "$HEAD"
 
+  # Original theorems (not translations) must carry the record of a blind attempt to re-prove up to ten
+  # headline theorems in 5 minutes (hard stop 7) from the library WITHOUT the PR. All re-proved → rejected.
+  # The job re-derives every number from the raw transcript; nothing in the claim is taken on trust.
+  assess:
+    needs: classify
+    if: contains(fromJSON('["content","promotion"]'), needs.classify.outputs.class)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions: { contents: read }
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
+        with: { egress-policy: audit }
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: { fetch-depth: 0, filter: "blob:none" }
+      - name: blind-reproof
+        run: python3 scripts/ci/assess.py "$BASE" "$HEAD" ${{ needs.classify.outputs.class == 'promotion' && '--promotion' || '' }}
+
   credits:
     needs: classify
     runs-on: ubuntu-latest
@@ -107,7 +124,7 @@ jobs:
           pip install -q detect-secrets==1.5.0
           git diff --name-only --diff-filter=AM "$BASE...$HEAD" -- . ':!data/' ':!Tengoku/' ':!.lake/' > changed.txt
           mapfile -t files < changed.txt
-          if [ "${#files[@]}" -gt 0 ]; then detect-secrets-hook --baseline .secrets.baseline --exclude-lines '"commit": "[0-9a-f]{40}"' "${files[@]}"; else echo "no non-data files to scan"; fi
+          if [ "${#files[@]}" -gt 0 ]; then detect-secrets-hook --baseline .secrets.baseline --exclude-lines '"commit": "[0-9a-f]{40}"' --exclude-lines '"[a-z_]*(sha256|digest)": "[0-9a-f]{64}"' --exclude-lines '"(search|states|verify)": "[0-9a-f]{40}"' "${files[@]}"; else echo "no non-data files to scan"; fi
           # records: scan the added lines of data files as text (a content-only PR reaches only this scan — round 2 of the
           # campaign found the step exiting before it). Key ids and tokens are found inside JSON strings; a bare AWS secret
           # key value is not (detect-secrets keyword rules need the plain "key = value" form).
@@ -181,7 +198,7 @@ jobs:
         with: { args: -color }
 
   pr-gate:
-    needs: [classify, data-rules, credits, dco, secrets, depends, lint-python, tooling-tests]
+    needs: [classify, data-rules, assess, credits, dco, secrets, depends, lint-python, tooling-tests]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5

@@ -20,7 +20,7 @@ repos:
     rev: v1.5.0
     hooks:
       - id: detect-secrets
-        args: ["--baseline", ".secrets.baseline", "--exclude-lines", '"commit": "[0-9a-f]{40}"']
+        args: ["--baseline", ".secrets.baseline", "--exclude-lines", '"commit": "[0-9a-f]{40}"', "--exclude-lines", '"[a-z_]*(sha256|digest)": "[0-9a-f]{64}"', "--exclude-lines", '"(search|states|verify)": "[0-9a-f]{40}"']
         exclude: ^(data/|Tengoku/|\.lake/)
   - repo: local
     hooks:
