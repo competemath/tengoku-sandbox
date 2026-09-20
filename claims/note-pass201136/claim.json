@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "records": "data/staging/competemath/note-pass201136.jsonl",
+  "headlines": [
+    {
+      "name": "Blind.note-pass201136A",
+      "statement_sha256": "78d54cf97a711ede386b6a4a15f70c807bbeb1b182d3b771d989e1b3da9959be",
+      "outcome": "closed",
+      "seconds": 6.0,
+      "calls": {
+        "search": 0,
+        "states": 0,
+        "verify": 2
+      },
+      "models": [
+        "claude-sonnet-5"
+      ],
+      "working": "1-Blind.note-pass201136A.working.md",
+      "working_sha256": "27fefb8e46f5d5b5eefec9daf3df10af3b668ca979ff537bc0df3d55a76a709d",
+      "transcript": "1-Blind.note-pass201136A.transcript.jsonl.gz",
+      "transcript_sha256": "e86d135acc0126991f752223c5548cb8aa629e5a74cb89aa7b02cbd20394af8f"
+    },
+    {
+      "name": "Blind.note-pass201136B",
+      "statement_sha256": "47f915ae67ea02e86062475e5c6fe6a27233ebaaddff75eb7e125c38ae74c8ad",
+      "outcome": "resisted",
+      "seconds": 306.5,
+      "calls": {
+        "search": 4,
+        "states": 4,
+        "verify": 5
+      },
+      "models": [
+        "claude-sonnet-5"
+      ],
+      "working": "2-Blind.note-pass201136B.working.md",
+      "working_sha256": "e791282f29296534105eb49852802604cd0b172215efb3fe730afb733d3ce16c",
+      "transcript": "2-Blind.note-pass201136B.transcript.jsonl.gz",
+      "transcript_sha256": "97f82e13453c19e54095f93f98869128994e1c3975d9aaca8cbe9c0363036742"
+    }
+  ],
+  "others": [],
+  "budget": {
+    "soft_s": 300,
+    "hard_s": 420
+  },
+  "services": {
+    "search": "https://barkingtree-leak-i.hf.space",
+    "states": "https://barkingtree-leak-ii.hf.space",
+    "verify": "https://barkingtree-leak-iv.hf.space"
+  },
+  "pinned_start": {
+    "search": "b1fccd64e649cb0035bb4c3dd2a99073ad497e14",
+    "states": "b1fccd64e649cb0035bb4c3dd2a99073ad497e14",
+    "verify": "b1fccd64e649cb0035bb4c3dd2a99073ad497e14"
+  },
+  "pinned_end": {
+    "search": "b1fccd64e649cb0035bb4c3dd2a99073ad497e14",
+    "states": "b1fccd64e649cb0035bb4c3dd2a99073ad497e14",
+    "verify": "b1fccd64e649cb0035bb4c3dd2a99073ad497e14"
+  },
+  "attested_by": "scenario <bashir.mikael@outlook.com>",
+  "made_at": "2026-09-20T12:10:00Z",
+  "digest": "850c8f5efeaed29b68d58c93dda82f8fb19d092bd50ad13c47ab8c606efbc548"
+}
