@@ -61,8 +61,8 @@ job `assess`, step `blind-reproof`):
   access, no shell, no web): it could not have seen your proof;
 - checks the services were on **a commit of main** throughout;
 - checks the claim is attested by someone who **signed off** a commit of the PR;
-- refuses a "resisted" that is not a full attempt: at least 290 seconds, run to
-  the budget, 3 verifications and 10 calls, no silence longer than 150 seconds
+- refuses a "resisted" that is not a full attempt: at least 280 seconds, run to
+  the budget, 10 calls to the services, no silence longer than 150 seconds
   (a laptop asleep is not an attempt);
 - scans the transcript for credentials.
 

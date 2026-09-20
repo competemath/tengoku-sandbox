@@ -27,9 +27,9 @@ SOFT_S = 300  # the agent is told it has about this long; a run that has not clo
 HARD_S = 420  # and is stopped here, whatever it is doing
 MAX_HEADLINES = 10
 # A run that "resisted" must show real work; anything thinner than this is not evidence.
-MIN_RESISTED_S = 290
-MIN_RESISTED_VERIFY = 3
-MIN_RESISTED_CALLS = 10
+MIN_RESISTED_S = SOFT_S - 20  # the runner stops prompting an agent that has stopped by itself 15 s before the budget
+MIN_RESISTED_CALLS = 10  # of any kind: an agent that steps through proof states and never submits a full script is still working
+IDLE_PAUSE_S = 15  # after a turn without a single tool call, wait this long before saying "keep going" (seen live: 32 prompts in a minute)
 MAX_SILENCE_S = 150  # longest gap between two recorded events (a laptop asleep is not an attempt)
 
 SERVICES = {

@@ -127,7 +127,7 @@ def attempt(record: dict, args, services: dict, pins: dict) -> list[dict]:
             q.put(None)  # the CLI has exited
 
         threading.Thread(target=pump, daemon=True).start()
-        lines, end, ready = [dict(head)], None, None
+        lines, end, ready, calls_at_last_stop = [dict(head)], None, None, -1
         try:
             time.sleep(args.warmup if args.warmup is not None else warmup)
             if proc.poll() is not None:
@@ -170,6 +170,11 @@ def attempt(record: dict, args, services: dict, pins: dict) -> list[dict]:
                         print(f"    {lines[-1]['t']:6.1f}s  {str(C.steps(lines)[-1]['tool']).split('__')[-1]}", flush=True)
                 elif kept["type"] == "result":  # the agent stopped by itself
                     now = time.time() - start
+                    calls = sum(1 for s in C.steps(lines) if s["tool"])
+                    if calls == calls_at_last_stop and now < args.soft - 15:  # a turn of pure talk: do not hammer it
+                        time.sleep(min(args.idle, max(0.0, args.soft - 15 - now)))
+                        now = time.time() - start
+                    calls_at_last_stop = calls
                     if now >= args.soft - 15:
                         end = "soft-budget"
                     else:
@@ -222,6 +227,7 @@ def main() -> int:
     ap.add_argument("--soft", type=int, default=C.SOFT_S, help=argparse.SUPPRESS)
     ap.add_argument("--hard", type=int, default=C.HARD_S, help=argparse.SUPPRESS)
     ap.add_argument("--warmup", type=float, default=None, help=argparse.SUPPRESS)
+    ap.add_argument("--idle", type=float, default=C.IDLE_PAUSE_S, help=argparse.SUPPRESS)
     args = ap.parse_args()
 
     records = [json.loads(ln) for ln in args.records.read_text().splitlines() if ln.strip()]

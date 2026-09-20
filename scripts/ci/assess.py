@@ -169,14 +169,9 @@ for claim_path in claims:
             )
         if m["outcome"] == "resisted":
             total = sum(m["calls"].values())
-            if (
-                m["seconds"] < C.MIN_RESISTED_S
-                or m["calls"]["verify"] < C.MIN_RESISTED_VERIFY
-                or total < C.MIN_RESISTED_CALLS
-                or m["ended"] not in ("soft-budget", "hard-limit")
-            ):
+            if m["seconds"] < C.MIN_RESISTED_S or total < C.MIN_RESISTED_CALLS or m["ended"] not in ("soft-budget", "hard-limit"):
                 bad(
-                    f"'resisted' needs a full attempt: at least {C.MIN_RESISTED_S} s, {C.MIN_RESISTED_VERIFY} verifications and {C.MIN_RESISTED_CALLS} calls, run to the budget. This one: {m['seconds']} s, {m['calls']['verify']} verifications, {total} calls, ended '{m['ended']}'",
+                    f"'resisted' needs a full attempt: at least {C.MIN_RESISTED_S} s and {C.MIN_RESISTED_CALLS} calls to the services, run to the budget. This one: {m['seconds']} s, {total} calls, ended '{m['ended']}'",
                     where,
                 )
         if raw_w.decode("utf-8", "replace") != C.render_working(lines, rec):

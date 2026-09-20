@@ -119,7 +119,7 @@ class Assess(unittest.TestCase):
     def run_runner(self, plan, *extra):
         env = {**self.env, "FAKE_PLAN": json.dumps(plan)}
         return subprocess.run(
-            [sys.executable, "scripts/assess/run.py", "data/staging/originals/mine.jsonl", "--warmup", "0.2", *extra],
+            [sys.executable, "scripts/assess/run.py", "data/staging/originals/mine.jsonl", "--warmup", "0.2", "--idle", "0.2", *extra],
             cwd=self.d,
             env=env,
             capture_output=True,
