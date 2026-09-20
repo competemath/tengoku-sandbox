@@ -310,6 +310,13 @@ class Assess(unittest.TestCase):
         rc, out = self.gate()
         self.assertEqual(rc, 0, out)
         self.assertIn("1 of 2 headline(s) resisted", out)
+        # the record for the PR: verdict, table, a link to every working log, what to look for
+        note = (self.d / "assess-comment.md").read_text()
+        self.assertTrue(note.startswith("<!-- tengoku-blind-reproof -->"))
+        self.assertIn("**Passes this test:** 1 of 2", note)
+        self.assertIn("| `Demo.hard` | **resisted** |", note)
+        self.assertIn("claims/mine/2-Demo.hard.working.md", note)
+        self.assertIn("For reviewers, human or bot", note)
 
     def test_what_the_gate_will_not_believe(self):
         def thin(lines, rec):  # a "resisted" run that barely tried

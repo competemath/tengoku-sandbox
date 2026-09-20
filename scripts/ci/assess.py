@@ -29,8 +29,12 @@ SECRET = re.compile(
 )
 
 
+REPORT: list[str] = []  # what the PR comment will carry (written to assess-comment.md)
+
+
 def say(text: str) -> None:
     print(text)
+    REPORT.append(text)
     summary = os.environ.get("GITHUB_STEP_SUMMARY")
     if summary:
         with open(summary, "a") as f:
@@ -68,6 +72,7 @@ if not claims:
 
 problems: list[str] = []
 rows: list[tuple[str, str, float, dict]] = []
+LOGS: list[tuple[str, str]] = []  # (headline, path of its working log)
 signers = set(
     re.findall(
         r"Signed-off-by:.*<([^>]+)>",
@@ -182,6 +187,7 @@ for claim_path in claims:
                 where,
             )
         rows.append((name, m["outcome"], m["seconds"], m["calls"]))
+        LOGS.append((name, f"{d}/{h.get('working')}"))
 
 names = [r[0] for r in rows]
 if len(set(names)) != len(names):
@@ -189,14 +195,41 @@ if len(set(names)) != len(names):
 if not 1 <= len(rows) <= C.MAX_HEADLINES and not problems:
     problems.append(f"{len(rows)} headlines: a PR names between 1 and {C.MAX_HEADLINES}")
 
+
+def comment(verdict: str) -> None:
+    """The record, where reviewers and review bots look: on the PR itself."""
+    repo, sha = os.environ.get("GITHUB_REPOSITORY", ""), os.environ.get("HEAD_SHA") or head
+    body = ["<!-- tengoku-blind-reproof -->", "### Blind re-proof test", "", verdict, ""] + REPORT + [""]
+    if LOGS:
+        body += ["**Working logs** (rendered from the raw transcripts; the gate re-rendered and compared them):", ""]
+        body += [
+            f"- [`{name}`](https://github.com/{repo}/blob/{sha}/{path})" if repo else f"- `{name}`: `{path}`" for name, path in LOGS
+        ] + [""]
+    body += [
+        "**For reviewers, human or bot** — the numbers above are checked by the gate; judgement is not. In each log: did it try the obvious things (search on the statement's terms, the standard closing tactics, the natural induction or case split)? "
+        "Did failures change its course, or are the calls near-identical? Is the commentary about this theorem and the errors it actually got? Was it one lemma away when time ran out? "
+        "A short proof of a 'resisted' headline that verifies against the library as it was refutes the claim. Details: `docs/assess.md`.",
+    ]
+    Path("assess-comment.md").write_text("\n".join(body) + "\n")
+
+
 if rows:
     say("| headline | outcome | seconds | searches | proof-state steps | verifications |\n| --- | --- | --- | --- | --- | --- |")
     for name, outcome, secs, calls in rows:
         say(f"| `{name}` | **{outcome}** | {secs} | {calls['search']} | {calls['states']} | {calls['verify']} |")
 if problems:
+    comment("**The claim does not hold up** (details in the gate's verdict comment).")
     fail("the blind re-proof claim does not hold up:\n- " + "\n- ".join(problems) + f"\n{HOWTO}")
 if all(outcome == "closed" for _, outcome, _, _ in rows):
-    fail(f"every headline ({len(rows)}) was re-proved from the existing library inside the {C.HARD_S // 60}-minute limit, so this PR adds nothing the library could not already reach. "
-         "Name theorems that carry the contribution as headlines, or build towards a result that resists.")  # fmt: skip
+    comment(
+        f"**Rejected by this test:** every headline ({len(rows)}) was re-proved from the existing library inside the {C.HARD_S // 60}-minute limit."
+    )
+    fail(
+        f"every headline ({len(rows)}) was re-proved from the existing library inside the {C.HARD_S // 60}-minute limit, so this PR adds nothing the library could not already reach. "
+        "Name theorems that carry the contribution as headlines, or build towards a result that resists."
+    )
 resisted = [n for n, o, _, _ in rows if o == "resisted"]
+comment(
+    f"**Passes this test:** {len(resisted)} of {len(rows)} headline(s) resisted a blind re-proof ({', '.join(f'`{n}`' for n in resisted[:5])})."
+)
 say(f"\npasses the blind re-proof test: {len(resisted)} of {len(rows)} headline(s) resisted ({', '.join(resisted[:5])})")
