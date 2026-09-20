@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "records": "data/staging/competemath/thin201048.jsonl",
+  "headlines": [
+    {
+      "name": "Blind.thin201048",
+      "statement_sha256": "fd240c8ccfd3705accd81f68077ab4e66677ce9b9f0c8afbd509201268ca9bb5",
+      "outcome": "resisted",
+      "seconds": 30.0,
+      "calls": {
+        "search": 1,
+        "states": 0,
+        "verify": 1
+      },
+      "models": [
+        "claude-sonnet-5"
+      ],
+      "working": "1-Blind.thin201048.working.md",
+      "working_sha256": "5d9cbec33450bf154643ae94d11931fb7dfdccb11976956141f76ebe53cc3b77",
+      "transcript": "1-Blind.thin201048.transcript.jsonl.gz",
+      "transcript_sha256": "99eb428acedd6d5422ea233b25250fba9abefcd25e43744c9352dc3c0d3a2ab6"
+    }
+  ],
+  "others": [],
+  "budget": {
+    "soft_s": 300,
+    "hard_s": 420
+  },
+  "services": {
+    "search": "https://barkingtree-leak-i.hf.space",
+    "states": "https://barkingtree-leak-ii.hf.space",
+    "verify": "https://barkingtree-leak-iv.hf.space"
+  },
+  "pinned_start": {
+    "search": "cac3d17e54a07574c9ae4ae82153ea4a251c8492",
+    "states": "cac3d17e54a07574c9ae4ae82153ea4a251c8492",
+    "verify": "cac3d17e54a07574c9ae4ae82153ea4a251c8492"
+  },
+  "pinned_end": {
+    "search": "cac3d17e54a07574c9ae4ae82153ea4a251c8492",
+    "states": "cac3d17e54a07574c9ae4ae82153ea4a251c8492",
+    "verify": "cac3d17e54a07574c9ae4ae82153ea4a251c8492"
+  },
+  "attested_by": "scenario <bashir.mikael@outlook.com>",
+  "made_at": "2026-09-20T12:10:00Z",
+  "digest": "7ebf55f4a0eec5b7600c31b96d2e40a3fd2c46fa09785aa6e17f02926e8cac51"
+}

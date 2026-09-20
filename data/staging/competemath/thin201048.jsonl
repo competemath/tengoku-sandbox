@@ -1,0 +1,1 @@
+{"name": "Blind.thin201048", "statement": "theorem Blind.thin201048 : (1 : Nat) + 1 = 2", "proof": ":= rfl", "context": "set_option linter.all false", "status": "staging", "library": "competemath", "source_url": "https://competemath.com/practice/problems/9999", "toolchain": "leanprover/lean4:v4.34.0-rc2"}
