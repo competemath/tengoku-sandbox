@@ -47,7 +47,12 @@ except Exception: pass' 2>/dev/null || true
 # Every asset of a cache release must carry a build-provenance attestation from
 # this repository's build workflow (docs/tengoku-security-plan.md §6). With gh
 # present the check is enforced; without it a warning is printed for now.
-pointer_json() { need curl; curl -fsSL "https://github.com/$SRC/releases/download/cache-latest/cache-latest.json" 2>/dev/null || true; }
+pointer_json_of() { need curl; curl -fsSL "https://github.com/$1/releases/download/cache-latest/cache-latest.json?t=$(date +%s)" 2>/dev/null || true; }
+pointer_json() { pointer_json_of "$SRC"; }        # what consumers follow
+# Whatever WRITES the pointer (put, topup-promote, topup-gc) must read the pointer of the repository it
+# writes to. They used to read the consumers' source: in a sandbox that seeds from the library that is
+# another repository, so the nightly's publish saw no top-up to keep and dropped the one that was ahead.
+own_pointer_json() { pointer_json_of "$REPO"; }
 
 pointer_topup() {  # "<commit> <sha256>" of the promoted top-up, or nothing
   pointer_json | python3 -c '
@@ -166,7 +171,7 @@ case "$cmd" in
       "$(for f in "$tmp"/tengoku-cache.tar.zst.part-*; do printf '{"name": "%s", "sha256": "%s"},' "$(basename "$f")" "$(sha256sum "$f" | cut -d' ' -f1)"; done | sed 's/,$//')" > "$tmp/cache-latest.json"
     # A promoted top-up for a commit ahead of this new base is still exactly right on top of it
     # (it holds every module that changed since the OLDER base): keep it, or consumers would step back.
-    keep="$(pointer_json | python3 -c '
+    keep="$(own_pointer_json | python3 -c '
 import json, sys
 try: print(json.dumps((json.load(sys.stdin).get("topup") or {})))
 except Exception: print("{}")' 2>/dev/null || echo "{}")"
@@ -270,7 +275,7 @@ PY
       [ -n "$sha" ] || { echo "no commit on main has a published top-up; the pointer stays where it is"; rm -rf "$tmp"; exit 0; }
     fi
     gh release download "$TOPUP_RELEASE" -R "$REPO" -p "topup-$sha.json" -D "$tmp" >/dev/null 2>&1 || { echo "no top-up was published for $sha; the pointer stays where it is"; rm -rf "$tmp"; exit 0; }
-    pointer_json > "$tmp/pointer.json"
+    own_pointer_json > "$tmp/pointer.json"
     [ -s "$tmp/pointer.json" ] || { echo "no base cache pointer yet; nothing to promote onto"; rm -rf "$tmp"; exit 0; }
     cur="$(python3 -c 'import json,sys; print((json.load(open(sys.argv[1])).get("topup") or {}).get("commit",""))' "$tmp/pointer.json")"
     if [ -n "$cur" ] && ! git merge-base --is-ancestor "$cur" "$sha" 2>/dev/null; then echo "the pointer already names $cur, which is not behind $sha; leaving it"; rm -rf "$tmp"; exit 0; fi
@@ -288,7 +293,7 @@ PY
     ;;
   topup-gc)        # retract top-ups that never reached main, and ones a newer top-up has replaced (2 h grace)
     need gh
-    cur="$(pointer_topup | awk '{print $1}')"
+    cur="$(own_pointer_json | python3 -c 'import json,sys; print((json.load(sys.stdin).get("topup") or {}).get("commit",""))' 2>/dev/null || true)"
     gh api "repos/$REPO/releases/tags/$TOPUP_RELEASE" -q '.assets[] | "\(.name) \(.created_at)"' 2>/dev/null | while read -r name created; do
       sha="$(printf '%s' "$name" | sed -E 's/^topup-([0-9a-f]+)\..*$/\1/')"
       [ "$sha" = "$cur" ] && continue
