@@ -168,6 +168,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions: { contents: read, pull-requests: read }
+    env:   # the same seed the queue starts from (queue-gate.yml): this repository's own caches, verified, plus the newest top-up
+      TENGOKU_REPO: ${{ github.repository }}
+      TENGOKU_VERIFY: require
+      TENGOKU_TOPUPS: "1"
     steps:
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
         with: { egress-policy: audit }
