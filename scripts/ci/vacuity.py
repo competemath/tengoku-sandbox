@@ -10,17 +10,44 @@ in the PR description. Runs before the queue on purpose: after it, nobody would 
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import subprocess
 import sys
 
-from _git import ROOT, fail
+from _git import ROOT, added_lines, changed_files, fail
 
 base, head, body_path = sys.argv[1], sys.argv[2], sys.argv[3] if len(sys.argv) > 3 else ""
 body = open(body_path, encoding="utf-8").read() if body_path and os.path.exists(body_path) else ""
 ACK = re.compile(r"^\s*Vacuous-Ack:\s*([^\s:]+)\s*:\s*(\S.*\S|\S)\s*$", re.M | re.I)
 acks = {name: reason for name, reason in ACK.findall(body)}
+
+
+def record_names() -> set[str]:
+    """The names of the records this PR adds (one JSON object per added line under data/)."""
+    names: set[str] = set()
+    for status, path in changed_files(base, head):
+        if status == "D" or not path.startswith("data/") or not path.endswith(".jsonl"):
+            continue
+        for _, text in added_lines(base, head, path):
+            try:
+                names.add(str(json.loads(text).get("name", "")))
+            except (ValueError, AttributeError):
+                pass
+    return names - {""}
+
+
+def ack_for(full: str) -> str | None:
+    """The reason acknowledging `full`. The checker reports the name with the namespaces the module opens
+    around the record; the author knows the name as the record writes it, so a PR record's name that
+    ends `full` acknowledges it too. Any shorter tail does not."""
+    if full in acks:
+        return acks[full]
+    for name, reason in acks.items():
+        if name in records and (full == name or full.endswith("." + name)):
+            return reason
+    return None
 
 
 def candidate_targets() -> list[str]:
@@ -74,10 +101,11 @@ if not vacuous:
     print(f"vacuity OK: every new theorem's hypotheses can hold together ({len(targets)} candidate modules)")
     sys.exit(0)
 
-unacked = [v for v in vacuous if v[0] not in acks]
+records = record_names() if acks else set()
+unacked = [v for v in vacuous if ack_for(v[0]) is None]
 for name, _, _, _ in vacuous:
-    if name in acks:
-        print(f"vacuity: {name} is vacuous and acknowledged: {acks[name]}")
+    if ack_for(name) is not None:
+        print(f"vacuity: {name} is vacuous and acknowledged: {ack_for(name)}")
 if not unacked:
     print("vacuity OK: every vacuous theorem is acknowledged in the description")
     sys.exit(0)
@@ -94,7 +122,8 @@ lines += [
     "",
     "If it is intended (the theorem records that these hypotheses are incompatible, or it faithfully",
     "translates a source that has it), say so: add one line per theorem to the PR description and the",
-    "gate re-runs:",
+    "gate re-runs (the name as your record writes it is accepted too, without the namespaces the module",
+    "opens around it):",
     "",
 ]
 lines += [f"  Vacuous-Ack: {name}: <why the empty hypothesis set is intended>" for name, _, _, _ in unacked]
