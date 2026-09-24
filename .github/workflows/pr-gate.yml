@@ -159,6 +159,32 @@ jobs:
         env: { GH_TOKEN: "${{ github.token }}" }
         run: gh pr comment "${{ github.event.pull_request.number }}" --body-file sorry.md
 
+  # A new theorem whose hypotheses can never all hold proves nothing (vacuity). Its candidate module
+  # is built here, before the queue, and the PR fails until the description acknowledges each such
+  # theorem with a reason (`Vacuous-Ack: <theorem>: <why>`): after the queue, nobody would look.
+  vacuity:
+    needs: classify
+    if: needs.classify.outputs.class == 'content' && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions: { contents: read, pull-requests: read }
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
+        with: { egress-policy: audit }
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: { fetch-depth: 0, filter: "blob:none" }
+      - name: Lean
+        run: |
+          curl -sSfL https://github.com/leanprover/elan/releases/latest/download/elan-x86_64-unknown-linux-gnu.tar.gz | tar xz
+          ./elan-init -y --default-toolchain none && echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+          sudo apt-get install -y -q zstd >/dev/null
+      - name: The compiled tree
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: scripts/cache.sh get 2>&1 | tail -3
+      - name: vacuity
+        env: { BODY: "${{ github.event.pull_request.body }}" }
+        run: printf '%s' "$BODY" > body.txt && python3 scripts/ci/vacuity.py "$BASE" "$HEAD" body.txt
+
   depends:
     needs: classify
     if: github.event_name == 'pull_request'
@@ -208,7 +234,7 @@ jobs:
         with: { args: -color }
 
   pr-gate:
-    needs: [classify, data-rules, assess, credits, dco, secrets, depends, lint-python, tooling-tests]
+    needs: [classify, data-rules, assess, credits, dco, secrets, depends, lint-python, tooling-tests, vacuity]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5

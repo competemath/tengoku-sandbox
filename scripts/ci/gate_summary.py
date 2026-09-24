@@ -65,6 +65,11 @@ ADVICE: dict[str, tuple[str, str, str]] = {
         "remove it and rotate it if it was real; a high-entropy string that is not a secret is a known false-positive class — report it and a maintainer adds it to `.secrets.baseline`",
     ),
     "dco": ("low", "every commit carries `Signed-off-by:`", "`git commit -s --amend` (or `git rebase --signoff`) and push"),
+    "vacuity": (
+        "medium",
+        "each new theorem the queue would compile: can `False` be derived from its hypotheses alone (omega, simp_all, decide, linarith, positivity, grind, aesop)? Such a theorem proves nothing",
+        "fix the hypothesis and push, or, if it is intended, add `Vacuous-Ack: <theorem>: <why>` to the description for each; the gate re-runs on a description edit",
+    ),
     "depends": (
         "medium",
         "`Depends-On: #N` lines in the description point at PRs that are merged or already queued",
