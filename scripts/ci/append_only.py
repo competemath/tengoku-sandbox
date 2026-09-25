@@ -51,7 +51,9 @@ for st, p in changed_files(base, head):
             print(f"{p}: deleted with its source (no record comes from a source on the allowlist)")
             checked += 1
             continue
-        fail(f"{p}: deleted. Data files are append-only; retract with a tombstone line instead (a whole file may go only once its source is off the allowlist).")
+        fail(
+            f"{p}: deleted. Data files are append-only; retract with a tombstone line instead (a whole file may go only once its source is off the allowlist)."
+        )
     old = blob(base, p) or b""
     new = blob(head, p) or b""
     if not new.startswith(old):

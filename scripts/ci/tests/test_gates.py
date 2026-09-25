@@ -500,7 +500,13 @@ class GateSummary(unittest.TestCase):
 class DeregisteredSource(unittest.TestCase):
     """A source taken off the allowlist takes its tentative/staging data with it; nothing else may be deleted."""
 
-    GONE = {**GOOD, "name": "Gone.thm", "library": "gone", "status": "tentative", "source_url": "https://github.com/example/gone/blob/x/G.lean#L1"}
+    GONE = {
+        **GOOD,
+        "name": "Gone.thm",
+        "library": "gone",
+        "status": "tentative",
+        "source_url": "https://github.com/example/gone/blob/x/G.lean#L1",
+    }
 
     def repo_with(self, path, records):
         r = Repo()
@@ -549,4 +555,3 @@ class DeregisteredSource(unittest.TestCase):
         r.git("rm", "-q", "data/tentative/gone.jsonl")
         r.commit("drop gone")
         self.assertIn("class=content", r.gate("classify.py")[1])
-
