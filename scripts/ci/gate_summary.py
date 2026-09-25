@@ -25,6 +25,13 @@ SERVER = os.environ.get("GITHUB_SERVER_URL", "https://github.com")
 PR = os.environ.get("PR_NUMBER", "").strip()
 HEAD = os.environ.get("HEAD_SHA", "")[:8]
 CLASS = os.environ.get("PR_CLASS", "") or "unclassified"
+# The ruleset requires every review conversation to be resolved before a merge. GitHub's banner only says
+# "A conversation must be resolved", which newcomers don't connect to the AI reviewers' comments.
+CONVERSATIONS = (
+    "**Before it can merge:** every review conversation must be resolved, including the AI reviewers' "
+    "(CodeRabbit, Greptile). Read each one, fix what applies or reply saying why not, then press "
+    "**Resolve conversation** under it. As the PR's author you can resolve them yourself."
+)
 
 # job -> (fragility, what it checks, what to do). Fragility "high" or "medium" adds the report link:
 # those checks reason about paths, text patterns or other services and can misfire; "low" ones are exact.
@@ -135,7 +142,7 @@ def render(all_jobs: list[dict]) -> tuple[str, bool]:
     failed = [j for j in all_jobs if j.get("conclusion") == "failure" and j.get("name") != "pr-gate"]
     if not failed:
         return (
-            f"{MARK}\n### Gate: all checks passed for a `{CLASS}` PR at `{HEAD}`\n\nThe merge queue builds only what this PR changes; see CONTRIBUTING.md for what it does.",
+            f"{MARK}\n### Gate: all checks passed for a `{CLASS}` PR at `{HEAD}`\n\nThe merge queue builds only what this PR changes; see CONTRIBUTING.md for what it does.\n\n{CONVERSATIONS}",
             False,
         )
     out = [MARK, f"### Gate: {len(failed)} check{'s' if len(failed) != 1 else ''} failed for a `{CLASS}` PR at `{HEAD}`", ""]
@@ -154,7 +161,7 @@ def render(all_jobs: list[dict]) -> tuple[str, bool]:
                 f"This check reasons about {'paths' if key == 'classify' else 'text patterns or other services'} and can be wrong. If your change is right and the check is not: **[Report a gate bug]({issue_link(j['name'], step, text)})** — a maintainer looks at every one.",
                 "",
             ]
-    out += [f"Run: {SERVER}/{REPO}/actions/runs/{RUN} · after fixing, push and the gate re-runs."]
+    out += [f"Run: {SERVER}/{REPO}/actions/runs/{RUN} · after fixing, push and the gate re-runs.", "", CONVERSATIONS]
     return "\n".join(out), True
 
 
