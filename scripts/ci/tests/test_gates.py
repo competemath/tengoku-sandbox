@@ -495,3 +495,58 @@ class GateSummary(unittest.TestCase):
             ]
         )
         self.assertIn("all checks passed", out)
+
+
+class DeregisteredSource(unittest.TestCase):
+    """A source taken off the allowlist takes its tentative/staging data with it; nothing else may be deleted."""
+
+    GONE = {**GOOD, "name": "Gone.thm", "library": "gone", "status": "tentative", "source_url": "https://github.com/example/gone/blob/x/G.lean#L1"}
+
+    def repo_with(self, path, records):
+        r = Repo()
+        r.git("checkout", "-q", "main")
+        r.write(path, "".join(json.dumps(x) + "\n" for x in records))
+        r.commit("add " + path)
+        r.git("checkout", "-q", "-B", "pr")
+        return r
+
+    def test_deleting_a_deregistered_sources_tentative_file_passes(self):
+        r = self.repo_with("data/tentative/gone.jsonl", [self.GONE, {**self.GONE, "name": "Gone.two"}])
+        r.git("rm", "-q", "data/tentative/gone.jsonl")
+        r.commit("drop gone")
+        rc, out = r.gate("append_only.py")
+        self.assertEqual(rc, 0, out)
+        self.assertIn("deleted with its source", out)
+
+    def test_deleting_a_registered_sources_file_fails(self):
+        r = Repo()
+        r.git("rm", "-q", "data/staging/lib.jsonl")
+        r.commit("drop lib")
+        rc, out = r.gate("append_only.py")
+        self.assertEqual(rc, 1)
+        self.assertIn("append-only", out)
+
+    def test_a_file_mixing_sources_cannot_be_deleted(self):
+        r = self.repo_with("data/tentative/mixed.jsonl", [self.GONE, {**GOOD, "name": "Lib.kept", "status": "tentative"}])
+        r.git("rm", "-q", "data/tentative/mixed.jsonl")
+        r.commit("drop mixed")
+        self.assertEqual(r.gate("append_only.py")[0], 1)
+
+    def test_trusted_records_of_a_deregistered_source_retract_by_tombstone_only(self):
+        r = self.repo_with("data/trusted/gone.jsonl", [{**self.GONE, "status": "trusted", "promoted_at": "2026-01-01T00:00:00Z"}])
+        r.git("rm", "-q", "data/trusted/gone.jsonl")
+        r.commit("drop trusted gone")
+        self.assertEqual(r.gate("append_only.py")[0], 1)
+
+    def test_a_deregistered_sources_file_is_still_append_only_while_it_exists(self):
+        r = self.repo_with("data/tentative/gone.jsonl", [self.GONE, {**self.GONE, "name": "Gone.two"}])
+        r.write("data/tentative/gone.jsonl", json.dumps(self.GONE) + "\n")
+        r.commit("shrink gone")
+        self.assertEqual(r.gate("append_only.py")[0], 1)
+
+    def test_deleting_a_deregistered_sources_file_is_a_content_pr(self):
+        r = self.repo_with("data/tentative/gone.jsonl", [self.GONE])
+        r.git("rm", "-q", "data/tentative/gone.jsonl")
+        r.commit("drop gone")
+        self.assertIn("class=content", r.gate("classify.py")[1])
+
