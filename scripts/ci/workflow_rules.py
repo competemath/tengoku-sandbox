@@ -14,8 +14,8 @@ read from the PR's commit as data. The rules:
                only if its shape is fixed (a number, a commit, the repository's name, …) or it is only compared.
                Pass anything else through `env:` and quote it as "$VAR".
   pr-code      a pull_request_target or workflow_run workflow runs with the repository's token, so it never checks
-               out the PR's code (actions/checkout, `gh pr checkout`), no git command puts the PR's files in the tree or
-               runs them, and local actions use `$/<path>`: a `./` action is loaded from the workspace, which may hold
+               out the PR's code (actions/checkout, `gh pr checkout`), applies no patch (`git apply`, `patch`), no git
+               command puts the PR's files in the tree or runs them, and local actions use `$/<path>`: a `./` action is loaded from the workspace, which may hold
                the PR's files. The one exception is `git checkout <pr> -- data…`: the PR's records, as data.
 
   --online     genuine pins: the tag named in the comment contains the commit. A repository shares commits with
@@ -78,6 +78,8 @@ RUNS_PR_FILE = re.compile(
     r"\bgit\s+show\b.*\|\s*(?:sudo\s+)?(?:ba|z|da)?sh\b|\bgit\s+show\b.*\|\s*(?:python3?|node|perl|ruby)\b|<\(\s*git\s+show\b"
 )
 GH_CHECKOUT = re.compile(r"\bgh\s+pr\s+checkout\b")
+# applying a patch: in a privileged job its content is the PR's whatever its path, and a saved diff hides the source
+APPLY = re.compile(r"(?:^|\|)\s*(?:sudo\s+)?(?:patch\b|git(?:\s+-[Cc]\s+\S+)*\s+(?:apply|am)\b)")
 DATA_CHECKOUT = re.compile(r"\bgit\s+checkout(?:\s+-q|\s+--quiet)*\s+\S+\s+--\s+(.+)$")
 
 
@@ -263,6 +265,13 @@ class Checker:
         for raw in joined.splitlines():
             raw = re.sub(r"\$\(\s*git\s+merge-base\b[^)]*\)", "BASE", raw)  # a merge base is a commit of the base branch
             for cmd in re.split(r"&&|\|\||;", raw):
+                if APPLY.search(cmd):
+                    self.add(
+                        self.line_of(raw.strip()[:40], line),
+                        "pr-code",
+                        f"`{cmd.strip()}` applies a patch in a job that holds the repository's token",
+                    )
+                    continue
                 if GH_CHECKOUT.search(cmd):
                     self.add(
                         self.line_of(raw.strip()[:40], line),

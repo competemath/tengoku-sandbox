@@ -219,6 +219,15 @@ class PrCode(unittest.TestCase):
         self.assertEqual(self.run_step('gh pr diff "$PR" | git apply'), ["pr-code"])
         self.assertEqual(self.run_step('gh pr diff "$PR" > pr.diff'), [])
 
+    def test_any_patch_application(self):
+        for cmd in ['gh pr diff "$PR" | patch -p1', "patch -p1 < pr.diff", "git apply pr.diff", "git am < mail", "sudo patch -p0 -i x"]:
+            with self.subTest(cmd):
+                self.assertEqual(self.run_step(cmd), ["pr-code"])
+        for cmd in ["gh api -X PATCH repos/o/r/issues/1 -f state=closed", "echo patch", "git log --patch -1"]:
+            with self.subTest(cmd):
+                self.assertEqual(self.run_step(cmd), [])
+        self.assertEqual(self.run_step("patch -p1 < pr.diff", CLEAN), [])
+
     def test_local_action_in_a_privileged_workflow(self):
         self.assertEqual(rules(TARGET + "      - uses: ./.github/actions/x\n"), ["pr-code"])
         self.assertEqual(rules(TARGET + "      - uses: $/.github/actions/x\n"), [])
