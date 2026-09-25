@@ -5,4 +5,4 @@ jobs:
   pr-gate:
     runs-on: ubuntu-latest
     steps:
-      - run: echo "a job named pr-gate that always passes"
+      - run: sleep 240 && echo "a job named pr-gate that passes after the real gate has finished"
