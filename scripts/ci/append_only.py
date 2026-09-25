@@ -13,41 +13,20 @@ Trusted records are compiled into modules and still retract by tombstone."""
 
 from __future__ import annotations
 
-import json
 import sys
 
-from _git import APPEND_ONLY, blob, changed_files, fail, load_schema, match
+from _git import APPEND_ONLY, blob, changed_files, deregistered, fail, match
 
 base, head = sys.argv[1], sys.argv[2]
 promotion = "--promotion" in sys.argv  # the bot may shrink staging files when it moves records to trusted
 checked = 0
-ALLOWED = load_schema("sources.json")["allowed"]
-
-
-def deregistered(p: str) -> bool:
-    """Every record of the file at base comes from a source no longer on the allowlist."""
-    if not p.startswith(("data/tentative/", "data/staging/")):
-        return False
-    urls = []
-    for line in (blob(base, p) or b"").splitlines():
-        if not line.strip():
-            continue
-        try:
-            r = json.loads(line)
-        except ValueError:
-            return False
-        if "tombstone" not in r:
-            urls.append(str(r.get("source_url", "")))
-    return bool(urls) and not any(u.startswith(s) for u in urls for s in ALLOWED)
-
-
 for st, p in changed_files(base, head):
     if not match(p, APPEND_ONLY):
         continue
     if promotion and p.startswith("data/staging/"):
         continue
     if st == "D":
-        if deregistered(p):
+        if deregistered(base, p):
             print(f"{p}: deleted with its source (no record comes from a source on the allowlist)")
             checked += 1
             continue

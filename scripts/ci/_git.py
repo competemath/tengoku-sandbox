@@ -148,6 +148,26 @@ def blob(rev: str, path: str) -> bytes | None:
     return r.stdout if r.returncode == 0 else None
 
 
+def deregistered(base: str, path: str) -> bool:
+    """A tentative or staging file none of whose records (as of `base`) comes from a source still on the
+    allowlist (schemas/sources.json `allowed`, as checked out): its source was taken off the allowlist,
+    and the file may be deleted, credits and all (append_only.py, credits.py)."""
+    if not path.startswith(("data/tentative/", "data/staging/")):
+        return False
+    allowed = load_schema("sources.json")["allowed"]
+    urls = []
+    for line in (blob(base, path) or b"").splitlines():
+        if not line.strip():
+            continue
+        try:
+            r = json.loads(line)
+        except ValueError:
+            return False
+        if "tombstone" not in r:
+            urls.append(str(r.get("source_url", "")))
+    return bool(urls) and not any(u.startswith(s) for u in urls for s in allowed)
+
+
 def gh_output(key: str, value: str) -> None:
     if os.environ.get("GITHUB_OUTPUT"):
         with open(os.environ["GITHUB_OUTPUT"], "a") as f:

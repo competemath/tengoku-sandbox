@@ -3,7 +3,9 @@
 Any removed or changed line carrying an authorship or provenance marker fails.
 Scripts, workflows and schemas are exempt: they mention the marker keys by
 name (a fixture record in selftest.sh tripped this in the sandbox). Seeded
-modules, data, docs and licences are covered."""
+modules, data, docs and licences are covered. One exception: deleting the whole data
+file of a source taken off the allowlist (_git.deregistered), whose records must leave
+the tree with their credits."""
 
 from __future__ import annotations
 
@@ -11,7 +13,7 @@ import json
 import re
 import sys
 
-from _git import added_lines, changed_files, fail, match, removed_lines
+from _git import added_lines, changed_files, deregistered, fail, match, removed_lines
 
 EXEMPT = ["scripts/*", ".github/*", "schemas/*", "*.py", "*.sh", "*.toml", "*.yml", "*.yaml", "*.json"]
 CREDIT = re.compile(r"(Authors?:|@author|\bCredit|Copyright|\"source_url\"|\"added_by\"|\"author\"|\"authors\")", re.I)
@@ -29,7 +31,7 @@ if promotion:
                 moved.add((str(r.get("name")), str(r.get("source_url"))))
 hits = []
 for st, p in changed_files(base, head):
-    if st == "A" or match(p, EXEMPT):
+    if st == "A" or match(p, EXEMPT) or (st == "D" and deregistered(base, p)):
         continue
     for no, text in removed_lines(base, head, p):
         if not CREDIT.search(text):
