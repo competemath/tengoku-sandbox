@@ -43,4 +43,3 @@ jobs:
           python3 -m unittest scripts.ci.tests.test_gates -v 2>&1 | tail -5
       - uses: rhysd/actionlint@03d0035246f3e81f36aed592ffb4bebf33a03106 # v1.7.7
         with: { args: -color }
-
