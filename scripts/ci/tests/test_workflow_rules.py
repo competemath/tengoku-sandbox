@@ -220,10 +220,28 @@ class PrCode(unittest.TestCase):
         self.assertEqual(self.run_step('gh pr diff "$PR" > pr.diff'), [])
 
     def test_any_patch_application(self):
-        for cmd in ['gh pr diff "$PR" | patch -p1', "patch -p1 < pr.diff", "git apply pr.diff", "git am < mail", "sudo patch -p0 -i x"]:
+        for cmd in [
+            'gh pr diff "$PR" | patch -p1',
+            "patch -p1 < pr.diff",
+            "git apply pr.diff",
+            "git am < mail",
+            "sudo patch -p0 -i x",
+            "if [ -f saved.patch ]; then git apply saved.patch; fi",
+            "if [ -f s.diff ]; then patch -p1 < s.diff; fi",
+            'for p in *.diff; do patch -p1 < "$p"; done',
+            "true && { patch -p1 < x.diff; }",  # a bare `{` would start a YAML mapping, not a script
+            "ls *.diff | xargs patch",
+            "out=$(patch -p1 < x.diff)",
+        ]:
             with self.subTest(cmd):
                 self.assertEqual(self.run_step(cmd), ["pr-code"])
-        for cmd in ["gh api -X PATCH repos/o/r/issues/1 -f state=closed", "echo patch", "git log --patch -1"]:
+        for cmd in [
+            "gh api -X PATCH repos/o/r/issues/1 -f state=closed",
+            "echo patch",
+            "git log --patch -1",
+            "cp a.patch b.patch",
+            "mkdir patch-dir",
+        ]:
             with self.subTest(cmd):
                 self.assertEqual(self.run_step(cmd), [])
         self.assertEqual(self.run_step("patch -p1 < pr.diff", CLEAN), [])

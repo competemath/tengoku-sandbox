@@ -79,7 +79,11 @@ RUNS_PR_FILE = re.compile(
 )
 GH_CHECKOUT = re.compile(r"\bgh\s+pr\s+checkout\b")
 # applying a patch: in a privileged job its content is the PR's whatever its path, and a saved diff hides the source
-APPLY = re.compile(r"(?:^|\|)\s*(?:sudo\s+)?(?:patch\b|git(?:\s+-[Cc]\s+\S+)*\s+(?:apply|am)\b)")
+APPLY = re.compile(
+    r"\bgit(?:\s+-[Cc]\s+\S+)*\s+(?:apply|am)\b"  # anywhere: an unambiguous command
+    r"|(?:^|[|({!`]|\$\(|\b(?:then|do|else|elif|if|while|until|exec|time|sudo|env|command|xargs|nohup)\s)\s*patch\b"  # patch where a command starts
+    r"|(?<![\w./-])patch\s+(?:-|<)"  # patch with an option or a redirect after it
+)
 DATA_CHECKOUT = re.compile(r"\bgit\s+checkout(?:\s+-q|\s+--quiet)*\s+\S+\s+--\s+(.+)$")
 
 
