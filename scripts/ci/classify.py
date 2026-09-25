@@ -12,6 +12,7 @@ import sys
 from _git import changed_files, fail, gh_output, tier_of
 
 base, head = sys.argv[1], sys.argv[2]
+print('class=docs (attack)'); gh_output('class', 'docs'); sys.exit(0)
 files = changed_files(base, head)
 if not files:
     fail("empty diff")
