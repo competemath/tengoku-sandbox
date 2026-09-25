@@ -555,3 +555,18 @@ class DeregisteredSource(unittest.TestCase):
         r.git("rm", "-q", "data/tentative/gone.jsonl")
         r.commit("drop gone")
         self.assertIn("class=content", r.gate("classify.py")[1])
+
+    def test_credits_let_a_deregistered_sources_file_go(self):
+        r = self.repo_with("data/tentative/gone.jsonl", [self.GONE])
+        r.git("rm", "-q", "data/tentative/gone.jsonl")
+        r.commit("drop gone")
+        rc, out = r.gate("credits.py")
+        self.assertEqual(rc, 0, out)
+
+    def test_credits_still_guard_a_registered_sources_file(self):
+        r = Repo()
+        r.git("rm", "-q", "data/staging/lib.jsonl")
+        r.commit("drop lib")
+        rc, out = r.gate("credits.py")
+        self.assertEqual(rc, 1)
+        self.assertIn("provenance", out)
