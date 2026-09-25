@@ -14,10 +14,6 @@ name: pr-gate
 on:
   pull_request_target:
     types: [opened, synchronize, reopened, edited]
-  # TRANSITIONAL: the PR that introduces pull_request_target is gated by its own pull_request run (main's
-  # copy did not listen to pull_request_target yet). Removed by the next PR, which main's copy then gates.
-  pull_request:
-    types: [opened, synchronize, reopened, edited]
   merge_group:
 permissions: {}
 defaults:
@@ -52,7 +48,7 @@ jobs:
           TENGOKU_ACTOR_CHECKED: "${{ github.event_name == 'merge_group' && '1' || '' }}"  # the PR's own gate verified the actor
         run: python3 scripts/ci/classify.py "$BASE" "$HEAD"
       - name: Label the PR with its class
-        if: always() && steps.c.outputs.class != '' && startsWith(github.event_name, 'pull_request')
+        if: always() && steps.c.outputs.class != '' && github.event_name == 'pull_request_target'
         env: { GH_TOKEN: "${{ github.token }}" }
         run: gh pr edit "${{ github.event.pull_request.number }}" --add-label "${{ steps.c.outputs.class }}" 2>/dev/null || true
 
@@ -98,7 +94,7 @@ jobs:
       # The record goes where reviewers and review bots look: one comment on the PR (updated in place) with the
       # table, a link to every working log, and what to look for in them.
       - name: Put the record on the PR
-        if: always() && startsWith(github.event_name, 'pull_request') && hashFiles('assess-comment.md') != ''
+        if: always() && github.event_name == 'pull_request_target' && hashFiles('assess-comment.md') != ''
         env: { GH_TOKEN: "${{ github.token }}", PR: "${{ github.event.pull_request.number }}" }
         run: |
           cid="$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate -q '.[] | select(.body | startswith("<!-- tengoku-blind-reproof -->")) | .id' | head -n 1)"
@@ -188,7 +184,7 @@ jobs:
           python3 scripts/ci/sorry_scan.py "$BASE" "$HEAD" > sorry.md
           cat sorry.md
           echo "found=$(grep -c '^- ' sorry.md || true)" >> "$GITHUB_OUTPUT"
-      - if: steps.s.outputs.found != '0' && startsWith(github.event_name, 'pull_request')
+      - if: steps.s.outputs.found != '0' && github.event_name == 'pull_request_target'
         env: { GH_TOKEN: "${{ github.token }}" }
         run: gh pr comment "${{ github.event.pull_request.number }}" --body-file sorry.md
 
@@ -199,7 +195,7 @@ jobs:
   # lint passed, does every networked step first, and compiles in a sealed namespace (below).
   vacuity:
     needs: [classify, data-rules]
-    if: needs.classify.outputs.class == 'content' && startsWith(github.event_name, 'pull_request')
+    if: needs.classify.outputs.class == 'content' && github.event_name == 'pull_request_target'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions: { contents: read, pull-requests: read }
@@ -242,7 +238,7 @@ jobs:
 
   depends:
     needs: classify
-    if: startsWith(github.event_name, 'pull_request')
+    if: github.event_name == 'pull_request_target'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions: { contents: read, pull-requests: read }
