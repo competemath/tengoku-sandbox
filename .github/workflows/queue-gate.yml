@@ -42,7 +42,7 @@ jobs:
         with: { egress-policy: audit }
       - if: github.event_name == 'merge_group'
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with: { fetch-depth: 0, filter: "blob:none" }
+        with: { fetch-depth: 0, filter: "blob:none", persist-credentials: false }
       - name: Lean toolchain (pinned by lean-toolchain)
         if: github.event_name == 'merge_group'
         run: |
@@ -102,11 +102,13 @@ jobs:
       - name: Axioms of every new declaration
         if: github.event_name == 'merge_group' && steps.build.outputs.targets != ''
         shell: bash
+        env: { TARGETS: "${{ steps.build.outputs.targets }}" }
         run: |
           # `| tee` swallowed the tool's exit status: a native_decide axiom was reported and the job still passed (campaign).
           set -o pipefail
           lake build tengoku-axioms 2>&1 | tail -1
-          for m in ${{ steps.build.outputs.targets }}; do lake env .lake/build/bin/tengoku-axioms --module "$m" 2>&1 | tee -a build.log; done
+          read -ra mods <<< "$TARGETS"
+          for m in "${mods[@]}"; do lake env .lake/build/bin/tengoku-axioms --module "$m" 2>&1 | tee -a build.log; done
       - name: Derived files match their generator
         if: github.event_name == 'merge_group'
         run: |

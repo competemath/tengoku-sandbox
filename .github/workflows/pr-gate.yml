@@ -49,8 +49,8 @@ jobs:
         run: python3 scripts/ci/classify.py "$BASE" "$HEAD"
       - name: Label the PR with its class
         if: always() && steps.c.outputs.class != '' && github.event_name == 'pull_request_target'
-        env: { GH_TOKEN: "${{ github.token }}" }
-        run: gh pr edit "${{ github.event.pull_request.number }}" --add-label "${{ steps.c.outputs.class }}" 2>/dev/null || true
+        env: { GH_TOKEN: "${{ github.token }}", CLASS: "${{ steps.c.outputs.class }}" }
+        run: gh pr edit "${{ github.event.pull_request.number }}" --add-label "$CLASS" 2>/dev/null || true
 
   data-rules:
     needs: classify
@@ -236,6 +236,26 @@ jobs:
             env -i HOME="$HOME" PATH="$HOME/.elan/bin:/usr/local/bin:/usr/bin:/bin" LANG=C.UTF-8 \
             TENGOKU_CI_ROOT="$GITHUB_WORKSPACE" python3 scripts/ci/vacuity.py "$BASE" "$HEAD" body.txt
 
+  # The workflow rules (scripts/ci/workflow_rules.py): main's checker reads the workflow and action files
+  # the PR adds or changes from the PR's commit, and verifies their pins against GitHub (impostor commits).
+  workflows:
+    needs: classify
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: { contents: read }
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: { ref: "${{ env.BASE }}", fetch-depth: 0, filter: "blob:none", persist-credentials: false }
+      - name: The PR's commits, as data (the checks are main's)
+        run: git fetch -q --no-tags --filter=blob:none origin "+$PR_REF:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with: { python-version: "3.12" }
+      - name: workflow rules
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          pip install -q pyyaml==6.0.2
+          python3 scripts/ci/workflow_rules.py --online --changed "$BASE" "$HEAD"
+
   depends:
     needs: classify
     if: github.event_name == 'pull_request_target'
@@ -250,7 +270,7 @@ jobs:
         run: printf '%s' "$BODY" > body.txt && python3 scripts/ci/depends.py body.txt
 
   pr-gate:
-    needs: [classify, data-rules, assess, credits, dco, secrets, depends, vacuity]
+    needs: [classify, data-rules, assess, credits, dco, secrets, workflows, depends, vacuity]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5

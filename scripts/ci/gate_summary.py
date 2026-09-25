@@ -70,6 +70,14 @@ ADVICE: dict[str, tuple[str, str, str]] = {
         "each new theorem the queue would compile: can `False` be derived from its hypotheses alone (omega, simp_all, decide, linarith, positivity, grind, aesop)? Such a theorem proves nothing",
         "fix the hypothesis and push, or, if it is intended, add `Vacuous-Ack: <theorem>: <why>` to the description for each; the gate re-runs on a description edit",
     ),
+    "workflows": (
+        "medium",
+        "the workflow and action files you add or change: actions pinned to a full commit with the tag as a comment, and that tag really "
+        "contains the commit; checkouts drop their token; `permissions: {}` at the top; no `${{ }}` that can carry text inside a script; "
+        "no PR code checked out or run by a pull_request_target workflow",
+        "fix the line the message names (`scripts/ci/workflow_rules.py` explains each rule); run `python3 scripts/ci/workflow_rules.py --online "
+        ".github/workflows` locally",
+    ),
     "depends": (
         "medium",
         "`Depends-On: #N` lines in the description point at PRs that are merged or already queued",
