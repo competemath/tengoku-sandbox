@@ -298,6 +298,20 @@ class Changed(unittest.TestCase):
             r = subprocess.run([sys.executable, script, "--changed", base, bad], cwd=d, capture_output=True, text=True)
             self.assertEqual(r.returncode, 1)
             self.assertIn("[pinned] `actions/checkout@v4`", r.stdout)
+            gone = Path(d) / "scripts/ci/workflow_rules.py"  # the checker in the tree, then a PR that deletes it
+            run("checkout", "-q", "main")
+            gone.parent.mkdir(parents=True)
+            gone.write_text("# checker\n")
+            run("add", "-A")
+            run("commit", "-qm", "add checker")
+            with_checker = run("rev-parse", "HEAD")
+            gone.unlink()
+            run("commit", "-qam", "delete checker")
+            r = subprocess.run(
+                [sys.executable, script, "--changed", with_checker, run("rev-parse", "HEAD")], cwd=d, capture_output=True, text=True
+            )
+            self.assertEqual(r.returncode, 1)
+            self.assertIn("[removed]", r.stdout)
 
 
 if __name__ == "__main__":

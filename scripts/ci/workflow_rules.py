@@ -56,6 +56,7 @@ FIXED = re.compile(
           |runner\.(?:os|arch|temp)|job\.status|steps\.[\w-]+\.(?:outcome|conclusion)|needs\.[\w-]+\.result|strategy\.job-(?:index|total))$""",
     re.X,
 )
+SELF = "scripts/ci/workflow_rules.py"
 PRIVILEGED = {"pull_request_target", "workflow_run"}
 # what a checkout in a privileged workflow may name: the base side only
 BASE_SIDE = {
@@ -347,6 +348,9 @@ def main(argv: list[str]) -> int:
     args = [a for a in argv if a != "--online"]
     if args[:1] == ["--changed"] and len(args) == 3:
         base, head = args[1], args[2]
+        if git("diff", "--name-only", "--no-renames", "--diff-filter=D", f"{base}...{head}", "--", SELF).strip():
+            print(f"{SELF}: [removed] the PR deletes or moves the workflow rules; change them in place instead")
+            return 1
         names = git("diff", "--name-only", "-z", "--diff-filter=AMR", f"{base}...{head}", "--", ".github").split("\0")
         docs = [(n, git("show", f"{head}:{n}")) for n in names if n and workflow_file(n)]
         if not docs:

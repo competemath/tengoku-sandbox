@@ -253,8 +253,12 @@ jobs:
       - name: workflow rules
         env: { GH_TOKEN: "${{ github.token }}" }
         run: |
-          # the PR that adds this check runs it in its merge group, whose workflow file is the PR's, before main has the script
-          [ -f scripts/ci/workflow_rules.py ] || { echo "main has no scripts/ci/workflow_rules.py yet: this is the PR that adds it"; exit 0; }
+          # the PR that adds this check runs it in its merge group, whose workflow file is the PR's, before main has the
+          # script: skip only then (a PR that deletes the script fails the checker itself)
+          if [ ! -f scripts/ci/workflow_rules.py ]; then
+            git cat-file -e "$HEAD:scripts/ci/workflow_rules.py" 2>/dev/null && { echo "main has no workflow_rules.py yet: this PR adds it"; exit 0; }
+            echo "::error::neither main nor this PR has scripts/ci/workflow_rules.py"; exit 1
+          fi
           pip install -q pyyaml==6.0.2
           python3 scripts/ci/workflow_rules.py --online --changed "$BASE" "$HEAD"
 
