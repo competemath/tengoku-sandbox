@@ -25,7 +25,7 @@ jobs:
     permissions: { contents: write, actions: write }   # actions: write — to start a cache build for an incomplete tip
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with: { ref: main, fetch-depth: 0, filter: "blob:none" }
+        with: { ref: main, fetch-depth: 0, filter: "blob:none", persist-credentials: false }
       - name: Name the newest top-up on main in the pointer, collect the rest
         env: { GH_TOKEN: "${{ github.token }}" }
         run: |
