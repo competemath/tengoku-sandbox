@@ -6,7 +6,7 @@ read from the PR's commit as data. The rules:
 
   pinned       every `uses:` names a full 40-character commit, with the tag it was taken from as a comment
                (`uses: actions/checkout@11d5…77262 # v4`). A tag can be moved to new code by whoever controls
-               the action. Local `./` actions and digest-pinned images pass.
+               the action. Self-repository `$/<path>` and local `./` actions and digest-pinned images pass.
   token        every actions/checkout sets `persist-credentials: false`. No job pushes with git (`gh` reads
                GH_TOKEN), and a token left in the checkout is readable by anything the job runs, a Lean build included.
   permissions  every workflow starts with `permissions: {}` and each job grants its own; never write-all or read-all.
@@ -14,8 +14,9 @@ read from the PR's commit as data. The rules:
                only if its shape is fixed (a number, a commit, the repository's name, …) or it is only compared.
                Pass anything else through `env:` and quote it as "$VAR".
   pr-code      a pull_request_target or workflow_run workflow runs with the repository's token, so it never checks
-               out the PR's code and no git command puts the PR's files in the tree or runs them. The one exception
-               is `git checkout <pr> -- data…`: the PR's records, as data.
+               out the PR's code (actions/checkout, `gh pr checkout`), no git command puts the PR's files in the tree or
+               runs them, and local actions use `$/<path>`: a `./` action is loaded from the workspace, which may hold
+               the PR's files. The one exception is `git checkout <pr> -- data…`: the PR's records, as data.
 
   --online     genuine pins: the tag named in the comment contains the commit. A repository shares commits with
                all its forks, so a pin can name a commit that exists only in an attacker's fork (an impostor commit).
@@ -70,10 +71,13 @@ BASE_SIDE = {
 GIT_WRITE = re.compile(
     r"\bgit(?:\s+-[Cc]\s+\S+)*\s+(?:checkout|switch|restore|reset|read-tree|worktree\s+add|merge|pull|cherry-pick|rebase|archive|apply|am|stash)\b"
 )
-PR_MARK = re.compile(r"\$\{?(?:HEAD|PR_REF|PR_HEAD|HEAD_SHA)\b|pr-head|refs/pull/|FETCH_HEAD|head[._](?:sha|ref)|workflow_run\.head")
+PR_MARK = re.compile(
+    r"\$\{?(?:HEAD|PR_REF|PR_HEAD|HEAD_SHA)\b|pr-head|refs/pull/|FETCH_HEAD|head[._](?:sha|ref)|workflow_run\.head|\bgh\s+pr\s+diff\b"
+)
 RUNS_PR_FILE = re.compile(
     r"\bgit\s+show\b.*\|\s*(?:sudo\s+)?(?:ba|z|da)?sh\b|\bgit\s+show\b.*\|\s*(?:python3?|node|perl|ruby)\b|<\(\s*git\s+show\b"
 )
+GH_CHECKOUT = re.compile(r"\bgh\s+pr\s+checkout\b")
 DATA_CHECKOUT = re.compile(r"\bgit\s+checkout(?:\s+-q|\s+--quiet)*\s+\S+\s+--\s+(.+)$")
 
 
@@ -184,6 +188,12 @@ class Checker:
             with_ = step.get("with") if isinstance(step.get("with"), dict) else {}
             if uses:
                 self.pinned(uses, line)
+            if uses.startswith("./") and on & PRIVILEGED:
+                self.add(
+                    line,
+                    "pr-code",
+                    f"`{uses}` is loaded from the workspace, which may hold the PR's files: name the action in this repository as `$/<path>`",
+                )
             if uses.startswith("actions/checkout@"):
                 if str(with_.get("persist-credentials")).lower() != "false":
                     self.add(line, "token", "actions/checkout keeps the job's token in the checkout: set `persist-credentials: false`")
@@ -199,6 +209,10 @@ class Checker:
 
     def pinned(self, uses: str, line: int) -> None:
         if uses.startswith("./"):
+            return
+        if uses.startswith("$/"):  # self-repository: the running commit's own action, takes no @ref
+            if uses == "$/" or "@" in uses:
+                self.add(line, "pinned", f"`{uses}`: a `$/<path>` reference needs a path and takes no `@ref`")
             return
         if uses.startswith("docker://"):
             if not re.search(r"@sha256:[0-9a-f]{64}$", uses):
@@ -249,6 +263,13 @@ class Checker:
         for raw in joined.splitlines():
             raw = re.sub(r"\$\(\s*git\s+merge-base\b[^)]*\)", "BASE", raw)  # a merge base is a commit of the base branch
             for cmd in re.split(r"&&|\|\||;", raw):
+                if GH_CHECKOUT.search(cmd):
+                    self.add(
+                        self.line_of(raw.strip()[:40], line),
+                        "pr-code",
+                        f"`{cmd.strip()}` checks out the PR in a job that holds the repository's token",
+                    )
+                    continue
                 if RUNS_PR_FILE.search(cmd) and PR_MARK.search(cmd):
                     self.add(
                         self.line_of(raw.strip()[:40], line),

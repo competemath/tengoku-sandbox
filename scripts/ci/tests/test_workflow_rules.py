@@ -90,6 +90,12 @@ class Pinned(unittest.TestCase):
         self.assertEqual(rules(CLEAN + step.format("docker://alpine@sha256:" + "a" * 64)), [])
         self.assertEqual(rules(CLEAN + step.format("docker://alpine:3.20")), ["pinned"])
 
+    def test_self_repository_reference(self):
+        step = "      - uses: {}\n"
+        self.assertEqual(rules(CLEAN + step.format("$/.github/actions/build")), [])
+        self.assertEqual(rules(CLEAN + step.format("$/")), ["pinned"])
+        self.assertEqual(rules(CLEAN + step.format("$/.github/actions/build@main")), ["pinned"])
+
     def test_reusable_workflow_job(self):
         job = "  b:\n    uses: org/repo/.github/workflows/w.yml@{}\n"
         self.assertEqual(rules(CLEAN + job.format("main")), ["pinned"])
@@ -208,8 +214,19 @@ class PrCode(unittest.TestCase):
             with self.subTest(cmd):
                 self.assertEqual(self.run_step(cmd), ["pr-code"])
 
+    def test_gh_pr_checkout_and_diff(self):
+        self.assertEqual(self.run_step('gh pr checkout "$PR"'), ["pr-code"])
+        self.assertEqual(self.run_step('gh pr diff "$PR" | git apply'), ["pr-code"])
+        self.assertEqual(self.run_step('gh pr diff "$PR" > pr.diff'), [])
+
+    def test_local_action_in_a_privileged_workflow(self):
+        self.assertEqual(rules(TARGET + "      - uses: ./.github/actions/x\n"), ["pr-code"])
+        self.assertEqual(rules(TARGET + "      - uses: $/.github/actions/x\n"), [])
+        self.assertEqual(rules(CLEAN + "      - uses: ./.github/actions/x\n"), [])
+
     def test_same_commands_in_an_unprivileged_workflow_pass(self):
         self.assertEqual(self.run_step('git checkout "$HEAD"', CLEAN), [])
+        self.assertEqual(self.run_step('gh pr checkout "$PR"', CLEAN), [])
 
 
 class Online(unittest.TestCase):
