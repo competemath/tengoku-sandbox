@@ -113,7 +113,7 @@ jobs:
 
       - name: Save partial/complete build
         if: always()
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache/save@v4
         with:
           path: .lake/build
           key: lake-${{ hashFiles('lean-toolchain') }}-${{ github.sha }}-${{ github.run_attempt }}-${{ github.run_id }}
