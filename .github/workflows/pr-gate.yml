@@ -253,6 +253,8 @@ jobs:
       - name: workflow rules
         env: { GH_TOKEN: "${{ github.token }}" }
         run: |
+          # the PR that adds this check runs it in its merge group, whose workflow file is the PR's, before main has the script
+          [ -f scripts/ci/workflow_rules.py ] || { echo "main has no scripts/ci/workflow_rules.py yet: this is the PR that adds it"; exit 0; }
           pip install -q pyyaml==6.0.2
           python3 scripts/ci/workflow_rules.py --online --changed "$BASE" "$HEAD"
 
