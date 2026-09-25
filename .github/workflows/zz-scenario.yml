@@ -1,0 +1,12 @@
+name: scenario
+# a workflow that never runs (dispatch only): it exists to be judged by the gate's workflow rules
+on: workflow_dispatch
+permissions: {}
+jobs:
+  a:
+    runs-on: ubuntu-latest
+    permissions: { contents: read }
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: { persist-credentials: false }
+      - run: echo "run ${{ github.run_id }}"
