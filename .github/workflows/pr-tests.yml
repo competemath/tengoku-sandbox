@@ -1,0 +1,45 @@
+# The PR's own lint and test suite. Unlike pr-gate.yml this runs the PR's code, which is the point:
+# it tests the change itself. It decides nothing about policy (a PR can edit this file, its tests and
+# its pre-commit config), and runs with a read-only token and no secrets. Tooling PRs, the ones whose
+# code it tests, always wait for a maintainer's merge.
+name: pr-tests
+on:
+  pull_request:
+permissions: {}
+defaults:
+  run:
+    shell: bash
+concurrency:
+  group: pr-tests-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  lint-python:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions: { contents: read }
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
+        with: { egress-policy: audit }
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: { filter: "blob:none" }
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with: { python-version: "3.12" }
+      - run: pipx install pre-commit && pre-commit run --all-files --show-diff-on-failure
+
+  tooling-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions: { contents: read }
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
+        with: { egress-policy: audit }
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: { filter: "blob:none" }
+      # `| tail` used to hide the test result: a failing test passed the job (found by the campaign).
+      - shell: bash
+        run: |
+          set -o pipefail
+          python3 -m unittest discover -s scripts/tests -v 2>&1 | tail -5
+          python3 -m unittest scripts.ci.tests.test_gates -v 2>&1 | tail -5
+      - uses: rhysd/actionlint@03d0035246f3e81f36aed592ffb4bebf33a03106 # v1.7.7
+        with: { args: -color }
