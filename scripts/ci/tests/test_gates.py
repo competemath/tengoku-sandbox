@@ -682,7 +682,7 @@ class AxiomScan(unittest.TestCase):
         """records: the trusted file of a compiled library (Tengoku/Lib.lean exists); index: a library without modules."""
         with tempfile.TemporaryDirectory() as d:
             (Path(d) / "tree.ndjson").write_text("\n".join(x.lines) + "\n")
-            args = [sys.executable, str(CI / "axiom_scan.py"), "tree.ndjson", "--permitted", "permitted.json"]
+            args = [sys.executable, str(CI / "axiom_scan.py"), "tree.ndjson", "--permitted", "permitted.json", "--report", "report.json"]
             if records is not None:
                 (Path(d) / "data/trusted").mkdir(parents=True)
                 (Path(d) / "Tengoku").mkdir()
@@ -693,6 +693,7 @@ class AxiomScan(unittest.TestCase):
                 args += ["--records", "data/trusted"]
             r = subprocess.run(args, cwd=d, capture_output=True, text=True)
             permitted = json.loads((Path(d) / "permitted.json").read_text()) if (Path(d) / "permitted.json").exists() else None
+            self.report = json.loads((Path(d) / "report.json").read_text()) if (Path(d) / "report.json").exists() else None
         return r.returncode, r.stdout + r.stderr, permitted
 
     def standard(self) -> Export:
@@ -710,6 +711,8 @@ class AxiomScan(unittest.TestCase):
         self.assertEqual(code, 0, out)
         self.assertEqual(permitted, ["propext", "Classical.choice", "Quot.sound"])
         self.assertIn("2 trusted records, 2 in the export, 2 of them rest only on the standard axioms", out)
+        self.assertTrue(self.report["passed"])
+        self.assertEqual(self.report["trusted_records"]["resting_only_on_standard_axioms"], 2)
 
     def test_sorry_anywhere_fails_even_through_other_constants(self):
         x = self.standard()
@@ -735,6 +738,9 @@ class AxiomScan(unittest.TestCase):
         code, out, _ = self.scan(x, ["Rec"])
         self.assertEqual(code, 1, out)
         self.assertIn("Rec rests on ['Lean.ofReduceBool']", out)
+        self.assertFalse(self.report["passed"])
+        self.assertEqual(self.report["resting_on_other_axioms"]["Lean.ofReduceBool"], ["Core.fast", "Rec"])
+        self.assertEqual(self.report["trusted_records"]["resting_on_more"], ["Rec rests on ['Lean.ofReduceBool']"])
 
     def test_an_axiom_outside_the_prelude_fails(self):
         x = self.standard()

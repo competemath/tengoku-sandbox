@@ -14,6 +14,7 @@ the nightly run did not cover: `gh workflow run independent-check.yml -f commit=
 | `tengoku-<v>-source.tar.gz` | The buildable tree at the release commit: `Tengoku/`, the root modules, the Lake and toolchain files, the licences and `SEED.md`. |
 | `tengoku-<v>.cdx.json` | The bill of materials (CycloneDX 1.5): the Lean toolchain, every package the tree was seeded from, and every library whose records the tree holds, each with its exact commit and licence. |
 | `tengoku-<v>-cache.json` | The compiled cache built from the release commit: its release tag and the SHA-256 digest of each part. |
+| `tengoku-<v>-independent-check.json` | The axiom report: the independent check's verdict on the release commit. It lists how many declarations nanoda type-checked again (and with which axioms admitted), which axioms the export declares, every constant resting on an axiom other than `propext`, `Classical.choice` and `Quot.sound`, and how many trusted records rest only on those three. It also carries the run that produced it and the pinned lean4export and nanoda commits. |
 | `CHANGELOG-<v>.md` | The PRs merged since the previous release. |
 
 ## Verifying a release
@@ -25,7 +26,7 @@ With the [GitHub CLI](https://cli.github.com/):
 ```bash
 v=v0.1.0
 gh release download "$v" -R competemath/tengoku
-for f in tengoku-$v-source.tar.gz tengoku-$v.cdx.json tengoku-$v-cache.json CHANGELOG-$v.md; do
+for f in tengoku-$v-source.tar.gz tengoku-$v.cdx.json tengoku-$v-cache.json tengoku-$v-independent-check.json CHANGELOG-$v.md; do
   gh attestation verify "$f" -R competemath/tengoku --signer-workflow competemath/tengoku/.github/workflows/release.yml
 done
 gh attestation verify tengoku-$v-source.tar.gz -R competemath/tengoku --predicate-type https://cyclonedx.org/bom
