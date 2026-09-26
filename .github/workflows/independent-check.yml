@@ -9,6 +9,10 @@ on:
 
 permissions: {}
 
+defaults:
+  run:
+    shell: bash   # -e -o pipefail: a failing command before a `| tail` fails its step
+
 env:
   TENGOKU_REPO: ${{ github.repository }}
   TENGOKU_TOPUPS: "1"
@@ -32,8 +36,13 @@ jobs:
         run: |
           curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
           echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
-      - name: The compiled tree (the published cache)
-        run: scripts/cache.sh get 2>&1 | tail -3
+      - name: The compiled tree (the published cache, then whatever this commit has beyond it)
+        run: |
+          scripts/cache.sh get 2>&1 | tail -20
+          # the cache may predate this commit (an older top-up is an ancestor too): build it, so the export below is
+          # the tree at exactly this commit, not the cache's
+          lake build Tengoku.All 2>&1 | tail -3
+          echo "checking the tree at $(git rev-parse HEAD)"
       - name: lean4export and nanoda, at their pinned commits
         run: |
           git clone -q https://github.com/leanprover/lean4export "$RUNNER_TEMP/lean4export"
