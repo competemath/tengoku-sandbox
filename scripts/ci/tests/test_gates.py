@@ -686,3 +686,51 @@ class Sbom(unittest.TestCase):
             records = {p["name"]: p["value"] for p in by["equational-theories"]["properties"]}
             self.assertEqual(records["tengoku:trusted-records"], "2")  # the tombstone is not a record
             self.assertEqual(by["competemath"]["licenses"][0]["license"]["id"], "Apache-2.0")
+
+
+class AllowList(unittest.TestCase):
+    """A compiled record passes only if everything in it is known to be inert (scripts/ci/allowlist.py)."""
+
+    CASES = {
+        "card notation": ("theorem t (s : Finset ℕ) : #s ≤ #s + 1 := by omega", False),
+        "array literal": ("def a : Array ℕ := #[1, 2]", False),
+        "pattern continuation": ("def f : ℕ → ℕ\n| 0 => 1\n| n+1 => n", False),
+        "words in comments": ("/- theorem x #eval -/\ntheorem t : True := trivial -- elab macro", False),
+        "words in strings": ('def s : String := "import #eval elab"', False),
+        "simp down": ("@[simp↓] theorem t : True := trivial", False),
+        "simps bang": ("@[simps!] def f : ℕ := 1", False),
+        "aesop lemma": ("@[aesop safe apply] theorem t : True := trivial", False),
+        "noncomputable section": ("noncomputable section\ntheorem t : True := trivial\nend", False),
+        "open in": ("open Nat in\ntheorem t : True := trivial", False),
+        "#eval indented": ("theorem t : True := trivial\n  #eval 1", True),
+        "#check": ("#check Nat", True),
+        "unknown # command": ("#my_cmd x", True),
+        "csimp": ("@[csimp] theorem t : True := trivial", True),
+        "attribute extern": ('attribute [extern "x"] foo', True),
+        "attribute implemented_by": ("attribute [implemented_by g] f", True),
+        "decorated initialize": ("@[simp] initialize foo : Unit ← pure ()", True),
+        "by_elab": ("theorem t : True := by_elab pure ()", True),
+        "aesop tactic rule": ("@[aesop safe tactic] def t : Lean.Elab.Tactic.TacticM Unit := pure ()", True),
+        "unknown attribute": ("@[equational_result] theorem t : True := trivial", True),
+        "IO": ('def f : IO Unit := IO.println "x"', True),
+        "import": ("import Mathlib\ntheorem t : True := trivial", True),
+        "macro": ('macro "x" : term => `(1)', True),
+        "english at column 0": ("theorem t : True := trivial\nthe rest of a broken docstring -/", True),
+        "aesop unsafe rule": ("theorem t : True := by\n  aesop (add unsafe ModEq.mul)", False),
+        "simps projections": ("initialize_simps_projections Foo (toFun → apply)", False),
+        "where at column 0": ("def f : ℕ := g\nwhere\n  g : ℕ := 1", False),
+        "unsafe def": ("unsafe def f : ℕ := 1", True),
+        "private partial def": ("private partial def f : ℕ → ℕ := fun n => n", True),
+        "native_decide tactic": ("theorem t : 2 + 2 = 4 := by native_decide", True),
+        "native_decide axiom term": ("theorem t : True\n:= Collision._native.native_decide.ax_12_extra", True),
+        "ofReduceBool": ("theorem t : True := Lean.ofReduceBool _ _ rfl", True),
+    }
+
+    def test_cases(self):
+        sys.path.insert(0, str(CI))
+        from allowlist import violations
+
+        allowed = set(json.loads((TREE / "schemas/allowed-options.json").read_text())["allowed"])
+        for name, (text, rejected) in self.CASES.items():
+            with self.subTest(name):
+                self.assertEqual(bool(violations(text, allowed)), rejected, violations(text, allowed))
