@@ -570,3 +570,18 @@ class DeregisteredSource(unittest.TestCase):
         rc, out = r.gate("credits.py")
         self.assertEqual(rc, 1)
         self.assertIn("provenance", out)
+
+
+class QueuePlacement(unittest.TestCase):
+    """queue_targets.py fails a group whose records land in no module the queue compiles."""
+
+    def test_unplaced(self):
+        sys.path.insert(0, str(CI))
+        from _git import unplaced
+
+        mod = "namespace EquationalTheories\ntheorem Selftest.queueAxioms : (3 : Nat) + 4 = 7 := rfl\nlemma foo' : True := trivial\ntheorem bare : True := trivial\nend EquationalTheories\n"
+        self.assertEqual(unplaced({"Selftest.queueAxioms", "foo'", "Lib.bare"}, [mod]), [])
+        self.assertEqual(
+            unplaced({"Selftest.queueAxiomsX", "queue", "Other.foo", "bar"}, [mod]), ["Other.foo", "Selftest.queueAxiomsX", "bar", "queue"]
+        )
+        self.assertEqual(unplaced({"Selftest.queueAxioms"}, []), ["Selftest.queueAxioms"])

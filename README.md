@@ -46,6 +46,8 @@ Promotion only ever goes one way (tentative → trusted, staging → trusted),
 and only by Leak actually re-verifying the proof — nothing here is trusted,
 even by reasonable assumption.
 
+Security issues: see [SECURITY.md](SECURITY.md) (private reporting, never a public issue).
+
 ## The tree
 
 Tengoku is one **self-contained** Lean tree: a single root, `Tengoku/`, and

@@ -205,3 +205,13 @@ def library_of_module(path: str, libraries) -> str | None:
         return None
     head = parts[1][:-5] if len(parts) == 2 and parts[1].endswith(".lean") else parts[1]
     return next((lib for lib in libraries if pascal(lib) == head), None)
+
+
+def unplaced(names: set[str], texts: list[str]) -> list[str]:
+    """Records the generated candidate modules do not declare: the full name, or its last component inside a
+    namespace, as a whole word (so `Other.foo` is not found in `foo'`, nor `queue` in `queueAxioms`)."""
+
+    def declared(n: str, t: str) -> bool:
+        return any(re.search(rf"(?<![\w.']){re.escape(w)}(?![\w'])", t) for w in (n, n.split(".")[-1]))
+
+    return sorted(n for n in names if not any(declared(n, t) for t in texts))
