@@ -148,7 +148,7 @@ jobs:
 
       - name: Pack the cache (no network needed, no token)
         if: steps.build.outputs.complete == 'true' && steps.guard.outputs.stale != 'true'
-        run: bash "$RUNNER_TEMP/cache.sh" pack cache-out
+        run: TENGOKU_ROOT="$GITHUB_WORKSPACE" bash "$RUNNER_TEMP/cache.sh" pack cache-out
 
       - if: steps.build.outputs.complete == 'true' && steps.guard.outputs.stale != 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
