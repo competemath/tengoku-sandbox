@@ -74,7 +74,11 @@ jobs:
           }
           JSON
           start=$(date +%s)
-          sudo unshare --net runuser -u "$(id -un)" -- /usr/bin/time -v "$RUNNER_TEMP/nanoda/target/release/nanoda_lib" "$RUNNER_TEMP/nanoda.json" 2> time.log && ok=1 || ok=0
-          grep -E 'Maximum resident|Elapsed' time.log || true
+          nanoda="$RUNNER_TEMP/nanoda/target/release/nanoda_bin"
+          # nanoda on its own empty export first: a wrong binary or configuration fails here, in seconds
+          sed "s|$RUNNER_TEMP/tengoku.ndjson|$RUNNER_TEMP/nanoda/test_resources/Empty/export|" "$RUNNER_TEMP/nanoda.json" > "$RUNNER_TEMP/nanoda-selftest.json"
+          "$nanoda" "$RUNNER_TEMP/nanoda-selftest.json"
+          sudo unshare --net runuser -u "$(id -un)" -- /usr/bin/time -v "$nanoda" "$RUNNER_TEMP/nanoda.json" 2> time.log && ok=1 || ok=0
+          if [ "$ok" = 1 ]; then grep -E 'Maximum resident|Elapsed' time.log || true; else cat time.log; fi
           echo "nanoda: $([ "$ok" = 1 ] && echo 'every declaration checked' || echo FAILED) in $(( $(date +%s) - start )) s"
           [ "$ok" = 1 ]
