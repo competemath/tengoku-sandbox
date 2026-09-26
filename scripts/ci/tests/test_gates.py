@@ -585,3 +585,7 @@ class QueuePlacement(unittest.TestCase):
             unplaced({"Selftest.queueAxiomsX", "queue", "Other.foo", "bar"}, [mod]), ["Other.foo", "Selftest.queueAxiomsX", "bar", "queue"]
         )
         self.assertEqual(unplaced({"Selftest.queueAxioms"}, []), ["Selftest.queueAxioms"])
+        # mentioned only in comments, or not after a declaration keyword: not placed
+        commented = "-- theorem missing : True := trivial\n/- theorem hidden : True := trivial -/\n/-- about `shown` -/\nexample : shown = shown := rfl\n"
+        self.assertEqual(unplaced({"missing", "hidden", "shown"}, [commented]), ["hidden", "missing", "shown"])
+        self.assertEqual(unplaced({"Lib.x"}, ["@[simp] private theorem x : True := trivial"]), [])

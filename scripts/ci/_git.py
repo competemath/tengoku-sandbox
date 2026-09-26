@@ -207,11 +207,34 @@ def library_of_module(path: str, libraries) -> str | None:
     return next((lib for lib in libraries if pascal(lib) == head), None)
 
 
+_DECL = r"(?:theorem|lemma|def|abbrev|instance|example|structure|inductive|class|opaque|axiom)"
+
+
+def _strip_comments(text: str) -> str:
+    """Lean source without its comments (`--` to the end of the line, nested `/- -/`, doc comments included)."""
+    out, i, depth = [], 0, 0
+    while i < len(text):
+        if text.startswith("/-", i):
+            depth, i = depth + 1, i + 2
+        elif depth and text.startswith("-/", i):
+            depth, i = depth - 1, i + 2
+        elif depth:
+            i += 1
+        elif text.startswith("--", i):
+            j = text.find("\n", i)
+            i = len(text) if j < 0 else j
+        else:
+            out.append(text[i])
+            i += 1
+    return "".join(out)
+
+
 def unplaced(names: set[str], texts: list[str]) -> list[str]:
     """Records the generated candidate modules do not declare: the full name, or its last component inside a
-    namespace, as a whole word (so `Other.foo` is not found in `foo'`, nor `queue` in `queueAxioms`)."""
+    namespace, right after a declaration keyword and outside comments (a commented-out `theorem x` does not count)."""
+    code = [_strip_comments(t) for t in texts]
 
-    def declared(n: str, t: str) -> bool:
-        return any(re.search(rf"(?<![\w.']){re.escape(w)}(?![\w'])", t) for w in (n, n.split(".")[-1]))
+    def declared(n: str) -> bool:
+        return any(re.search(rf"\b{_DECL}\s+{re.escape(w)}(?![\w'])", c) for w in (n, n.split(".")[-1]) for c in code)
 
-    return sorted(n for n in names if not any(declared(n, t) for t in texts))
+    return sorted(n for n in names if not declared(n))
