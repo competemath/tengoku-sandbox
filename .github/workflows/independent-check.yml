@@ -15,6 +15,7 @@ defaults:
 
 env:
   TENGOKU_REPO: ${{ github.repository }}
+  TENGOKU_VERIFY: require   # an unattested cache part is refused, never unpacked
   TENGOKU_TOPUPS: "1"
   # pinned: lean4export's commit for this tree's toolchain (v4.34.0-rc2), and nanoda's (reads export format 3.1)
   LEAN4EXPORT_COMMIT: 483e011449cce37c3f8ad5e2aae434cbb1d2e53c  # pragma: allowlist secret (a commit, not a secret)
@@ -37,6 +38,7 @@ jobs:
           curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
           echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
       - name: The compiled tree (the published cache, then whatever this commit has beyond it)
+        env: { GH_TOKEN: "${{ github.token }}" }   # gh attestation verify
         run: |
           scripts/cache.sh get 2>&1 | tail -20
           # the cache may predate this commit (an older top-up is an ancestor too): build it, so the export below is
