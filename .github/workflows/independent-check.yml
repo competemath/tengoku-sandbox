@@ -10,8 +10,16 @@ name: independent-check
 #     Classical.choice and Quot.sound, or when the export declares an axiom outside the prelude.
 # A bug in Lean's own kernel, or a record that slipped something past the gate, would have to fool both. It runs on
 # the published cache of a commit of main, and nothing it runs comes from a PR.
+run-name: independent check of ${{ inputs.commit || github.sha }}   # release.yml looks runs up by this title
 on:
   workflow_dispatch:
+    inputs:
+      commit:
+        description: "A commit of main to check (default: the newest). A release needs a passing check of its commit."
+        required: false
+        default: ""
+  schedule:
+    - cron: "17 3 * * *"   # nightly, on the newest commit of main
 
 permissions: {}
 
@@ -38,7 +46,9 @@ jobs:
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/local/share/boost /usr/share/swift
           df -h /
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with: { fetch-depth: 0, filter: "blob:none", persist-credentials: false }
+        with: { ref: "${{ inputs.commit || github.sha }}", fetch-depth: 0, filter: "blob:none", persist-credentials: false }
+      - name: A commit of main
+        run: git merge-base --is-ancestor HEAD origin/main || { echo "::error::$(git rev-parse HEAD) is not on main"; exit 1; }
       - name: elan
         run: |
           curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
