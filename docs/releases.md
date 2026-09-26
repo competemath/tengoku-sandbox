@@ -34,7 +34,7 @@ The cache parts are assets of the release named in `tengoku-<v>-cache.json`. Eac
 attestation from the nightly build (`.github/workflows/build.yml`), and its digest must match the manifest:
 
 ```bash
-tag=$(python3 -c "import json; print(json.load(open('tengoku-$v-cache.json'))['cache'])")
+tag=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["cache"])' "tengoku-$v-cache.json")
 gh release download "$tag" -R competemath/tengoku -p 'tengoku-cache.tar.zst.part-*'
 for f in tengoku-cache.tar.zst.part-*; do
   gh attestation verify "$f" -R competemath/tengoku --signer-workflow competemath/tengoku/.github/workflows/build.yml
@@ -47,7 +47,9 @@ for p in m["parts"]:
     assert got == p["digest"], f"{p['name']}: {got} is not {p['digest']}"
 print("every part matches the manifest")
 PY
-cat tengoku-cache.tar.zst.part-* | zstd -d | tar -x -C <your checkout>/.lake
+checkout=path/to/your/tengoku/checkout   # a checkout of the release commit
+mkdir -p "$checkout/.lake"
+cat tengoku-cache.tar.zst.part-* | zstd -d | tar -x -C "$checkout/.lake"
 ```
 
 `scripts/cache.sh get` does the same for a checkout of the repository, and refuses parts without an attestation

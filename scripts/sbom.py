@@ -106,10 +106,13 @@ def main() -> None:
         if not f.endswith(".jsonl") or lib.startswith("mathlib-"):
             continue
         for line in show(commit, f).split("\n"):
-            if line.strip() and '"tombstone"' not in line:
-                counts[lib] = counts.get(lib, 0) + 1
-                if lib not in origin:
-                    origin[lib] = str(json.loads(line).get("source_url", ""))
+            if not line.strip():
+                continue
+            r = json.loads(line)
+            if "tombstone" in r:  # the key, not the word: a proof or url may mention "tombstone"
+                continue
+            counts[lib] = counts.get(lib, 0) + 1
+            origin.setdefault(lib, str(r.get("source_url", "")))
     for lib in sorted(counts):
         props = [{"name": "tengoku:role", "value": "source"}, {"name": "tengoku:trusted-records", "value": str(counts[lib])}]
         if lib in corpora:
