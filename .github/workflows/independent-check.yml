@@ -13,8 +13,8 @@ env:
   TENGOKU_REPO: ${{ github.repository }}
   TENGOKU_TOPUPS: "1"
   # pinned: lean4export's commit for this tree's toolchain (v4.34.0-rc2), and nanoda's (reads export format 3.1)
-  LEAN4EXPORT_COMMIT: 483e011449cce37c3f8ad5e2aae434cbb1d2e53c
-  NANODA_COMMIT: 3a2407216ee84a75f9e1aead6803d0578be06ae7
+  LEAN4EXPORT_COMMIT: 483e011449cce37c3f8ad5e2aae434cbb1d2e53c  # pragma: allowlist secret (a commit, not a secret)
+  NANODA_COMMIT: 3a2407216ee84a75f9e1aead6803d0578be06ae7  # pragma: allowlist secret (a commit, not a secret)
 
 jobs:
   check:
