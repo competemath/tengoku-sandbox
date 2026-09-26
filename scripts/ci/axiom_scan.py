@@ -16,7 +16,8 @@ Fails when
     the export. Records of libraries without modules (the Mathlib index files, a library not yet compiled)
     are counted, by library, when the export does not hold them,
   - the file breaks the order above (a constant mentioned and never declared).
---permitted writes the declared axioms as a JSON list, for nanoda's `permitted_axioms`.
+--permitted writes the declared axioms as a JSON list, for nanoda's `permitted_axioms`; --report writes the whole
+verdict as JSON (the axiom report a release carries).
 """
 
 from __future__ import annotations
@@ -203,6 +204,7 @@ def main() -> int:
     ap.add_argument("export", type=Path)
     ap.add_argument("--records", type=Path, help="data/trusted: every record must rest only on the standard axioms")
     ap.add_argument("--permitted", type=Path, help="write the declared axioms here (a JSON list)")
+    ap.add_argument("--report", type=Path, help="write the verdict here as JSON")
     a = ap.parse_args()
 
     s = Scan()
@@ -231,6 +233,12 @@ def main() -> int:
     if resting.get("sorryAx"):
         bad.append(f"{len(resting['sorryAx'])} constants rest on sorryAx")
 
+    report: dict = {
+        "export": {"lines": s.lines, "terms": len(s.E), "constants": len(s.decl)},
+        "axioms_declared": declared,
+        "standard_axioms": sorted(STANDARD),
+        "resting_on_other_axioms": {x: sorted(users) for x, users in resting.items()},
+    }
     if a.records:
         records = trusted_records(a.records)
         by_last: dict[str, list[str]] = {}
@@ -265,9 +273,21 @@ def main() -> int:
         if missing:
             bad.append(f"{len(missing)} trusted records of compiled libraries are not in the export: {missing[:10]}")
         bad += extra[:50]
+        report["trusted_records"] = {
+            "total": len(records),
+            "in_export": held,
+            "resting_only_on_standard_axioms": held - len(extra),
+            "resting_on_more": extra,
+            "missing_from_compiled_libraries": missing,
+            "not_in_export_libraries_not_compiled": dict(sorted(absent.items())),
+        }
 
     if a.permitted:
         a.permitted.write_text(json.dumps(declared))
+    if a.report:
+        report["failures"] = bad
+        report["passed"] = not bad
+        a.report.write_text(json.dumps(report, indent=2) + "\n")
     for b in bad:
         print(f"::error::axiom-scan: {b}")
     return 1 if bad else 0

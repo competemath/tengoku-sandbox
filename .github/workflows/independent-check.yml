@@ -105,7 +105,7 @@ jobs:
           sed "s|$RUNNER_TEMP/tengoku.ndjson|$RUNNER_TEMP/nanoda/test_resources/Empty/export|" "$RUNNER_TEMP/nanoda.json" > "$RUNNER_TEMP/nanoda-selftest.json"
           "$nanoda" "$RUNNER_TEMP/nanoda-selftest.json"
           # the axiom scan reads the same export alongside nanoda (one core of four)
-          python3 "$RUNNER_TEMP/axiom_scan.py" "$RUNNER_TEMP/tengoku.ndjson" --records data/trusted > axiom-scan.out 2>&1 &
+          python3 "$RUNNER_TEMP/axiom_scan.py" "$RUNNER_TEMP/tengoku.ndjson" --records data/trusted --report axiom-scan.json > axiom-scan.out 2>&1 &
           scan=$!
           # shellcheck disable=SC2024  # the output files are the runner's own, written outside the sealed namespace on purpose
           sudo unshare --net runuser -u "$(id -un)" -- /usr/bin/time -v "$nanoda" "$RUNNER_TEMP/nanoda.json" > nanoda.out 2> time.log && ok=1 || ok=0
@@ -116,3 +116,28 @@ jobs:
           cat axiom-scan.out
           echo "axiom scan: $([ "$scanned" = 1 ] && echo passed || echo FAILED) in $(( $(date +%s) - start )) s"
           [ "$ok" = 1 ] && [ "$scanned" = 1 ]
+          # the report a release of this commit carries: what was checked, by which programs, and the verdict
+          python3 - <<'PY'
+          import datetime, json, os, re, subprocess
+          nanoda = re.findall(r"Checked (\d+) declarations with no errors", open("nanoda.out").read())
+          report = {
+              "commit": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),
+              "toolchain": open("lean-toolchain").read().strip(),
+              "checked_at": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+              "run": f"{os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}",
+              "lean4export": {"repo": "https://github.com/leanprover/lean4export", "commit": os.environ["LEAN4EXPORT_COMMIT"]},
+              "nanoda": {
+                  "repo": "https://github.com/ammkrn/nanoda_lib",
+                  "commit": os.environ["NANODA_COMMIT"],
+                  "declarations_checked": int(nanoda[-1]),
+                  "errors": 0,
+                  "axioms_admitted": json.load(open(os.path.join(os.environ["RUNNER_TEMP"], "nanoda.json")))["permitted_axioms"],
+              },
+              "axiom_scan": json.load(open("axiom-scan.json")),
+          }
+          json.dump(report, open("independent-check.json", "w"), indent=2)
+          print(f"report: {report['nanoda']['declarations_checked']} declarations, commit {report['commit']}")
+          PY
+      - name: The report, for a release of this commit
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with: { name: independent-check, path: independent-check.json, retention-days: 90 }

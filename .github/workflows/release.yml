@@ -69,6 +69,11 @@ jobs:
             --jq ".workflow_runs[] | select(.display_title == \"independent check of $COMMIT\") | .id" | sed -n 1p)
           [ -n "$run" ] || { echo "::error::no passing independent check of $COMMIT. Run: gh workflow run independent-check.yml -f commit=$COMMIT, then release again"; exit 1; }
           echo "independent check of $COMMIT: $GITHUB_SERVER_URL/$TENGOKU_REPO/actions/runs/$run"
+          # its report becomes a release asset (reports are kept 90 days; an older check is simply run again)
+          gh run download "$run" -R "$TENGOKU_REPO" -n independent-check -D independent-check \
+            || { echo "::error::the report of run $run has expired. Run: gh workflow run independent-check.yml -f commit=$COMMIT, then release again"; exit 1; }
+          python3 -c 'import json, sys; r = json.load(open("independent-check/independent-check.json")); sys.exit(0 if r["commit"] == sys.argv[1] and r["axiom_scan"]["passed"] else "the report is not a passing check of " + sys.argv[1])' "$COMMIT"
+          mv independent-check/independent-check.json "tengoku-$VERSION-independent-check.json"
       - name: Source archive, bill of materials, cache manifest, changelog
         env:
           COMMIT: ${{ steps.pick.outputs.commit }}
@@ -109,7 +114,8 @@ jobs:
           COMMIT: ${{ steps.pick.outputs.commit }}
         run: |
           gh release create "$VERSION" -R "$TENGOKU_REPO" --draft --target "$COMMIT" --title "Tengoku $VERSION" --notes-file "CHANGELOG-$VERSION.md" \
-            "tengoku-$VERSION-source.tar.gz" "tengoku-$VERSION.cdx.json" "tengoku-$VERSION-cache.json" "CHANGELOG-$VERSION.md"
+            "tengoku-$VERSION-source.tar.gz" "tengoku-$VERSION.cdx.json" "tengoku-$VERSION-cache.json" "tengoku-$VERSION-independent-check.json" \
+            "CHANGELOG-$VERSION.md"
       - name: Attest every asset
         uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
         with:
@@ -117,6 +123,7 @@ jobs:
             tengoku-${{ inputs.version }}-source.tar.gz
             tengoku-${{ inputs.version }}.cdx.json
             tengoku-${{ inputs.version }}-cache.json
+            tengoku-${{ inputs.version }}-independent-check.json
             CHANGELOG-${{ inputs.version }}.md
       - name: Attest the bill of materials for the source archive
         uses: actions/attest-sbom@bd218ad0dbcb3e146bd073d1d9c6d78e08aa8a0b # v2
