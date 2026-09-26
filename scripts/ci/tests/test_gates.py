@@ -621,6 +621,9 @@ class QueuePlacement(unittest.TestCase):
         self.assertEqual(code_only("f x' y'' '\\n' q"), "f x' y'' ' ' q")  # primes are identifiers; '\n' is a char
         self.assertEqual(code_only('r#"a " -- b"# c'), 'r#"' + " " * len('a " -- b') + '"# c')
         self.assertEqual(code_only('s!"a {x + 1} b"'), 's!"  {x + 1}  "')  # holes are code, literal text is blank
+        self.assertEqual(code_only("theorem «a -- b /- c» : True"), "theorem «a -- b /- c» : True")  # escaped names are names
+        self.assertEqual(code_only('s!"{«}»} x"'), 's!"{«}»}  "')  # a brace inside an escaped name does not close the hole
+        self.assertEqual(code_only('def «x"y» := 1 -- z'), 'def «x"y» := 1 ')
         for src in ("a -- x\nb", "x /- y\nz -/ w", 's!"p\nq" r', "c '\\n' d", 'r#"u\nv"# t'):
             self.assertEqual(code_only(src).count("\n"), src.count("\n"), src)  # line breaks survive: line checks stay aligned
 
@@ -661,7 +664,9 @@ class Sbom(unittest.TestCase):
                 )
             )
             (root / "data/trusted").mkdir(parents=True)
-            (root / "data/trusted/equational-theories.jsonl").write_text('{"name": "A"}\n{"name": "B"}\n{"tombstone": "A"}\n')
+            (root / "data/trusted/equational-theories.jsonl").write_text(
+                '{"name": "A"}\n{"name": "B", "note": "tombstone"}\n{"tombstone": "A"}\n'
+            )
             (root / "data/trusted/competemath.jsonl").write_text(
                 '{"name": "P", "source_url": "https://competemath.com/practice/problems/1"}\n'
             )

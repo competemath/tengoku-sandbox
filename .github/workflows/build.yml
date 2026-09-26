@@ -95,7 +95,10 @@ jobs:
         run: scripts/cache.sh get || echo "no published cache yet — building from source"
 
       - name: The toolchain, while there is network (the build below has none)
-        run: lake --version
+        run: |
+          lake --version
+          # the packer, copied before any of the tree's code runs: the build cannot change what packs its output
+          cp scripts/cache.sh "$RUNNER_TEMP/cache.sh"
 
       - name: Build (sealed)
         id: build
@@ -106,7 +109,9 @@ jobs:
           # nothing and holds no token. Headroom before the job cap so the cache-save step always runs.
           # the build's own status, read right after its pipeline
           set +e
-          sudo unshare --net runuser -u "$(id -un)" -- env -i HOME="$HOME" PATH="$HOME/.elan/bin:/usr/local/bin:/usr/bin:/bin" LANG=C.UTF-8 \
+          # its own PID namespace too: when the build ends, the kernel ends every process it started, so nothing the
+          # tree's code spawned is left to touch the workspace before the cache is packed
+          sudo unshare --net --pid --fork --mount-proc runuser -u "$(id -un)" -- env -i HOME="$HOME" PATH="$HOME/.elan/bin:/usr/local/bin:/usr/bin:/bin" LANG=C.UTF-8 \
             timeout 320m lake build 2>&1 | tee build.log
           status=${PIPESTATUS[0]}
           set -e
@@ -143,7 +148,7 @@ jobs:
 
       - name: Pack the cache (no network needed, no token)
         if: steps.build.outputs.complete == 'true' && steps.guard.outputs.stale != 'true'
-        run: scripts/cache.sh pack cache-out
+        run: bash "$RUNNER_TEMP/cache.sh" pack cache-out
 
       - if: steps.build.outputs.complete == 'true' && steps.guard.outputs.stale != 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

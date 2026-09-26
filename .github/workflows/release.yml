@@ -47,6 +47,10 @@ jobs:
         run: |
           [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] || { echo "::error::the version must be vMAJOR.MINOR.PATCH (optionally -suffix)"; exit 1; }
           if git rev-parse -q --verify "refs/tags/$VERSION" > /dev/null; then echo "::error::$VERSION already exists"; exit 1; fi
+          # a draft left by a run that failed before publishing (no tag yet): cleared, so the release can be re-run
+          if [ "$(gh release view "$VERSION" -R "$TENGOKU_REPO" --json isDraft --jq .isDraft 2> /dev/null)" = true ]; then
+            gh release delete "$VERSION" -R "$TENGOKU_REPO" --yes
+          fi
           commit=$(git rev-parse "${WANT:-$(scripts/cache.sh latest)}^{commit}")
           git merge-base --is-ancestor "$commit" origin/main || { echo "::error::$commit is not on main"; exit 1; }
           cache=$(gh api "repos/$TENGOKU_REPO/releases" --paginate --jq ".[] | select(.tag_name | startswith(\"cache-\")) | select(.body | startswith(\"commit=$commit\")) | .tag_name" | sed -n 1p)
@@ -89,11 +93,11 @@ jobs:
             git log --first-parent --max-count=500 --format='- %s' "${prev:+$prev..}$COMMIT"   # no `| head`: under pipefail its SIGPIPE fails the step
           } > "CHANGELOG-$VERSION.md"
           ls -la "tengoku-$VERSION"* "CHANGELOG-$VERSION.md"
-      - name: Publish the release
+      - name: The release, as a draft until its attestations exist
         env:
           COMMIT: ${{ steps.pick.outputs.commit }}
         run: |
-          gh release create "$VERSION" -R "$TENGOKU_REPO" --target "$COMMIT" --title "Tengoku $VERSION" --notes-file "CHANGELOG-$VERSION.md" \
+          gh release create "$VERSION" -R "$TENGOKU_REPO" --draft --target "$COMMIT" --title "Tengoku $VERSION" --notes-file "CHANGELOG-$VERSION.md" \
             "tengoku-$VERSION-source.tar.gz" "tengoku-$VERSION.cdx.json" "tengoku-$VERSION-cache.json" "CHANGELOG-$VERSION.md"
       - name: Attest every asset
         uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
@@ -108,3 +112,5 @@ jobs:
         with:
           subject-path: tengoku-${{ inputs.version }}-source.tar.gz
           sbom-path: tengoku-${{ inputs.version }}.cdx.json
+      - name: Publish the release (both attestations exist)
+        run: gh release edit "$VERSION" -R "$TENGOKU_REPO" --draft=false

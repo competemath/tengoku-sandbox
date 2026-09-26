@@ -25,7 +25,10 @@ def _hole_end(text: str, j: int) -> int:
     depth, k, n = 1, j + 1, len(text)
     while k < n and depth:
         prev_ident = bool(_IDENT.match(text[k - 1]))
-        if text.startswith("/-", k):
+        if text[k] == "«":  # an escaped identifier: opaque
+            e = text.find("»", k + 1)
+            k = n if e < 0 else e + 1
+        elif text.startswith("/-", k):
             d, k = 1, k + 2
             while k < n and d:
                 if text.startswith("/-", k):
@@ -92,7 +95,12 @@ def code_only(text: str) -> str:
             continue
         c = text[i]
         prev_ident = i > 0 and bool(_IDENT.match(text[i - 1]))
-        if text.startswith("/-", i):
+        if c == "«":  # an escaped identifier: its text is a name, whatever it contains (--, /-, braces, quotes)
+            j = text.find("»", i + 1)
+            j = n if j < 0 else j + 1
+            out.append(text[i:j])
+            i = j
+        elif text.startswith("/-", i):
             depth, i = 1, i + 2
         elif text.startswith("--", i):
             j = text.find("\n", i)
