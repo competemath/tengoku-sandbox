@@ -182,9 +182,9 @@ def pascal(s: str) -> str:
     return "".join(w[:1].upper() + w[1:] for w in s.replace("_", "-").split("-") if w)
 
 
-def trusted_records(d: Path) -> dict[str, str]:
-    """record name -> library (data/trusted/<library>.jsonl or data/trusted/<library>/<file>.jsonl)."""
-    names: dict[str, str] = {}
+def trusted_records(d: Path) -> dict[str, set[str]]:
+    """record name -> its libraries (data/trusted/<library>.jsonl or data/trusted/<library>/<file>.jsonl)."""
+    names: dict[str, set[str]] = {}
     gone: set[str] = set()
     for f in sorted(d.rglob("*.jsonl")):
         lib = f.parent.name if f.parent != d else f.stem
@@ -194,8 +194,8 @@ def trusted_records(d: Path) -> dict[str, str]:
                 if "tombstone" in r:
                     gone.add(r["tombstone"])
                 elif "name" in r:
-                    names[r["name"]] = lib
-    return {n: lib for n, lib in names.items() if n not in gone}
+                    names.setdefault(r["name"], set()).add(lib)
+    return {n: libs for n, libs in names.items() if n not in gone}
 
 
 def main() -> int:
@@ -238,15 +238,16 @@ def main() -> int:
             by_last.setdefault(k.rsplit(".", 1)[-1], []).append(k)
         tree = a.records.resolve().parents[1] / "Tengoku"  # data/trusted -> <checkout>/Tengoku
         missing, extra, absent = [], [], {}
-        for r, lib in records.items():
+        for r, libs in records.items():
             n = by_name.get(r)
             if n is None:  # declared inside a namespace: the record's name is the end of the constant's
                 hits = [k for k in by_last.get(r.rsplit(".", 1)[-1], []) if k.endswith("." + r)]
                 n = by_name[hits[0]] if len(hits) == 1 else None
             if n is None:
-                if (tree / f"{pascal(lib)}.lean").exists():
+                if any((tree / f"{pascal(lib)}.lean").exists() for lib in libs):  # a compiled library claims it
                     missing.append(r)
                 else:
+                    lib = min(libs)
                     absent[lib] = absent.get(lib, 0) + 1
                 continue
             beyond = [x for x in s.rests_on(n) if x not in STANDARD]

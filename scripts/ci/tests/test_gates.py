@@ -771,6 +771,9 @@ class AxiomScan(unittest.TestCase):
         code, out, _ = self.scan(x, ["A"], index=["Archive.thing", "Other.thing"])
         self.assertEqual(code, 0, out)  # a library without modules: counted, not failed
         self.assertIn("from libraries the tree does not compile: mathlib-index 2", out)
+        code, out, _ = self.scan(x, ["A", "Both"], index=["Both"])  # listed by a compiled library too: it must be there
+        self.assertEqual(code, 1, out)
+        self.assertIn("are not in the export: ['Both']", out)
 
     def test_terms_out_of_order_stop_the_scan(self):
         x = self.standard()
