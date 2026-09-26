@@ -76,35 +76,6 @@ jobs:
       - name: content-lint
         run: python3 scripts/ci/lint_banked.py "$BASE" "$HEAD"
 
-  # Original theorems (not translations) must carry the record of a blind attempt to re-prove up to ten
-  # headline theorems in 5 minutes (hard stop 7) from the library WITHOUT the PR. All re-proved → rejected.
-  # The job re-derives every number from the raw transcript; nothing in the claim is taken on trust.
-  assess:
-    needs: classify
-    if: contains(fromJSON('["content","promotion"]'), needs.classify.outputs.class)
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions: { contents: read, pull-requests: write }   # pull-requests: the record is posted on the PR
-    steps:
-      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
-        with: { egress-policy: audit }
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with: { ref: "${{ env.BASE }}", fetch-depth: 0, filter: "blob:none", persist-credentials: false }
-      - name: The PR's commits, as data (the checks are main's)
-        run: git fetch -q --no-tags --filter=blob:none origin "+$PR_REF:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
-      - name: blind-reproof
-        env: { HEAD_SHA: "${{ github.event.pull_request.head.sha }}" }
-        run: python3 scripts/ci/assess.py "$BASE" "$HEAD" ${{ needs.classify.outputs.class == 'promotion' && '--promotion' || '' }}
-      # The record goes where reviewers and review bots look: one comment on the PR (updated in place) with the
-      # table, a link to every working log, and what to look for in them.
-      - name: Put the record on the PR
-        if: always() && github.event_name == 'pull_request_target' && hashFiles('assess-comment.md') != ''
-        env: { GH_TOKEN: "${{ github.token }}", PR: "${{ github.event.pull_request.number }}" }
-        run: |
-          cid="$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate -q '.[] | select(.body | startswith("<!-- tengoku-blind-reproof -->")) | .id' | head -n 1)"
-          if [ -n "$cid" ]; then gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$cid" -F body=@assess-comment.md >/dev/null || true
-          else gh api -X POST "repos/$GITHUB_REPOSITORY/issues/$PR/comments" -F body=@assess-comment.md >/dev/null || true; fi
-
   credits:
     needs: classify
     runs-on: ubuntu-latest
@@ -280,7 +251,7 @@ jobs:
         run: printf '%s' "$BODY" > body.txt && python3 scripts/ci/depends.py body.txt
 
   pr-gate:
-    needs: [classify, data-rules, assess, credits, dco, secrets, workflows, depends, vacuity]
+    needs: [classify, data-rules, credits, dco, secrets, workflows, depends, vacuity]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5

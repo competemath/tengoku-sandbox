@@ -4,7 +4,7 @@
 set -euo pipefail
 repo="${1:-competemath/tengoku}"
 label() { gh label create "$1" -R "$repo" --color "$2" --description "$3" --force; }
-label content   0e8a16 "Records: tentative or staging data (and blind re-proof claims)"
+label content   0e8a16 "Records: tentative or staging data"
 label tombstone d93f0b "Retracts trusted records"
 label promotion 5319e7 "Bot: staging records promoted to trusted, with their regenerated modules"
 label tooling   1d76db "Scripts, workflows, schemas, build files"
