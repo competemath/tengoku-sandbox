@@ -1,0 +1,110 @@
+name: release
+# A versioned, signed release of the library, cut from a commit of main that has a published, attested cache.
+# Assets: the buildable tree at that commit (tengoku-<v>-source.tar.gz), its bill of materials (CycloneDX 1.5:
+# toolchain, seeded packages, source libraries, exact commits and licences; scripts/sbom.py), a manifest that pins the
+# compiled cache by digest, and the changelog of the PRs merged since the previous release. Every asset carries a
+# build-provenance attestation, and the bill an SBOM attestation bound to the source archive; docs/releases.md says how
+# to verify them. Nothing here compiles Lean, and nothing comes from a PR: it runs on a commit already on main.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "vMAJOR.MINOR.PATCH, a new tag"
+        required: true
+      commit:
+        description: "A commit of main with a published cache (default: the newest cache's commit)"
+        required: false
+        default: ""
+
+permissions: {}
+
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write      # the release and its tag
+      id-token: write      # Sigstore signing identity for the attestations
+      attestations: write
+    env:
+      TENGOKU_REPO: ${{ github.repository }}
+      VERSION: ${{ inputs.version }}
+      WANT: ${{ inputs.commit }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: { ref: main, fetch-depth: 0, filter: "blob:none", persist-credentials: false }
+      - name: The version, the commit and the cache built from it
+        id: pick
+        run: |
+          [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] || { echo "::error::the version must be vMAJOR.MINOR.PATCH (optionally -suffix)"; exit 1; }
+          if git rev-parse -q --verify "refs/tags/$VERSION" > /dev/null; then echo "::error::$VERSION already exists"; exit 1; fi
+          commit=$(git rev-parse "${WANT:-$(scripts/cache.sh latest)}^{commit}")
+          git merge-base --is-ancestor "$commit" origin/main || { echo "::error::$commit is not on main"; exit 1; }
+          cache=$(gh api "repos/$TENGOKU_REPO/releases" --paginate --jq ".[] | select(.tag_name | startswith(\"cache-\")) | select(.body | startswith(\"commit=$commit\")) | .tag_name" | head -n 1)
+          [ -n "$cache" ] || { echo "::error::no published cache was built from $commit: release a commit the nightly build published"; exit 1; }
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+          echo "cache=$cache" >> "$GITHUB_OUTPUT"
+          echo "releasing $VERSION: commit $commit, cache $cache"
+      - name: Source archive, bill of materials, cache manifest, changelog
+        env:
+          COMMIT: ${{ steps.pick.outputs.commit }}
+          CACHE: ${{ steps.pick.outputs.cache }}
+        run: |
+          # the buildable library and its legal files (the records in data/ stay in git, named by the commit)
+          paths=()
+          for p in Tengoku Tengoku.lean TengokuAxioms.lean TengokuExtract.lean lakefile.toml lake-manifest.json lean-toolchain \
+                   LICENSE LICENSE-THIRD-PARTY.md SEED.md README.md SECURITY.md schemas widget; do
+            git cat-file -e "$COMMIT:$p" 2> /dev/null && paths+=("$p")
+          done
+          git archive --format=tar.gz --prefix="tengoku-$VERSION/" -o "tengoku-$VERSION-source.tar.gz" "$COMMIT" -- "${paths[@]}"
+          python3 scripts/sbom.py --commit "$COMMIT" --version "$VERSION" > "tengoku-$VERSION.cdx.json"
+          gh api "repos/$TENGOKU_REPO/releases/tags/$CACHE" > cache-release.json
+          python3 - <<'PY'
+          import json, os
+          rel = json.load(open("cache-release.json"))
+          parts = [{"name": a["name"], "size": a["size"], "digest": a.get("digest")} for a in rel["assets"] if a["name"].startswith("tengoku-cache.tar.zst.part-")]
+          assert parts and all(p["digest"] for p in parts), "the cache's parts carry no digests"
+          manifest = {"version": os.environ["VERSION"], "commit": os.environ["COMMIT"], "cache": os.environ["CACHE"],
+                      "url": f"https://github.com/{os.environ['TENGOKU_REPO']}/releases/tag/{os.environ['CACHE']}", "parts": sorted(parts, key=lambda p: p["name"])}
+          json.dump(manifest, open(f"tengoku-{os.environ['VERSION']}-cache.json", "w"), indent=2)
+          PY
+          prev=$(git describe --tags --abbrev=0 --match 'v[0-9]*' "$COMMIT^" 2> /dev/null || true)
+          {
+            echo "## Tengoku $VERSION"
+            echo
+            echo "Commit \`$COMMIT\`, toolchain \`$(git show "$COMMIT:lean-toolchain")\`, compiled cache [\`$CACHE\`](https://github.com/$TENGOKU_REPO/releases/tag/$CACHE)."
+            echo "Every asset is attested: see [docs/releases.md](https://github.com/$TENGOKU_REPO/blob/main/docs/releases.md) to verify them."
+            echo
+            echo "### Changes since ${prev:-the first commit}"
+            echo
+            git log --first-parent --format='- %s' "${prev:+$prev..}$COMMIT" | head -n 500
+          } > "CHANGELOG-$VERSION.md"
+          ls -la "tengoku-$VERSION"* "CHANGELOG-$VERSION.md"
+      - name: Publish the release
+        env:
+          COMMIT: ${{ steps.pick.outputs.commit }}
+        run: |
+          gh release create "$VERSION" -R "$TENGOKU_REPO" --target "$COMMIT" --title "Tengoku $VERSION" --notes-file "CHANGELOG-$VERSION.md" \
+            "tengoku-$VERSION-source.tar.gz" "tengoku-$VERSION.cdx.json" "tengoku-$VERSION-cache.json" "CHANGELOG-$VERSION.md"
+      - name: Attest every asset
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        with:
+          subject-path: |
+            tengoku-${{ inputs.version }}-source.tar.gz
+            tengoku-${{ inputs.version }}.cdx.json
+            tengoku-${{ inputs.version }}-cache.json
+            CHANGELOG-${{ inputs.version }}.md
+      - name: Attest the bill of materials for the source archive
+        uses: actions/attest-sbom@bd218ad0dbcb3e146bd073d1d9c6d78e08aa8a0b # v2
+        with:
+          subject-path: tengoku-${{ inputs.version }}-source.tar.gz
+          sbom-path: tengoku-${{ inputs.version }}.cdx.json
