@@ -1,0 +1,69 @@
+name: independent-check
+# The whole tree, checked again by a second kernel. lean4export writes every declaration of the compiled tree
+# (Lean's core, the seed, every derived library) and nanoda (github.com/ammkrn/nanoda_lib), an independent type
+# checker written in Rust, checks each one again, refusing any axiom beyond propext, Classical.choice and
+# Quot.sound. A bug in Lean's own kernel, or a record that slipped something past the gate, would have to fool two
+# unrelated checkers. It runs on the published cache of a commit of main, and nothing it runs comes from a PR.
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+env:
+  TENGOKU_REPO: ${{ github.repository }}
+  TENGOKU_TOPUPS: "1"
+  # pinned: lean4export's commit for this tree's toolchain (v4.34.0-rc2), and nanoda's (reads export format 3.1)
+  LEAN4EXPORT_COMMIT: 483e011449cce37c3f8ad5e2aae434cbb1d2e53c
+  NANODA_COMMIT: 3a2407216ee84a75f9e1aead6803d0578be06ae7
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    permissions: { contents: read }
+    steps:
+      - name: Free disk (the export of the whole tree is several GB)
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/local/share/boost /usr/share/swift
+          df -h /
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: { fetch-depth: 0, filter: "blob:none", persist-credentials: false }
+      - name: elan
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: The compiled tree (the published cache)
+        run: scripts/cache.sh get 2>&1 | tail -3
+      - name: lean4export and nanoda, at their pinned commits
+        run: |
+          git clone -q https://github.com/leanprover/lean4export "$RUNNER_TEMP/lean4export"
+          git -C "$RUNNER_TEMP/lean4export" checkout -q "$LEAN4EXPORT_COMMIT"
+          (cd "$RUNNER_TEMP/lean4export" && lake build 2>&1 | tail -2)
+          git clone -q https://github.com/ammkrn/nanoda_lib "$RUNNER_TEMP/nanoda"
+          git -C "$RUNNER_TEMP/nanoda" checkout -q "$NANODA_COMMIT"
+          (cd "$RUNNER_TEMP/nanoda" && cargo build --release --locked 2>&1 | tail -2)
+      - name: Export every declaration of the tree
+        run: |
+          start=$(date +%s)
+          lake env "$RUNNER_TEMP/lean4export/.lake/build/bin/lean4export" Tengoku.All > "$RUNNER_TEMP/tengoku.ndjson"
+          echo "exported $(wc -l < "$RUNNER_TEMP/tengoku.ndjson") lines, $(du -h "$RUNNER_TEMP/tengoku.ndjson" | cut -f1), in $(( $(date +%s) - start )) s"
+          head -c 300 "$RUNNER_TEMP/tengoku.ndjson"; echo
+          df -h / | tail -1
+      - name: Check it again with nanoda (sealed, no network)
+        run: |
+          cat > "$RUNNER_TEMP/nanoda.json" <<JSON
+          {
+            "export_file_path": "$RUNNER_TEMP/tengoku.ndjson",
+            "use_stdin": false,
+            "permitted_axioms": ["propext", "Classical.choice", "Quot.sound"],
+            "unpermitted_axiom_hard_error": true,
+            "nat_extension": true,
+            "string_extension": true,
+            "print_success_message": true
+          }
+          JSON
+          start=$(date +%s)
+          sudo unshare --net runuser -u "$(id -un)" -- /usr/bin/time -v "$RUNNER_TEMP/nanoda/target/release/nanoda_lib" "$RUNNER_TEMP/nanoda.json" 2> time.log && ok=1 || ok=0
+          grep -E 'Maximum resident|Elapsed' time.log || true
+          echo "nanoda: $([ "$ok" = 1 ] && echo 'every declaration checked' || echo FAILED) in $(( $(date +%s) - start )) s"
+          [ "$ok" = 1 ]
