@@ -734,6 +734,7 @@ class AllowList(unittest.TestCase):
         "hole closed by a char literal brace": ("def s : String := s!\"{('}', eval% 1).2}\"", True),
         "hole with a block comment brace": ('def s : String := s!"{ /- } -/ eval% 1 }"', True),
         "hole with a nested interpolation": ('def s : String := s!"{s!"{eval% 1}"}"', True),
+        "eval% in a raw-string interpolation hole": ('def s : String := s!"{r#"a"}"b"# ++ toString (eval% 1)}"', True),
     }
 
     def test_cases(self):

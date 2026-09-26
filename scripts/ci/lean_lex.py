@@ -37,6 +37,10 @@ def _hole_end(text: str, j: int) -> int:
         elif text.startswith("--", k):
             nl = text.find("\n", k)
             k = n if nl < 0 else nl
+        elif text[k] == "r" and not prev_ident and (m := _RAW_OPEN.match(text, k)):
+            close = '"' + m.group(1)  # a raw string: a brace or quote inside it is text
+            e = text.find(close, m.end())
+            k = n if e < 0 else e + len(close)
         elif text[k] == '"' and k >= 2 and text[k - 1] == "!" and _IDENT.match(text[k - 2]):
             _, k = _interpolated(text, k)
         elif text[k] == '"':
