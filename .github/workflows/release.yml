@@ -34,6 +34,7 @@ jobs:
       contents: write      # the release and its tag
       id-token: write      # Sigstore signing identity for the attestations
       attestations: write
+      actions: read        # the independent check's runs
     env:
       TENGOKU_REPO: ${{ github.repository }}
       VERSION: ${{ inputs.version }}
@@ -58,6 +59,16 @@ jobs:
           echo "commit=$commit" >> "$GITHUB_OUTPUT"
           echo "cache=$cache" >> "$GITHUB_OUTPUT"
           echo "releasing $VERSION: commit $commit, cache $cache"
+      # A release is only cut from a commit the independent check passed: nanoda re-checked every declaration and
+      # the axiom scan found nothing resting on sorry or a non-standard axiom. Only runs of main's own workflow count.
+      - name: The independent check passed on this commit
+        env: { COMMIT: "${{ steps.pick.outputs.commit }}" }
+        run: |
+          # every successful run of main's workflow, paginated: an old commit's check still counts
+          run=$(gh api "repos/$TENGOKU_REPO/actions/workflows/independent-check.yml/runs?branch=main&status=success&per_page=100" --paginate \
+            --jq ".workflow_runs[] | select(.display_title == \"independent check of $COMMIT\") | .id" | sed -n 1p)
+          [ -n "$run" ] || { echo "::error::no passing independent check of $COMMIT. Run: gh workflow run independent-check.yml -f commit=$COMMIT, then release again"; exit 1; }
+          echo "independent check of $COMMIT: $GITHUB_SERVER_URL/$TENGOKU_REPO/actions/runs/$run"
       - name: Source archive, bill of materials, cache manifest, changelog
         env:
           COMMIT: ${{ steps.pick.outputs.commit }}
