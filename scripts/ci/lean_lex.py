@@ -19,24 +19,50 @@ def _blank(s: str) -> str:
     return "".join("\n" if ch == "\n" else " " for ch in s)
 
 
+def _hole_end(text: str, j: int) -> int:
+    """The index just past the `}` that closes the interpolation hole whose `{` is at `j`. Braces count only in code:
+    strings (interpolated ones included), character literals and comments inside the hole are stepped over whole."""
+    depth, k, n = 1, j + 1, len(text)
+    while k < n and depth:
+        prev_ident = bool(_IDENT.match(text[k - 1]))
+        if text.startswith("/-", k):
+            d, k = 1, k + 2
+            while k < n and d:
+                if text.startswith("/-", k):
+                    d, k = d + 1, k + 2
+                elif text.startswith("-/", k):
+                    d, k = d - 1, k + 2
+                else:
+                    k += 1
+        elif text.startswith("--", k):
+            nl = text.find("\n", k)
+            k = n if nl < 0 else nl
+        elif text[k] == '"' and k >= 2 and text[k - 1] == "!" and _IDENT.match(text[k - 2]):
+            _, k = _interpolated(text, k)
+        elif text[k] == '"':
+            k += 1
+            while k < n and text[k] != '"':
+                k += 2 if text[k] == "\\" else 1
+            k += 1
+        elif text[k] == "'" and not prev_ident and (m := _CHAR.match(text, k)):
+            k = m.end()
+        else:
+            depth += {"{": 1, "}": -1}.get(text[k], 0)
+            k += 1
+    return k
+
+
 def _interpolated(text: str, i: int) -> tuple[str, int]:
     """An interpolated string (`s!"…{e}…"`, `m!`, `f!`…) from its opening quote at `i`: the literal text blanked, each
-    `{…}` hole kept as code (lexed in turn, so a string or comment inside a hole is handled too). Returns the
-    replacement and the index after the closing quote."""
+    `{…}` hole kept as code (lexed in turn, so strings, character literals and comments inside a hole are handled).
+    Returns the replacement and the index after the closing quote."""
     out, j, n = ['"'], i + 1, len(text)
     while j < n and text[j] != '"':
         if text[j] == "\\":
             out.append(_blank(text[j : j + 2]))
             j += 2
         elif text[j] == "{":
-            depth, k = 1, j + 1
-            while k < n and depth:
-                if text[k] == '"':  # a string inside the hole: skip it whole
-                    k += 1
-                    while k < n and text[k] != '"':
-                        k += 2 if text[k] == "\\" else 1
-                depth += {"{": 1, "}": -1}.get(text[k], 0) if k < n else 0
-                k += 1
+            k = _hole_end(text, j)
             out.append("{" + code_only(text[j + 1 : k - 1]) + "}")
             j = k
         else:

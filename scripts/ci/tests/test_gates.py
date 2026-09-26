@@ -731,6 +731,9 @@ class AllowList(unittest.TestCase):
         "IO in an interpolation hole": ('def s : String := m!"x {IO.println 1} y"', True),
         "interpolation with a plain hole": ('def s (n : ℕ) : String := s!"n = {n} and {"in {eval% 1}"}"', False),
         "braces in a plain string": ('def s : String := "{eval% 1}"', False),
+        "hole closed by a char literal brace": ("def s : String := s!\"{('}', eval% 1).2}\"", True),
+        "hole with a block comment brace": ('def s : String := s!"{ /- } -/ eval% 1 }"', True),
+        "hole with a nested interpolation": ('def s : String := s!"{s!"{eval% 1}"}"', True),
     }
 
     def test_cases(self):
