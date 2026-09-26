@@ -208,33 +208,37 @@ def library_of_module(path: str, libraries) -> str | None:
 
 
 _DECL = r"(?:theorem|lemma|def|abbrev|instance|example|structure|inductive|class|opaque|axiom)"
+_SCOPE_OR_DECL = re.compile(
+    r"^[ \t]*(?:(namespace)\s+(\S+)|(section)\b[^\n]*|(end)\b[^\n]*|"
+    r"(?:(?:@\[[^\]]*\]|private|protected|noncomputable|nonrec|partial|unsafe)\s+)*" + _DECL + r"\s+([^\s(\[{:⦃]+))",
+    re.M,
+)
 
 
-def _strip_comments(text: str) -> str:
-    """Lean source without its comments (`--` to the end of the line, nested `/- -/`, doc comments included)."""
-    out, i, depth = [], 0, 0
-    while i < len(text):
-        if text.startswith("/-", i):
-            depth, i = depth + 1, i + 2
-        elif depth and text.startswith("-/", i):
-            depth, i = depth - 1, i + 2
-        elif depth:
-            i += 1
-        elif text.startswith("--", i):
-            j = text.find("\n", i)
-            i = len(text) if j < 0 else j
-        else:
-            out.append(text[i])
-            i += 1
-    return "".join(out)
+def declared_names(text: str) -> set[str]:
+    """Full names a Lean module declares: comments and strings ignored (lean_lex), each name resolved against the
+    `namespace` blocks around it (`namespace Other … theorem foo` declares `Other.foo`; `_root_.x` declares `x`)."""
+    from lean_lex import code_only
+
+    names: set[str] = set()
+    stack: list[list[str]] = []  # one entry per open namespace or section (sections add no prefix)
+    for m in _SCOPE_OR_DECL.finditer(code_only(text)):
+        ns, ns_name, sec, end, decl = m.groups()
+        if ns:
+            stack.append(ns_name.split("."))
+        elif sec:
+            stack.append([])
+        elif end:
+            if stack:
+                stack.pop()
+        elif decl:
+            prefix = [p for scope in stack for p in scope]
+            names.add(decl[len("_root_.") :] if decl.startswith("_root_.") else ".".join(prefix + [decl]))
+    return names
 
 
 def unplaced(names: set[str], texts: list[str]) -> list[str]:
-    """Records the generated candidate modules do not declare: the full name, or its last component inside a
-    namespace, right after a declaration keyword and outside comments (a commented-out `theorem x` does not count)."""
-    code = [_strip_comments(t) for t in texts]
-
-    def declared(n: str) -> bool:
-        return any(re.search(rf"\b{_DECL}\s+{re.escape(w)}(?![\w'])", c) for w in (n, n.split(".")[-1]) for c in code)
-
-    return sorted(n for n in names if not declared(n))
+    """Records no candidate module declares. A module may wrap its records in a library namespace
+    (`EquationalTheories`), so a declared name counts when it is the record's name or ends with `.<name>`."""
+    declared = set().union(*(declared_names(t) for t in texts)) if texts else set()
+    return sorted(n for n in names if not any(d == n or d.endswith("." + n) for d in declared))
