@@ -47,8 +47,11 @@ jobs:
           df -h /
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with: { ref: "${{ inputs.commit || github.sha }}", fetch-depth: 0, filter: "blob:none", persist-credentials: false }
-      - name: A commit of main
-        run: git merge-base --is-ancestor HEAD origin/main || { echo "::error::$(git rev-parse HEAD) is not on main"; exit 1; }
+      - name: A commit of main, checked by the newest checker
+        run: |
+          git merge-base --is-ancestor HEAD origin/main || { echo "::error::$(git rev-parse HEAD) is not on main"; exit 1; }
+          # the axiom scan comes from this workflow's own commit, not from the (possibly older) commit being checked
+          git show "$GITHUB_SHA:scripts/ci/axiom_scan.py" > "$RUNNER_TEMP/axiom_scan.py"
       - name: elan
         run: |
           curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
@@ -97,7 +100,7 @@ jobs:
           sed "s|$RUNNER_TEMP/tengoku.ndjson|$RUNNER_TEMP/nanoda/test_resources/Empty/export|" "$RUNNER_TEMP/nanoda.json" > "$RUNNER_TEMP/nanoda-selftest.json"
           "$nanoda" "$RUNNER_TEMP/nanoda-selftest.json"
           # the axiom scan reads the same export alongside nanoda (one core of four)
-          python3 scripts/ci/axiom_scan.py "$RUNNER_TEMP/tengoku.ndjson" --records data/trusted > axiom-scan.out 2>&1 &
+          python3 "$RUNNER_TEMP/axiom_scan.py" "$RUNNER_TEMP/tengoku.ndjson" --records data/trusted > axiom-scan.out 2>&1 &
           scan=$!
           # shellcheck disable=SC2024  # the output files are the runner's own, written outside the sealed namespace on purpose
           sudo unshare --net runuser -u "$(id -un)" -- /usr/bin/time -v "$nanoda" "$RUNNER_TEMP/nanoda.json" > nanoda.out 2> time.log && ok=1 || ok=0
