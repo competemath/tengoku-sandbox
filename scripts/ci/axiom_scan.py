@@ -12,7 +12,9 @@ Fails when
     Lean.ofReduceBool, Lean.ofReduceNat, Lean.trustCompiler),
   - any declaration rests on sorryAx,
   - a trusted record (data/trusted, tombstones applied) rests on anything but propext, Classical.choice
-    and Quot.sound, or is not in the export at all,
+    and Quot.sound, or belongs to a library the tree compiles (Tengoku/<Library>.lean exists) and is not in
+    the export. Records of libraries without modules (the Mathlib index files, a library not yet compiled)
+    are counted, by library, when the export does not hold them,
   - the file breaks the order above (a constant mentioned and never declared).
 --permitted writes the declared axioms as a JSON list, for nanoda's `permitted_axioms`.
 """
@@ -175,18 +177,25 @@ class Scan:
         return sorted(self.name(self.axioms[b]) for b in self.S.sets[self.decl[n]])
 
 
-def trusted_records(d: Path) -> list[str]:
-    names: dict[str, None] = {}
+def pascal(s: str) -> str:
+    """equational-theories -> EquationalTheories, as scripts/ci/_git.py names a library's modules."""
+    return "".join(w[:1].upper() + w[1:] for w in s.replace("_", "-").split("-") if w)
+
+
+def trusted_records(d: Path) -> dict[str, set[str]]:
+    """record name -> its libraries (data/trusted/<library>.jsonl or data/trusted/<library>/<file>.jsonl)."""
+    names: dict[str, set[str]] = {}
     gone: set[str] = set()
     for f in sorted(d.rglob("*.jsonl")):
+        lib = f.parent.name if f.parent != d else f.stem
         for line in f.read_text().splitlines():
             if line.strip():
                 r = json.loads(line)
                 if "tombstone" in r:
                     gone.add(r["tombstone"])
                 elif "name" in r:
-                    names[r["name"]] = None
-    return [n for n in names if n not in gone]
+                    names.setdefault(r["name"], set()).add(lib)
+    return {n: libs for n, libs in names.items() if n not in gone}
 
 
 def main() -> int:
@@ -227,21 +236,34 @@ def main() -> int:
         by_last: dict[str, list[str]] = {}
         for k in by_name:
             by_last.setdefault(k.rsplit(".", 1)[-1], []).append(k)
-        missing, extra = [], []
-        for r in records:
+        tree = a.records.resolve().parents[1] / "Tengoku"  # data/trusted -> <checkout>/Tengoku
+        missing, extra, absent = [], [], {}
+        for r, libs in records.items():
             n = by_name.get(r)
             if n is None:  # declared inside a namespace: the record's name is the end of the constant's
                 hits = [k for k in by_last.get(r.rsplit(".", 1)[-1], []) if k.endswith("." + r)]
                 n = by_name[hits[0]] if len(hits) == 1 else None
             if n is None:
-                missing.append(r)
+                if any((tree / f"{pascal(lib)}.lean").exists() for lib in libs):  # a compiled library claims it
+                    missing.append(r)
+                else:
+                    lib = min(libs)
+                    absent[lib] = absent.get(lib, 0) + 1
                 continue
             beyond = [x for x in s.rests_on(n) if x not in STANDARD]
             if beyond:
                 extra.append(f"{r} rests on {beyond}")
-        print(f"axiom-scan: {len(records)} trusted records, {len(records) - len(missing) - len(extra)} rest only on the standard axioms")
+        held = len(records) - len(missing) - sum(absent.values())
+        print(
+            f"axiom-scan: {len(records)} trusted records, {held} in the export, {held - len(extra)} of them rest only on the standard axioms"
+        )
+        if absent:
+            print(
+                "  not in the export, from libraries the tree does not compile: "
+                + ", ".join(f"{k} {v}" for k, v in sorted(absent.items(), key=lambda x: -x[1]))
+            )
         if missing:
-            bad.append(f"{len(missing)} trusted records are not in the export: {missing[:10]}")
+            bad.append(f"{len(missing)} trusted records of compiled libraries are not in the export: {missing[:10]}")
         bad += extra[:50]
 
     if a.permitted:
