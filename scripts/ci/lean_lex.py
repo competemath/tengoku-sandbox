@@ -19,6 +19,33 @@ def _blank(s: str) -> str:
     return "".join("\n" if ch == "\n" else " " for ch in s)
 
 
+def _interpolated(text: str, i: int) -> tuple[str, int]:
+    """An interpolated string (`s!"…{e}…"`, `m!`, `f!`…) from its opening quote at `i`: the literal text blanked, each
+    `{…}` hole kept as code (lexed in turn, so a string or comment inside a hole is handled too). Returns the
+    replacement and the index after the closing quote."""
+    out, j, n = ['"'], i + 1, len(text)
+    while j < n and text[j] != '"':
+        if text[j] == "\\":
+            out.append(_blank(text[j : j + 2]))
+            j += 2
+        elif text[j] == "{":
+            depth, k = 1, j + 1
+            while k < n and depth:
+                if text[k] == '"':  # a string inside the hole: skip it whole
+                    k += 1
+                    while k < n and text[k] != '"':
+                        k += 2 if text[k] == "\\" else 1
+                depth += {"{": 1, "}": -1}.get(text[k], 0) if k < n else 0
+                k += 1
+            out.append("{" + code_only(text[j + 1 : k - 1]) + "}")
+            j = k
+        else:
+            out.append("\n" if text[j] == "\n" else " ")
+            j += 1
+    out.append('"')
+    return "".join(out), j + 1
+
+
 def code_only(text: str) -> str:
     out: list[str] = []
     i, n, depth = 0, len(text), 0
@@ -46,6 +73,9 @@ def code_only(text: str) -> str:
             j = n if j < 0 else j
             out.append(text[i : m.end()] + _blank(text[m.end() : j]) + close)  # delimiters kept: columns stay put
             i = j + len(close)
+        elif c == '"' and i >= 2 and text[i - 1] == "!" and _IDENT.match(text[i - 2]):
+            s, i = _interpolated(text, i)  # s!"…{e}…": the holes are code
+            out.append(s)
         elif c == '"':
             j = i + 1
             while j < n and text[j] != '"':

@@ -620,6 +620,7 @@ class QueuePlacement(unittest.TestCase):
         self.assertEqual(code_only('s!"x -- y" z'), 's!"' + " " * len("x -- y") + '" z')
         self.assertEqual(code_only("f x' y'' '\\n' q"), "f x' y'' ' ' q")  # primes are identifiers; '\n' is a char
         self.assertEqual(code_only('r#"a " -- b"# c'), 'r#"' + " " * len('a " -- b') + '"# c')
+        self.assertEqual(code_only('s!"a {x + 1} b"'), 's!"  {x + 1}  "')  # holes are code, literal text is blank
         for src in ("a -- x\nb", "x /- y\nz -/ w", 's!"p\nq" r', "c '\\n' d", 'r#"u\nv"# t'):
             self.assertEqual(code_only(src).count("\n"), src.count("\n"), src)  # line breaks survive: line checks stay aligned
 
@@ -726,6 +727,10 @@ class AllowList(unittest.TestCase):
         "ofReduceBool": ("theorem t : True := Lean.ofReduceBool _ _ rfl", True),
         "run_meta indented": ("theorem t : True := trivial\n  run_meta pure ()", True),
         "eval% term": ("theorem t : (eval% 2 + 2) = 4 := rfl", True),
+        "eval% in an interpolation hole": ('def s : String := s!"{eval% 2 + 2}"', True),
+        "IO in an interpolation hole": ('def s : String := m!"x {IO.println 1} y"', True),
+        "interpolation with a plain hole": ('def s (n : ℕ) : String := s!"n = {n} and {"in {eval% 1}"}"', False),
+        "braces in a plain string": ('def s : String := "{eval% 1}"', False),
     }
 
     def test_cases(self):
