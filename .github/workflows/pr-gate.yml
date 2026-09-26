@@ -49,8 +49,12 @@ jobs:
         run: python3 scripts/ci/classify.py "$BASE" "$HEAD"
       - name: Label the PR with its class
         if: always() && steps.c.outputs.class != '' && github.event_name == 'pull_request_target'
-        env: { GH_TOKEN: "${{ github.token }}", CLASS: "${{ steps.c.outputs.class }}" }
-        run: gh pr edit "${{ github.event.pull_request.number }}" --add-label "$CLASS" 2>/dev/null || true
+        env: { GH_TOKEN: "${{ github.token }}", CLASS: "${{ steps.c.outputs.class }}", PR: "${{ github.event.pull_request.number }}" }
+        run: |
+          # one class label at a time: a PR whose class changes (docs, then content) loses the old one
+          old=$(gh pr view "$PR" -R "$GITHUB_REPOSITORY" --json labels --jq '.labels[].name' | grep -xE 'content|tombstone|tooling|docs|promotion|derived' | grep -vxF "$CLASS" | paste -sd, - || true)
+          args=(--add-label "$CLASS"); [ -n "$old" ] && args+=(--remove-label "$old")
+          gh pr edit "$PR" -R "$GITHUB_REPOSITORY" "${args[@]}" || echo "::warning::could not label the PR '$CLASS' (scripts/ci/labels.sh creates the class labels)"
 
   data-rules:
     needs: classify

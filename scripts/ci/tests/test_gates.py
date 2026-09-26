@@ -570,3 +570,55 @@ class DeregisteredSource(unittest.TestCase):
         rc, out = r.gate("credits.py")
         self.assertEqual(rc, 1)
         self.assertIn("provenance", out)
+
+
+class QueuePlacement(unittest.TestCase):
+    """queue_targets.py fails a group whose records land in no module the queue compiles."""
+
+    def setUp(self):
+        sys.path.insert(0, str(CI))
+
+    def test_unplaced(self):
+        from _git import unplaced
+
+        mod = "namespace EquationalTheories\ntheorem Selftest.queueAxioms : (3 : Nat) + 4 = 7 := rfl\nend EquationalTheories\n"
+        self.assertEqual(unplaced({"Selftest.queueAxioms"}, [mod]), [])  # inside a library namespace
+        self.assertEqual(
+            unplaced({"Selftest.queueAxiomsX", "queueAxioms.Selftest"}, [mod]), ["Selftest.queueAxiomsX", "queueAxioms.Selftest"]
+        )
+        self.assertEqual(unplaced({"Selftest.queueAxioms"}, []), ["Selftest.queueAxioms"])
+        other = "namespace Other\n@[simp] private theorem foo : True := trivial\nend Other\n"
+        self.assertEqual(unplaced({"Lib.foo"}, [other]), ["Lib.foo"])  # declares Other.foo, not Lib.foo
+        self.assertEqual(unplaced({"Other.foo"}, [other]), [])
+        self.assertEqual(unplaced({"x"}, ["namespace A\ntheorem _root_.x : True := trivial\nend A\n"]), [])
+        self.assertEqual(unplaced({"A.s"}, ["namespace A\nsection B\ntheorem s : True := trivial\nend B\nend A\n"]), [])
+        mutual = (
+            "namespace A\nmutual\ntheorem m1 : True := trivial\ntheorem m2 : True := trivial\nend\ntheorem after : True := trivial\nend A\n"
+        )
+        self.assertEqual(unplaced({"A.m1", "A.m2", "A.after"}, [mutual]), [])  # `end` of mutual keeps namespace A open
+        ncs = "namespace A\nnoncomputable section\ntheorem n : True := trivial\nend\ntheorem after2 : True := trivial\nend A\n"
+        self.assertEqual(unplaced({"A.n", "A.after2"}, [ncs]), [])
+
+    def test_comments_and_strings_hide_nothing_and_declare_nothing(self):
+        from _git import unplaced
+
+        text = (
+            "-- theorem missing : True := trivial\n/- theorem hidden /- nested -/ : True -/\n/-- about `shown` -/\n"
+            'def s : String := "theorem instring : True /- not a comment"\n'
+            "theorem after : True := trivial\n"
+            "def c : Char := '\"'\ntheorem afterChar : True := trivial\n"
+        )
+        self.assertEqual(
+            unplaced({"missing", "hidden", "shown", "instring", "after", "afterChar"}, [text]), ["hidden", "instring", "missing", "shown"]
+        )
+
+    def test_lexer(self):
+        from lean_lex import code_only
+
+        self.assertEqual(code_only("a -- x\nb"), "a \nb")
+        self.assertEqual(code_only("a /- x /- y -/ z -/ b"), "a  b")
+        self.assertEqual(code_only('s!"x -- y" z'), 's!"' + " " * len("x -- y") + '" z')
+        self.assertEqual(code_only("f x' y'' '\\n' q"), "f x' y'' ' ' q")  # primes are identifiers; '\n' is a char
+        self.assertEqual(code_only('r#"a " -- b"# c'), 'r#"' + " " * len('a " -- b') + '"# c')
+        for src in ("a -- x\nb", "x /- y\nz -/ w", 's!"p\nq" r', "c '\\n' d", 'r#"u\nv"# t'):
+            self.assertEqual(code_only(src).count("\n"), src.count("\n"), src)  # line breaks survive: line checks stay aligned

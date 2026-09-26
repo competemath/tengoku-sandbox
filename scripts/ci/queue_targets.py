@@ -13,7 +13,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from _git import ROOT, added_lines, changed_files, fail, library_of, library_of_module, load_schema, match, pascal
+from _git import ROOT, added_lines, changed_files, fail, library_of, library_of_module, load_schema, match, pascal, unplaced
 
 base, head = sys.argv[1], sys.argv[2]
 regenerate = "--regenerate" in sys.argv
@@ -78,8 +78,14 @@ for lib, paths in sorted(work.items()):
         # Only the group's own staging records join the trusted ones: an older, still-broken staging
         # record of the same source file ejected a clean PR in the sandbox.
         generate(lib, ["--candidate", sp, "--candidate-names", ",".join(sorted(names))])
-    for cand in sorted((ROOT / "Tengoku" / pascal(lib)).rglob("_candidate_*.lean")):
+    cands = sorted((ROOT / "Tengoku" / pascal(lib)).rglob("_candidate_*.lean"))
+    for cand in cands:
         targets.append(".".join(cand.relative_to(ROOT).with_suffix("").parts))
+    # A record that no candidate module declares would skip the build and the axioms check alike, and the
+    # group would pass on nothing (the build step treats an empty target list as a tooling-only group).
+    missing = unplaced({n for names in paths.values() for n in names}, [c.read_text() for c in cands])
+    if missing:
+        fail(f"{lib}: {len(missing)} record(s) this group adds are in no module the queue compiles: {', '.join(missing[:5])}")
 for lib in sorted(touched - set(work)):
     if lib in corpora:
         targets.append(f"Tengoku.{pascal(lib)}")  # tombstones: rebuild the library's modules

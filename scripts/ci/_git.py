@@ -205,3 +205,40 @@ def library_of_module(path: str, libraries) -> str | None:
         return None
     head = parts[1][:-5] if len(parts) == 2 and parts[1].endswith(".lean") else parts[1]
     return next((lib for lib in libraries if pascal(lib) == head), None)
+
+
+_DECL = r"(?:theorem|lemma|def|abbrev|instance|example|structure|inductive|class|opaque|axiom)"
+_SCOPE_OR_DECL = re.compile(
+    r"^[ \t]*(?:(namespace)\s+(\S+)|((?:(?:noncomputable|private|public|protected)\s+)*section\b|mutual\b)[^\n]*|(end)\b[^\n]*|"
+    r"(?:(?:@\[[^\]]*\]|private|protected|noncomputable|nonrec|partial|unsafe)\s+)*" + _DECL + r"\s+([^\s(\[{:⦃]+))",
+    re.M,
+)
+
+
+def declared_names(text: str) -> set[str]:
+    """Full names a Lean module declares: comments and strings ignored (lean_lex), each name resolved against the
+    `namespace` blocks around it (`namespace Other … theorem foo` declares `Other.foo`; `_root_.x` declares `x`)."""
+    from lean_lex import code_only
+
+    names: set[str] = set()
+    stack: list[list[str]] = []  # one entry per block `end` closes: namespaces add their name; sections, mutual add nothing
+    for m in _SCOPE_OR_DECL.finditer(code_only(text)):
+        ns, ns_name, sec, end, decl = m.groups()
+        if ns:
+            stack.append(ns_name.split("."))
+        elif sec:
+            stack.append([])
+        elif end:
+            if stack:
+                stack.pop()
+        elif decl:
+            prefix = [p for scope in stack for p in scope]
+            names.add(decl[len("_root_.") :] if decl.startswith("_root_.") else ".".join(prefix + [decl]))
+    return names
+
+
+def unplaced(names: set[str], texts: list[str]) -> list[str]:
+    """Records no candidate module declares. A module may wrap its records in a library namespace
+    (`EquationalTheories`), so a declared name counts when it is the record's name or ends with `.<name>`."""
+    declared = set().union(*(declared_names(t) for t in texts)) if texts else set()
+    return sorted(n for n in names if not any(d == n or d.endswith("." + n) for d in declared))
