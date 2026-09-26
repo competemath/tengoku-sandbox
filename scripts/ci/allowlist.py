@@ -152,6 +152,7 @@ FORBIDDEN_WORDS = [
     "run_cmd",
     "run_tac",
     "run_elab",
+    "run_meta",
     "by_elab",
     "opaque",
     "axiom",
@@ -172,6 +173,8 @@ _UNSAFE_DECL = re.compile(
     r"(?:def|theorem|lemma|abbrev|instance|opaque|inductive|structure|class|example)\b|^[ \t]*(unsafe|partial)\b",
     re.M,
 )
+# term-level evaluation: Mathlib's `eval% e` evaluates `e` while elaborating (a `%` ends the word, so it is its own pattern)
+_EVAL_TERM = re.compile(r"(?<![\w'!?])eval%")
 # trusting the compiler, also as a component of a longer name: native_decide leaves auxiliary axioms such as
 # `Foo._native.native_decide.ax_12`, and a proof term that cites one trusts compiled code just the same
 _TRUST = re.compile(r"(?<![\w'!?])(native_decide|ofReduceBool|reduceBool|trustCompiler)(?![\w'!?])")
@@ -247,6 +250,8 @@ def violations(text: str, allowed_options: set[str]) -> list[str]:
     out: list[str] = []
     for m in _WORD.finditer(code):
         out.append(f"`{m.group(1)}` runs code while the tree compiles (or trusts the compiler)")
+    for m in _EVAL_TERM.finditer(code):
+        out.append("`eval%` runs code while the tree compiles")
     for m in _TRUST.finditer(code):
         out.append(f"`{m.group(1)}` trusts the compiler")
     for m in _UNSAFE_DECL.finditer(code):

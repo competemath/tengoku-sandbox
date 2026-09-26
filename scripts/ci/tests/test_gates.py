@@ -724,6 +724,8 @@ class AllowList(unittest.TestCase):
         "native_decide tactic": ("theorem t : 2 + 2 = 4 := by native_decide", True),
         "native_decide axiom term": ("theorem t : True\n:= Collision._native.native_decide.ax_12_extra", True),
         "ofReduceBool": ("theorem t : True := Lean.ofReduceBool _ _ rfl", True),
+        "run_meta indented": ("theorem t : True := trivial\n  run_meta pure ()", True),
+        "eval% term": ("theorem t : (eval% 2 + 2) = 4 := rfl", True),
     }
 
     def test_cases(self):
