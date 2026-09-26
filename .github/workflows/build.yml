@@ -29,6 +29,10 @@ on:
         description: "internal: how many times this build has re-run on the tip after workflow files changed on main (max 2)"
         required: false
         default: "0"
+      resumed:
+        description: "internal: how many follow-up runs this build has had after the time cap (max 5)"
+        required: false
+        default: "0"
 
 concurrency:
   group: build-${{ github.ref }}
@@ -44,17 +48,15 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 345
-    permissions:
-      contents: write      # release assets (the cache)
-      id-token: write      # Sigstore signing identity for the attestation
-      attestations: write
-      actions: write       # the run re-dispatches itself (resume after the time cap; publish from the tip) — found by the campaign
+    # This job compiles the tree, so it holds no write access at all, and the compile runs without network:
+    # publishing is the `publish` job's, re-dispatching the `relaunch` job's.
+    permissions: { contents: read }
     env:
       TENGOKU_REPO: ${{ github.repository }}     # publish here
       TENGOKU_CACHE_SOURCE: competemath/tengoku  # seed from the library (a sandbox has no caches of its own)
     outputs:
       complete: ${{ steps.build.outputs.complete }}
-      published: ${{ steps.publish.outputs.tag != '' }}
+      stale: ${{ steps.guard.outputs.stale }}
     steps:
       # Full history, no file contents: `cache.sh get` picks the newest cache that is an ANCESTOR of this
       # commit and `put` keeps a top-up that is AHEAD of it; a depth-1 clone can answer neither once main
@@ -92,14 +94,23 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: scripts/cache.sh get || echo "no published cache yet — building from source"
 
-      - name: Build
+      - name: The toolchain, while there is network (the build below has none)
+        run: lake --version
+
+      - name: Build (sealed)
         id: build
         shell: bash
         run: |
           set -o pipefail
-          # Leave headroom before the job cap so the cache-save step always runs.
-          if timeout 320m lake build 2>&1 | tee build.log | grep -E "^(✖|error:)|declaration uses .sorry." ; then :; fi
+          # No network and a clean environment: whatever the tree's code does while it compiles, it can reach
+          # nothing and holds no token. Headroom before the job cap so the cache-save step always runs.
+          # the build's own status, read right after its pipeline
+          set +e
+          sudo unshare --net runuser -u "$(id -un)" -- env -i HOME="$HOME" PATH="$HOME/.elan/bin:/usr/local/bin:/usr/bin:/bin" LANG=C.UTF-8 \
+            timeout 320m lake build 2>&1 | tee build.log
           status=${PIPESTATUS[0]}
+          set -e
+          grep -E "^(✖|error:)|declaration uses .sorry." build.log | head -n 50 || true
           if grep -q "declaration uses \`sorry\`" build.log; then
             echo "::error::a trusted module uses sorry — refusing"; exit 1
           fi
@@ -130,32 +141,65 @@ jobs:
           if git diff --quiet "$GITHUB_SHA" origin/main -- .github/workflows; then echo "stale=false" >> "$GITHUB_OUTPUT"
           else echo "stale=true" >> "$GITHUB_OUTPUT"; echo "::warning::.github/workflows changed on main since $GITHUB_SHA; publishing from a run on the tip instead"; fi
 
-      - name: Publish cache to releases
+      - name: Pack the cache (no network needed, no token)
         if: steps.build.outputs.complete == 'true' && steps.guard.outputs.stale != 'true'
+        run: scripts/cache.sh pack cache-out
+
+      - if: steps.build.outputs.complete == 'true' && steps.guard.outputs.stale != 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with: { name: cache-parts, path: cache-out, retention-days: 1, compression-level: 0 }
+
+  # Publishes what the build packed: it runs no Lean, so it is the one job that may write releases and sign.
+  publish:
+    needs: build
+    if: needs.build.outputs.complete == 'true' && needs.build.outputs.stale != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write      # release assets (the cache)
+      id-token: write      # Sigstore signing identity for the attestation
+      attestations: write
+    env:
+      TENGOKU_REPO: ${{ github.repository }}
+    outputs:
+      published: ${{ steps.publish.outputs.tag != '' }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: { fetch-depth: 0, filter: "blob:none", persist-credentials: false }
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with: { name: cache-parts, path: cache-out }
+      - name: Publish cache to releases
         id: publish
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          scripts/cache.sh put | tee put.log
+          test "$(cat cache-out/commit)" = "$GITHUB_SHA"
+          scripts/cache.sh publish cache-out | tee put.log
           tag="$(grep -oE 'published cache-[0-9A-Z]+' put.log | awk '{print $2}')"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
-          mkdir -p attest && gh release download "$tag" -R "$TENGOKU_REPO" -D attest -p 'tengoku-cache.tar.zst.part-*'
-
       # Every part gets a build-provenance attestation; scripts/cache.sh get refuses parts without one.
       - name: Attest the cache parts
-        if: steps.build.outputs.complete == 'true' && steps.guard.outputs.stale != 'true'
         uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
         with:
-          subject-path: attest/tengoku-cache.tar.zst.part-*
+          subject-path: cache-out/tengoku-cache.tar.zst.part-*
 
-      - name: Continue the build in a follow-up run
-        if: steps.build.outputs.complete == 'false'
+  # Re-dispatches the build: after the time cap (resume), or on the tip when a workflow file landed meanwhile.
+  relaunch:
+    needs: build
+    # only after a build job that ended well (time cap reached, or a stale tip): a failed build never re-dispatches
+    if: needs.build.result == 'success' && ((needs.build.outputs.complete == 'false' && github.event.inputs.resumed != '5') || (needs.build.outputs.stale == 'true' && github.event.inputs.retried != '2'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: { actions: write }
+    steps:
+      - name: Continue the build in a follow-up run (at most five)
+        if: needs.build.outputs.complete == 'false'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh workflow run build.yml -R "$GITHUB_REPOSITORY" --ref "$GITHUB_REF_NAME" -f resume=true
-
+          RESUMED: ${{ github.event.inputs.resumed || '0' }}
+        run: gh workflow run build.yml -R "$GITHUB_REPOSITORY" --ref "$GITHUB_REF_NAME" -f resume=true -f resumed="$(( ${RESUMED:-0} + 1 ))"
       - name: Publish from a run on the tip (once)
-        if: steps.build.outputs.complete == 'true' && steps.guard.outputs.stale == 'true' && github.event.inputs.retried != '2'
+        if: needs.build.outputs.complete == 'true' && needs.build.outputs.stale == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           RETRIED: ${{ github.event.inputs.retried || '0' }}
@@ -169,8 +213,8 @@ jobs:
   # restarts its resident Lean); a sleeping Space is unreachable and instead
   # refreshes itself the next time it starts. Nightly only, never on push.
   notify:
-    needs: build
-    if: needs.build.outputs.published == 'true' && github.repository == 'competemath/tengoku'
+    needs: publish
+    if: needs.publish.outputs.published == 'true' && github.repository == 'competemath/tengoku'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:

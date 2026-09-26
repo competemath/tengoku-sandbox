@@ -6,6 +6,9 @@
 #   scripts/cache.sh latest           # print the commit of the newest published cache (what scripts/pin.sh checks out)
 #   scripts/cache.sh latest-tag       # print its tag, e.g. cache-20260915T0300Z
 #   scripts/cache.sh put              # pack .lake/build and publish it for HEAD (needs `gh` logged in)
+#   scripts/cache.sh pack <dir>       # only pack .lake/build into <dir> (the parts and a `commit` file): no network,
+#                                     # no token (the build job, which compiles, stops here)
+#   scripts/cache.sh publish <dir>    # publish packed parts for the commit named in <dir>/commit (the publish job)
 #
 # A cache is a release tagged `cache-<UTC stamp>` (cache-20260915T0300Z); the
 # commit it was built from is the first line of its notes (`commit=<sha>`).
@@ -145,20 +148,33 @@ for a in json.load(sys.stdin).get("assets", []):
 
 case "$cmd" in
   put)
-    need gh
+    tmp="$(mktemp -d)"
+    "$0" pack "$tmp" && "$0" publish "$tmp"
+    rc=$?; rm -rf "$tmp"; exit $rc
+    ;;
+  pack)
+    dir="${2:?usage: cache.sh pack <dir>}"
     # Caches are packed by CI on Linux only. A macOS pack once broke the replay
     # for Linux consumers (case-insensitive filesystem, bsdtar); never again.
     if [ "$(uname -s)" = "Darwin" ] && [ "${TENGOKU_ALLOW_MAC_PUT:-0}" != "1" ]; then
       echo "refusing to pack a cache on macOS — let the nightly build (or workflow_dispatch) publish it" >&2; exit 1
     fi
     sha="$(git rev-parse HEAD)"
+    [ -d .lake/build ] || { echo "nothing to pack: .lake/build missing" >&2; exit 1; }
+    mkdir -p "$dir"
+    rm -f "$dir"/tengoku-cache.tar.zst.part-* "$dir/commit"   # a larger earlier pack would leave surplus parts behind
+    echo "packing .lake/build for $sha …"
+    tar -C .lake -cf - build | zstd -T0 -3 -q | split -b 1900m - "$dir/tengoku-cache.tar.zst.part-"
+    printf '%s\n' "$sha" > "$dir/commit"
+    ls -la "$dir"
+    ;;
+  publish)
+    need gh
+    dir="${2:?usage: cache.sh publish <dir>}"
+    sha="$(cat "$dir/commit")"
     stamp="${TENGOKU_CACHE_STAMP:-$(date -u +%Y%m%dT%H%MZ)}"
     tag="cache-$stamp"
-    [ -d .lake/build ] || { echo "nothing to publish: .lake/build missing" >&2; exit 1; }
-    tmp="$(mktemp -d)"
-    echo "packing .lake/build for $sha as $tag …"
-    tar -C .lake -cf - build | zstd -T0 -3 -q | split -b 1900m - "$tmp/tengoku-cache.tar.zst.part-"
-    ls -la "$tmp"
+    tmp="$dir"
     if gh release view "$tag" -R "$REPO" >/dev/null 2>&1; then
       gh release delete "$tag" -R "$REPO" --yes --cleanup-tag
     fi
@@ -186,7 +202,6 @@ PY
     fi
     gh release view cache-latest -R "$REPO" >/dev/null 2>&1 || gh release create cache-latest -R "$REPO" --title "newest cache (pointer)" --notes "cache-latest.json names the newest cache release. Updated by every publish." >/dev/null
     gh release upload cache-latest "$tmp/cache-latest.json" -R "$REPO" --clobber >/dev/null && echo "pointer cache-latest.json → $tag"
-    rm -rf "$tmp"
     # Keep the newest KEEP caches; each is gigabytes and `get` only ever needs
     # a recent one (Lake rebuilds the difference).
     KEEP="${TENGOKU_CACHE_KEEP:-5}"
