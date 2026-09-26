@@ -100,7 +100,7 @@ jobs:
           gh release create "$VERSION" -R "$TENGOKU_REPO" --draft --target "$COMMIT" --title "Tengoku $VERSION" --notes-file "CHANGELOG-$VERSION.md" \
             "tengoku-$VERSION-source.tar.gz" "tengoku-$VERSION.cdx.json" "tengoku-$VERSION-cache.json" "CHANGELOG-$VERSION.md"
       - name: Attest every asset
-        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: |
             tengoku-${{ inputs.version }}-source.tar.gz
