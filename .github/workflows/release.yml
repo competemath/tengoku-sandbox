@@ -49,7 +49,7 @@ jobs:
           if git rev-parse -q --verify "refs/tags/$VERSION" > /dev/null; then echo "::error::$VERSION already exists"; exit 1; fi
           commit=$(git rev-parse "${WANT:-$(scripts/cache.sh latest)}^{commit}")
           git merge-base --is-ancestor "$commit" origin/main || { echo "::error::$commit is not on main"; exit 1; }
-          cache=$(gh api "repos/$TENGOKU_REPO/releases" --paginate --jq ".[] | select(.tag_name | startswith(\"cache-\")) | select(.body | startswith(\"commit=$commit\")) | .tag_name" | head -n 1)
+          cache=$(gh api "repos/$TENGOKU_REPO/releases" --paginate --jq ".[] | select(.tag_name | startswith(\"cache-\")) | select(.body | startswith(\"commit=$commit\")) | .tag_name" | sed -n 1p)
           [ -n "$cache" ] || { echo "::error::no published cache was built from $commit: release a commit the nightly build published"; exit 1; }
           echo "commit=$commit" >> "$GITHUB_OUTPUT"
           echo "cache=$cache" >> "$GITHUB_OUTPUT"
@@ -86,7 +86,7 @@ jobs:
             echo
             echo "### Changes since ${prev:-the first commit}"
             echo
-            git log --first-parent --format='- %s' "${prev:+$prev..}$COMMIT" | head -n 500
+            git log --first-parent --max-count=500 --format='- %s' "${prev:+$prev..}$COMMIT"   # no `| head`: under pipefail its SIGPIPE fails the step
           } > "CHANGELOG-$VERSION.md"
           ls -la "tengoku-$VERSION"* "CHANGELOG-$VERSION.md"
       - name: Publish the release
