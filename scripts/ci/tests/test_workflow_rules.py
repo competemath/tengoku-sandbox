@@ -142,6 +142,7 @@ class Expressions(unittest.TestCase):
             "github.event.pull_request.number || github.event.merge_group.head_ref",
             "format('{0}', github.event.pull_request.body)",
             "toJSON(github.event.issue)",
+            "contains(github.event.pull_request.title, '(') && github.event.pull_request.title || ''",
         ]:
             with self.subTest(expr):
                 self.assertEqual(rules(swap("printf '%s' \"$TITLE\"", "echo ${{ " + expr + " }}")), ["expressions"])
@@ -179,6 +180,20 @@ class PrCode(unittest.TestCase):
         self.assertEqual(
             rules(swap('ref: "${{ env.BASE }}"', 'repository: "${{ github.event.pull_request.head.repo.full_name }}"', TARGET)), ["pr-code"]
         )
+
+    def test_case_variants(self):
+        self.assertEqual(
+            rules(swap(CO, CO.replace("actions/checkout", "Actions/Checkout"), TARGET).replace(", persist-credentials: false", "")),
+            ["token"],
+        )
+        self.assertEqual(rules(swap('ref: "${{ env.BASE }}"', 'REF: "${{ github.event.pull_request.head.sha }}"', TARGET)), ["pr-code"])
+        self.assertEqual(rules(swap("persist-credentials: false", "Persist-Credentials: false", TARGET)), [])
+        step = (
+            "      - uses: Actions/GitHub-Script@"
+            + "b" * 40
+            + " # v7\n        with:\n          Script: console.log('${{ github.event.issue.title }}')\n"
+        )
+        self.assertEqual(rules(CLEAN + step), ["expressions"])
 
     def test_workflow_run_head_fails(self):
         wr_ = swap("  pull_request_target:\n    types: [opened]\n", "  workflow_run:\n    workflows: [x]\n", TARGET)

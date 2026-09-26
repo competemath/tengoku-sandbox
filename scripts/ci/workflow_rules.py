@@ -107,7 +107,7 @@ def items(m: object) -> list[tuple]:
 
 def contexts(expr: str) -> list[str]:
     """The contexts whose value an expression can return: compared or boolean-only contexts are dropped."""
-    e = expr
+    e = re.sub(STRING, "''", expr)  # first: a parenthesis inside a string is not one
     while m := BOOLEAN_CALL.search(e):  # a boolean function's arguments never reach the value
         depth, i = 0, m.end() - 1
         for i in range(m.end() - 1, len(e)):
@@ -115,7 +115,6 @@ def contexts(expr: str) -> list[str]:
             if depth == 0:
                 break
         e = e[: m.start()] + "true" + e[i + 1 :]
-    e = re.sub(STRING, "''", e)
     e = COMPARISON.sub("true", e)
     e = NEGATION.sub("true", e)
     return [m.group(1) for m in REFERENCE.finditer(e) if not m.group(2) and m.group(1) not in ("true", "false", "null")]
@@ -192,7 +191,9 @@ class Checker:
                 continue
             line = step.get(LINE, 1)
             uses = step.get("uses") if isinstance(step.get("uses"), str) else ""
-            with_ = step.get("with") if isinstance(step.get("with"), dict) else {}
+            action = uses.lower()  # GitHub resolves owner and repository names regardless of case
+            # action inputs are case-insensitive too (`REF:` is `ref:`)
+            with_ = {str(k).lower(): v for k, v in items(step.get("with"))}
             if uses:
                 self.pinned(uses, line)
             if uses.startswith("./") and on & PRIVILEGED:
@@ -201,13 +202,13 @@ class Checker:
                     "pr-code",
                     f"`{uses}` is loaded from the workspace, which may hold the PR's files: name the action in this repository as `$/<path>`",
                 )
-            if uses.startswith("actions/checkout@"):
+            if action.startswith("actions/checkout@"):
                 if str(with_.get("persist-credentials")).lower() != "false":
                     self.add(line, "token", "actions/checkout keeps the job's token in the checkout: set `persist-credentials: false`")
                 if on & PRIVILEGED:
                     self.pr_checkout(with_, line, step.get("env") or {}, job_env, wf_env)
             scripts = [step["run"]] if isinstance(step.get("run"), str) else []
-            if uses.startswith("actions/github-script@") and isinstance(with_.get("script"), str):
+            if action.startswith("actions/github-script@") and isinstance(with_.get("script"), str):
                 scripts.append(with_["script"])
             for script in scripts:
                 self.expressions(script, line)
