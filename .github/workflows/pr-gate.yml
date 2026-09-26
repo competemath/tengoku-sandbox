@@ -36,7 +36,7 @@ jobs:
     steps:
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
         with: { egress-policy: audit }
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { ref: "${{ env.BASE }}", fetch-depth: 0, filter: "blob:none", persist-credentials: false }
       - name: The PR's commits, as data (the checks are main's)
         run: git fetch -q --no-tags --filter=blob:none origin "+$PR_REF:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
@@ -65,7 +65,7 @@ jobs:
     steps:
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
         with: { egress-policy: audit }
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { ref: "${{ env.BASE }}", fetch-depth: 0, filter: "blob:none", persist-credentials: false }
       - name: The PR's commits, as data (the checks are main's)
         run: git fetch -q --no-tags --filter=blob:none origin "+$PR_REF:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
@@ -84,7 +84,7 @@ jobs:
     steps:
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
         with: { egress-policy: audit }
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { ref: "${{ env.BASE }}", fetch-depth: 0, filter: "blob:none", persist-credentials: false }
       - name: The PR's commits, as data (the checks are main's)
         run: git fetch -q --no-tags --filter=blob:none origin "+$PR_REF:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
@@ -97,7 +97,7 @@ jobs:
     timeout-minutes: 5
     permissions: { contents: read }
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { ref: "${{ env.BASE }}", fetch-depth: 0, filter: "blob:none", persist-credentials: false }
       - name: The PR's commits, as data (the checks are main's)
         run: git fetch -q --no-tags --filter=blob:none origin "+$PR_REF:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
@@ -110,7 +110,7 @@ jobs:
     timeout-minutes: 10
     permissions: { contents: read }
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { ref: "${{ env.BASE }}", fetch-depth: 0, persist-credentials: false }
       - name: The PR's commits, as data (the checks are main's)
         run: git fetch -q --no-tags origin "+$PR_REF:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
@@ -150,7 +150,7 @@ jobs:
     timeout-minutes: 5
     permissions: { contents: read, pull-requests: write }
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { ref: "${{ env.BASE }}", fetch-depth: 0, filter: "blob:none", persist-credentials: false }
       - name: The PR's commits, as data (the checks are main's)
         run: git fetch -q --no-tags --filter=blob:none origin "+$PR_REF:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
@@ -181,7 +181,7 @@ jobs:
     steps:
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
         with: { egress-policy: audit }
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { ref: "${{ env.BASE }}", fetch-depth: 0, filter: "blob:none", persist-credentials: false }
       - name: The PR's commits, as data (the checks are main's)
         run: git fetch -q --no-tags --filter=blob:none origin "+$PR_REF:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
@@ -219,7 +219,7 @@ jobs:
     timeout-minutes: 5
     permissions: { contents: read }
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { ref: "${{ env.BASE }}", fetch-depth: 0, filter: "blob:none", persist-credentials: false }
       - name: The PR's commits, as data (the checks are main's)
         run: git fetch -q --no-tags --filter=blob:none origin "+$PR_REF:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
@@ -244,7 +244,7 @@ jobs:
     timeout-minutes: 5
     permissions: { contents: read, pull-requests: read }
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { ref: "${{ env.BASE }}", filter: "blob:none", persist-credentials: false }
       - name: depends
         env: { GH_TOKEN: "${{ github.token }}", BODY: "${{ github.event.pull_request.body }}" }
@@ -257,7 +257,7 @@ jobs:
     timeout-minutes: 5
     permissions: { contents: read, actions: read, pull-requests: write }
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { ref: "${{ env.BASE }}", filter: "blob:none", persist-credentials: false }
       # One comment per PR (updated in place): which check failed, what it said, what to do, and a
       # prefilled "Report a gate bug" issue link for the checks complex enough to be wrong themselves.
