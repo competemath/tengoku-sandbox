@@ -620,6 +620,7 @@ class QueuePlacement(unittest.TestCase):
         self.assertEqual(code_only('s!"x -- y" z'), 's!"' + " " * len("x -- y") + '" z')
         self.assertEqual(code_only("f x' y'' '\\n' q"), "f x' y'' ' ' q")  # primes are identifiers; '\n' is a char
         self.assertEqual(code_only('r#"a " -- b"# c'), 'r#"' + " " * len('a " -- b') + '"# c')
+        self.assertEqual(code_only('s!"a {x + 1} b"'), 's!"  {x + 1}  "')  # holes are code, literal text is blank
         for src in ("a -- x\nb", "x /- y\nz -/ w", 's!"p\nq" r', "c '\\n' d", 'r#"u\nv"# t'):
             self.assertEqual(code_only(src).count("\n"), src.count("\n"), src)  # line breaks survive: line checks stay aligned
 
@@ -686,3 +687,61 @@ class Sbom(unittest.TestCase):
             records = {p["name"]: p["value"] for p in by["equational-theories"]["properties"]}
             self.assertEqual(records["tengoku:trusted-records"], "2")  # the tombstone is not a record
             self.assertEqual(by["competemath"]["licenses"][0]["license"]["id"], "Apache-2.0")
+
+
+class AllowList(unittest.TestCase):
+    """A compiled record passes only if everything in it is known to be inert (scripts/ci/allowlist.py)."""
+
+    CASES = {
+        "card notation": ("theorem t (s : Finset ℕ) : #s ≤ #s + 1 := by omega", False),
+        "array literal": ("def a : Array ℕ := #[1, 2]", False),
+        "pattern continuation": ("def f : ℕ → ℕ\n| 0 => 1\n| n+1 => n", False),
+        "words in comments": ("/- theorem x #eval -/\ntheorem t : True := trivial -- elab macro", False),
+        "words in strings": ('def s : String := "import #eval elab"', False),
+        "simp down": ("@[simp↓] theorem t : True := trivial", False),
+        "simps bang": ("@[simps!] def f : ℕ := 1", False),
+        "aesop lemma": ("@[aesop safe apply] theorem t : True := trivial", False),
+        "noncomputable section": ("noncomputable section\ntheorem t : True := trivial\nend", False),
+        "open in": ("open Nat in\ntheorem t : True := trivial", False),
+        "#eval indented": ("theorem t : True := trivial\n  #eval 1", True),
+        "#check": ("#check Nat", True),
+        "unknown # command": ("#my_cmd x", True),
+        "csimp": ("@[csimp] theorem t : True := trivial", True),
+        "attribute extern": ('attribute [extern "x"] foo', True),
+        "attribute implemented_by": ("attribute [implemented_by g] f", True),
+        "decorated initialize": ("@[simp] initialize foo : Unit ← pure ()", True),
+        "by_elab": ("theorem t : True := by_elab pure ()", True),
+        "aesop tactic rule": ("@[aesop safe tactic] def t : Lean.Elab.Tactic.TacticM Unit := pure ()", True),
+        "unknown attribute": ("@[equational_result] theorem t : True := trivial", True),
+        "IO": ('def f : IO Unit := IO.println "x"', True),
+        "import": ("import Mathlib\ntheorem t : True := trivial", True),
+        "macro": ('macro "x" : term => `(1)', True),
+        "english at column 0": ("theorem t : True := trivial\nthe rest of a broken docstring -/", True),
+        "aesop unsafe rule": ("theorem t : True := by\n  aesop (add unsafe ModEq.mul)", False),
+        "simps projections": ("initialize_simps_projections Foo (toFun → apply)", False),
+        "where at column 0": ("def f : ℕ := g\nwhere\n  g : ℕ := 1", False),
+        "unsafe def": ("unsafe def f : ℕ := 1", True),
+        "private partial def": ("private partial def f : ℕ → ℕ := fun n => n", True),
+        "native_decide tactic": ("theorem t : 2 + 2 = 4 := by native_decide", True),
+        "native_decide axiom term": ("theorem t : True\n:= Collision._native.native_decide.ax_12_extra", True),
+        "ofReduceBool": ("theorem t : True := Lean.ofReduceBool _ _ rfl", True),
+        "run_meta indented": ("theorem t : True := trivial\n  run_meta pure ()", True),
+        "eval% term": ("theorem t : (eval% 2 + 2) = 4 := rfl", True),
+        "eval% in an interpolation hole": ('def s : String := s!"{eval% 2 + 2}"', True),
+        "IO in an interpolation hole": ('def s : String := m!"x {IO.println 1} y"', True),
+        "interpolation with a plain hole": ('def s (n : ℕ) : String := s!"n = {n} and {"in {eval% 1}"}"', False),
+        "braces in a plain string": ('def s : String := "{eval% 1}"', False),
+        "hole closed by a char literal brace": ("def s : String := s!\"{('}', eval% 1).2}\"", True),
+        "hole with a block comment brace": ('def s : String := s!"{ /- } -/ eval% 1 }"', True),
+        "hole with a nested interpolation": ('def s : String := s!"{s!"{eval% 1}"}"', True),
+        "eval% in a raw-string interpolation hole": ('def s : String := s!"{r#"a"}"b"# ++ toString (eval% 1)}"', True),
+    }
+
+    def test_cases(self):
+        sys.path.insert(0, str(CI))
+        from allowlist import violations
+
+        allowed = set(json.loads((TREE / "schemas/allowed-options.json").read_text())["allowed"])
+        for name, (text, rejected) in self.CASES.items():
+            with self.subTest(name):
+                self.assertEqual(bool(violations(text, allowed)), rejected, violations(text, allowed))

@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """lint_banked.py <base> <head> | --text FILE — banked Lean must not run code.
 Records paste `context` and `proof` verbatim into modules; modules are compiled
-by CI and imported by every Leak service, where `initialize` runs. Reject any
-construct that executes, links, or trusts native code, and any set_option off
-the allowlist (schemas/allowed-options.json). Existing records are not
-re-judged: only lines a PR adds."""
+by CI and imported by every Leak service, where `initialize` runs. A staging or
+trusted record (the tiers the tree compiles) must pass the allow-list
+(scripts/ci/allowlist.py): only known-inert commands, attributes and options.
+Tentative records (never compiled) and module lines keep the list of known
+dangers below. Existing records are not re-judged: only lines a PR adds."""
 
 from __future__ import annotations
 
@@ -13,6 +14,7 @@ import re
 import sys
 
 from _git import added_lines, changed_files, fail, load_schema, match
+from allowlist import violations
 
 FORBIDDEN = [
     (re.compile(r"^\s*import\b", re.M), "import (the generator supplies imports)"),
@@ -79,7 +81,11 @@ def main() -> None:
                     if "tombstone" in r:
                         continue
                     body = "\n".join(str(r.get(k, "")) for k in ("context", "statement", "proof"))
-                    errors += check_text(f"{p}:{no} ({r.get('name')})", body, allowed)
+                    label = f"{p}:{no} ({r.get('name')})"
+                    if p.startswith(("data/staging/", "data/trusted/")):  # compiled: only what is known to be inert
+                        errors += [f"{label}: {v}" for v in violations(body, allowed)]
+                    else:
+                        errors += check_text(label, body, allowed)
             elif p.endswith(".lean") and p.startswith(
                 "Tengoku/"
             ):  # modules only; root tool programs (TengokuExtract/TengokuAxioms) run in CI, not in the library
