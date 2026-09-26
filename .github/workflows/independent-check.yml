@@ -1,9 +1,11 @@
 name: independent-check
 # The whole tree, checked again by a second kernel. lean4export writes every declaration of the compiled tree
 # (Lean's core, the seed, every derived library) and nanoda (github.com/ammkrn/nanoda_lib), an independent type
-# checker written in Rust, checks each one again, refusing any axiom beyond propext, Classical.choice and
-# Quot.sound. A bug in Lean's own kernel, or a record that slipped something past the gate, would have to fool two
-# unrelated checkers. It runs on the published cache of a commit of main, and nothing it runs comes from a PR.
+# checker written in Rust, checks each one again. A bug in Lean's own kernel, or a record that slipped something past
+# the gate, would have to fool two unrelated checkers. nanoda refuses any axiom the export DECLARES beyond propext,
+# Classical.choice, Quot.sound and Lean.trustCompiler, which Lean's prelude declares in every environment (its first
+# run here stopped on exactly that). Whether a theorem USES trustCompiler (native_decide) is decided per declaration by
+# the merge queue's axioms step and refused up front by the content lint. It runs on the published cache of a commit of main, and nothing it runs comes from a PR.
 on:
   workflow_dispatch:
 
@@ -66,7 +68,7 @@ jobs:
           {
             "export_file_path": "$RUNNER_TEMP/tengoku.ndjson",
             "use_stdin": false,
-            "permitted_axioms": ["propext", "Classical.choice", "Quot.sound"],
+            "permitted_axioms": ["propext", "Classical.choice", "Quot.sound", "Lean.trustCompiler"],
             "unpermitted_axiom_hard_error": true,
             "nat_extension": true,
             "string_extension": true,
