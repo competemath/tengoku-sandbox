@@ -29,6 +29,10 @@ on:
         description: "internal: how many times this build has re-run on the tip after workflow files changed on main (max 2)"
         required: false
         default: "0"
+      resumed:
+        description: "internal: how many follow-up runs this build has had after the time cap (max 5)"
+        required: false
+        default: "0"
 
 concurrency:
   group: build-${{ github.ref }}
@@ -100,9 +104,14 @@ jobs:
           set -o pipefail
           # No network and a clean environment: whatever the tree's code does while it compiles, it can reach
           # nothing and holds no token. Headroom before the job cap so the cache-save step always runs.
-          if sudo unshare --net runuser -u "$(id -un)" -- env -i HOME="$HOME" PATH="$HOME/.elan/bin:/usr/local/bin:/usr/bin:/bin" LANG=C.UTF-8 \
-               timeout 320m lake build 2>&1 | tee build.log | grep -E "^(✖|error:)|declaration uses .sorry." ; then :; fi
+          # the build's own status, read right after its pipeline (inside an `if`, PIPESTATUS would be the status of
+          # whatever ran last: `:` when the log had an error line, so a failed build read as complete)
+          set +e
+          sudo unshare --net runuser -u "$(id -un)" -- env -i HOME="$HOME" PATH="$HOME/.elan/bin:/usr/local/bin:/usr/bin:/bin" LANG=C.UTF-8 \
+            timeout 320m lake build 2>&1 | tee build.log
           status=${PIPESTATUS[0]}
+          set -e
+          grep -E "^(✖|error:)|declaration uses .sorry." build.log | head -n 50 || true
           if grep -q "declaration uses \`sorry\`" build.log; then
             echo "::error::a trusted module uses sorry — refusing"; exit 1
           fi
@@ -179,16 +188,17 @@ jobs:
   relaunch:
     needs: build
     # only after a build job that ended well (time cap reached, or a stale tip): a failed build never re-dispatches
-    if: needs.build.result == 'success' && (needs.build.outputs.complete == 'false' || (needs.build.outputs.stale == 'true' && github.event.inputs.retried != '2'))
+    if: needs.build.result == 'success' && ((needs.build.outputs.complete == 'false' && github.event.inputs.resumed != '5') || (needs.build.outputs.stale == 'true' && github.event.inputs.retried != '2'))
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions: { actions: write }
     steps:
-      - name: Continue the build in a follow-up run
+      - name: Continue the build in a follow-up run (at most five)
         if: needs.build.outputs.complete == 'false'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh workflow run build.yml -R "$GITHUB_REPOSITORY" --ref "$GITHUB_REF_NAME" -f resume=true
+          RESUMED: ${{ github.event.inputs.resumed || '0' }}
+        run: gh workflow run build.yml -R "$GITHUB_REPOSITORY" --ref "$GITHUB_REF_NAME" -f resume=true -f resumed="$(( ${RESUMED:-0} + 1 ))"
       - name: Publish from a run on the tip (once)
         if: needs.build.outputs.complete == 'true' && needs.build.outputs.stale == 'true'
         env:

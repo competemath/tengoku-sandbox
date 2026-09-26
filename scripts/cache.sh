@@ -162,6 +162,7 @@ case "$cmd" in
     sha="$(git rev-parse HEAD)"
     [ -d .lake/build ] || { echo "nothing to pack: .lake/build missing" >&2; exit 1; }
     mkdir -p "$dir"
+    rm -f "$dir"/tengoku-cache.tar.zst.part-* "$dir/commit"   # a larger earlier pack would leave surplus parts behind
     echo "packing .lake/build for $sha …"
     tar -C .lake -cf - build | zstd -T0 -3 -q | split -b 1900m - "$dir/tengoku-cache.tar.zst.part-"
     printf '%s\n' "$sha" > "$dir/commit"
