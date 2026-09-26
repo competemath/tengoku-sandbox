@@ -104,8 +104,7 @@ jobs:
           set -o pipefail
           # No network and a clean environment: whatever the tree's code does while it compiles, it can reach
           # nothing and holds no token. Headroom before the job cap so the cache-save step always runs.
-          # the build's own status, read right after its pipeline (inside an `if`, PIPESTATUS would be the status of
-          # whatever ran last: `:` when the log had an error line, so a failed build read as complete)
+          # the build's own status, read right after its pipeline
           set +e
           sudo unshare --net runuser -u "$(id -un)" -- env -i HOME="$HOME" PATH="$HOME/.elan/bin:/usr/local/bin:/usr/bin:/bin" LANG=C.UTF-8 \
             timeout 320m lake build 2>&1 | tee build.log
