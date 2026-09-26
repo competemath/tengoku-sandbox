@@ -2,10 +2,11 @@ name: independent-check
 # The whole tree, checked again by a second kernel. lean4export writes every declaration of the compiled tree
 # (Lean's core, the seed, every derived library) and nanoda (github.com/ammkrn/nanoda_lib), an independent type
 # checker written in Rust, checks each one again. A bug in Lean's own kernel, or a record that slipped something past
-# the gate, would have to fool two unrelated checkers. nanoda refuses any axiom the export DECLARES beyond propext,
-# Classical.choice, Quot.sound and Lean.trustCompiler, which Lean's prelude declares in every environment (its first
-# run here stopped on exactly that). Whether a theorem USES trustCompiler (native_decide) is decided per declaration by
-# the merge queue's axioms step and refused up front by the content lint. It runs on the published cache of a commit of main, and nothing it runs comes from a PR.
+# the gate, would have to fool two unrelated checkers. Only propext, Classical.choice and Quot.sound enter nanoda's
+# environment: every other axiom the export declares is left out (unpermitted_axiom_hard_error: false), so any
+# declaration that USES one (sorryAx for sorry, Lean.ofReduceBool or Lean.trustCompiler for native_decide) fails to
+# type-check and is named. Lean's prelude declares those in every environment, so they are expected in the list of
+# skipped axioms; any other skipped axiom (one a record or seed file declared) fails the job even if nothing uses it. It runs on the published cache of a commit of main, and nothing it runs comes from a PR.
 on:
   workflow_dispatch:
 
@@ -68,8 +69,9 @@ jobs:
           {
             "export_file_path": "$RUNNER_TEMP/tengoku.ndjson",
             "use_stdin": false,
-            "permitted_axioms": ["propext", "Classical.choice", "Quot.sound", "Lean.trustCompiler"],
-            "unpermitted_axiom_hard_error": true,
+            "permitted_axioms": ["propext", "Classical.choice", "Quot.sound"],
+            "unpermitted_axiom_hard_error": false,
+            "num_threads": 4,
             "nat_extension": true,
             "string_extension": true,
             "print_success_message": true
@@ -80,7 +82,18 @@ jobs:
           # nanoda on its own empty export first: a wrong binary or configuration fails here, in seconds
           sed "s|$RUNNER_TEMP/tengoku.ndjson|$RUNNER_TEMP/nanoda/test_resources/Empty/export|" "$RUNNER_TEMP/nanoda.json" > "$RUNNER_TEMP/nanoda-selftest.json"
           "$nanoda" "$RUNNER_TEMP/nanoda-selftest.json"
-          sudo unshare --net runuser -u "$(id -un)" -- /usr/bin/time -v "$nanoda" "$RUNNER_TEMP/nanoda.json" 2> time.log && ok=1 || ok=0
+          # shellcheck disable=SC2024  # the output files are the runner's own, written outside the sealed namespace on purpose
+          sudo unshare --net runuser -u "$(id -un)" -- /usr/bin/time -v "$nanoda" "$RUNNER_TEMP/nanoda.json" > nanoda.out 2> time.log && ok=1 || ok=0
+          cat nanoda.out
           if [ "$ok" = 1 ]; then grep -E 'Maximum resident|Elapsed' time.log || true; else cat time.log; fi
+          [ "$ok" = 1 ] || { echo "nanoda: FAILED in $(( $(date +%s) - start )) s"; exit 1; }
+          # the axioms nanoda skipped: only the prelude's own may appear
+          skipped=$(grep -oE 'unpermitted axioms \[[^]]*\]' time.log nanoda.out 2>/dev/null | sed -n 1p | grep -oE '"[^"]+"' | tr -d '"' | sort -u | tr '\n' ' ')
+          echo "skipped (declared, not permitted): ${skipped:-none}"
+          for a in $skipped; do
+            case "$a" in sorryAx|Lean.ofReduceBool|Lean.ofReduceNat|Lean.trustCompiler) ;;
+              *) echo "::error::the tree declares the axiom $a"; exit 1 ;;
+            esac
+          done
           echo "nanoda: $([ "$ok" = 1 ] && echo 'every declaration checked' || echo FAILED) in $(( $(date +%s) - start )) s"
           [ "$ok" = 1 ]
