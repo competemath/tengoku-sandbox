@@ -209,7 +209,7 @@ def library_of_module(path: str, libraries) -> str | None:
 
 _DECL = r"(?:theorem|lemma|def|abbrev|instance|example|structure|inductive|class|opaque|axiom)"
 _SCOPE_OR_DECL = re.compile(
-    r"^[ \t]*(?:(namespace)\s+(\S+)|(section)\b[^\n]*|(end)\b[^\n]*|"
+    r"^[ \t]*(?:(namespace)\s+(\S+)|((?:(?:noncomputable|private|public|protected)\s+)*section\b|mutual\b)[^\n]*|(end)\b[^\n]*|"
     r"(?:(?:@\[[^\]]*\]|private|protected|noncomputable|nonrec|partial|unsafe)\s+)*" + _DECL + r"\s+([^\s(\[{:⦃]+))",
     re.M,
 )
@@ -221,7 +221,7 @@ def declared_names(text: str) -> set[str]:
     from lean_lex import code_only
 
     names: set[str] = set()
-    stack: list[list[str]] = []  # one entry per open namespace or section (sections add no prefix)
+    stack: list[list[str]] = []  # one entry per block `end` closes: namespaces add their name; sections, mutual add nothing
     for m in _SCOPE_OR_DECL.finditer(code_only(text)):
         ns, ns_name, sec, end, decl = m.groups()
         if ns:

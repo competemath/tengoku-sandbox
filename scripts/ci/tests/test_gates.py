@@ -592,6 +592,12 @@ class QueuePlacement(unittest.TestCase):
         self.assertEqual(unplaced({"Other.foo"}, [other]), [])
         self.assertEqual(unplaced({"x"}, ["namespace A\ntheorem _root_.x : True := trivial\nend A\n"]), [])
         self.assertEqual(unplaced({"A.s"}, ["namespace A\nsection B\ntheorem s : True := trivial\nend B\nend A\n"]), [])
+        mutual = (
+            "namespace A\nmutual\ntheorem m1 : True := trivial\ntheorem m2 : True := trivial\nend\ntheorem after : True := trivial\nend A\n"
+        )
+        self.assertEqual(unplaced({"A.m1", "A.m2", "A.after"}, [mutual]), [])  # `end` of mutual keeps namespace A open
+        ncs = "namespace A\nnoncomputable section\ntheorem n : True := trivial\nend\ntheorem after2 : True := trivial\nend A\n"
+        self.assertEqual(unplaced({"A.n", "A.after2"}, [ncs]), [])
 
     def test_comments_and_strings_hide_nothing_and_declare_nothing(self):
         from _git import unplaced
