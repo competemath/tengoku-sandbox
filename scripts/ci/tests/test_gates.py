@@ -622,3 +622,67 @@ class QueuePlacement(unittest.TestCase):
         self.assertEqual(code_only('r#"a " -- b"# c'), 'r#"' + " " * len('a " -- b') + '"# c')
         for src in ("a -- x\nb", "x /- y\nz -/ w", 's!"p\nq" r', "c '\\n' d", 'r#"u\nv"# t'):
             self.assertEqual(code_only(src).count("\n"), src.count("\n"), src)  # line breaks survive: line checks stay aligned
+
+
+class Sbom(unittest.TestCase):
+    """scripts/sbom.py lists the toolchain, the seed and the libraries whose records the tree holds, from the commit."""
+
+    def test_bill(self):
+        with tempfile.TemporaryDirectory() as d:
+            run = lambda *a: subprocess.run(["git", *a], cwd=d, check=True, capture_output=True, text=True).stdout  # noqa: E731
+            run("init", "-q", "-b", "main")
+            run("config", "user.email", "t@t")
+            run("config", "user.name", "t")
+            root = Path(d)
+            (root / "lean-toolchain").write_text("leanprover/lean4:v4.34.0-rc2\n")
+            (root / "SEED.md").write_text(
+                "| package | origin | rev | mapped to |\n|---|---|---|---|\n| mathlib | https://github.com/leanprover-community/mathlib4.git | "
+                + "a" * 40
+                + " | `Tengoku` |\n| Cli | https://github.com/leanprover/lean4-cli | "
+                + "b" * 40
+                + " | `Tengoku.Meta.Cli` |\n"
+            )
+            (root / "LICENSE-THIRD-PARTY.md").write_text(
+                "| Package | Upstream | Licence | Folded into |\n|---|---|---|---|\n"
+                "| Mathlib | [x](https://github.com/leanprover-community/mathlib4) | Apache-2.0 | `Tengoku/` |\n"
+                "| lean4-cli | [x](https://github.com/leanprover/lean4-cli) | MIT | `Tengoku/Meta/Cli/` |\n"
+            )
+            (root / "schemas").mkdir()
+            (root / "schemas/sources.json").write_text(
+                json.dumps(
+                    {
+                        "licences": {
+                            "https://github.com/teorth/equational_theories": "Apache-2.0",
+                            "https://competemath.com/": "Apache-2.0",
+                        },
+                        "corpora": {"equational-theories": {"repo": "https://github.com/teorth/equational_theories", "commit": "c" * 40}},
+                    }
+                )
+            )
+            (root / "data/trusted").mkdir(parents=True)
+            (root / "data/trusted/equational-theories.jsonl").write_text('{"name": "A"}\n{"name": "B"}\n{"tombstone": "A"}\n')
+            (root / "data/trusted/competemath.jsonl").write_text(
+                '{"name": "P", "source_url": "https://competemath.com/practice/problems/1"}\n'
+            )
+            (root / "data/trusted/mathlib-algebra.jsonl").write_text('{"name": "M"}\n')
+            run("add", "-A")
+            run("commit", "-qm", "tree")
+            out = subprocess.run(
+                [sys.executable, str(TREE / "scripts/sbom.py"), "--commit", "HEAD", "--version", "v0.0.1"],
+                cwd=d,
+                capture_output=True,
+                text=True,
+                check=True,
+            ).stdout
+            bom = json.loads(out)
+            self.assertEqual(
+                (bom["bomFormat"], bom["specVersion"], bom["metadata"]["component"]["version"]), ("CycloneDX", "1.5", "v0.0.1")
+            )
+            by = {c["name"]: c for c in bom["components"]}
+            self.assertEqual(set(by), {"lean4", "mathlib", "Cli", "equational-theories", "competemath"})  # mathlib-* is seed metadata
+            self.assertEqual(by["Cli"]["licenses"][0]["license"]["id"], "MIT")
+            self.assertEqual(by["mathlib"]["purl"], "pkg:github/leanprover-community/mathlib4@" + "a" * 40)
+            self.assertEqual(by["equational-theories"]["version"], "c" * 40)
+            records = {p["name"]: p["value"] for p in by["equational-theories"]["properties"]}
+            self.assertEqual(records["tengoku:trusted-records"], "2")  # the tombstone is not a record
+            self.assertEqual(by["competemath"]["licenses"][0]["license"]["id"], "Apache-2.0")
