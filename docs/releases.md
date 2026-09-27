@@ -7,7 +7,9 @@ have passed the independent check (`.github/workflows/independent-check.yml`, ni
 declaration of the tree exported with lean4export and type-checked again by
 [nanoda](https://github.com/ammkrn/nanoda_lib), a kernel that shares no code with Lean, and every trusted record
 shown, from the same export, to rest only on `propext`, `Classical.choice` and `Quot.sound`. To release a commit
-the nightly run did not cover: `gh workflow run independent-check.yml -f commit=<sha>`, then release.
+the nightly run did not cover: `gh workflow run independent-check.yml -f commit=<sha>`, then release. GitHub will not let the
+release workflow tag a commit whose workflow files differ from main's, so release main's tip (or a commit since the last
+workflow change).
 
 | Asset | What it is |
 | --- | --- |

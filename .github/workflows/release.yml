@@ -54,6 +54,10 @@ jobs:
           fi
           commit=$(git rev-parse "${WANT:-$(scripts/cache.sh latest)}^{commit}")
           git merge-base --is-ancestor "$commit" origin/main || { echo "::error::$commit is not on main"; exit 1; }
+          # GitHub refuses the job's token a tag on a commit whose workflow files differ from main's (HTTP 403 "Resource not
+          # accessible by integration", seen releasing a commit behind a workflow change): say so instead of failing there
+          git diff --quiet "$commit" origin/main -- .github/workflows \
+            || { echo "::error::main's workflows changed since $commit, and GitHub will not let this job tag it. Release a newer commit: the nightly builds and checks main's tip"; exit 1; }
           cache=$(gh api "repos/$TENGOKU_REPO/releases" --paginate --jq ".[] | select(.tag_name | startswith(\"cache-\")) | select(.body | startswith(\"commit=$commit\")) | .tag_name" | sed -n 1p)
           [ -n "$cache" ] || { echo "::error::no published cache was built from $commit: release a commit the nightly build published"; exit 1; }
           echo "commit=$commit" >> "$GITHUB_OUTPUT"
