@@ -140,7 +140,10 @@ jobs:
           # campaign found the step exiting before it). Key ids and tokens are found inside JSON strings; a bare AWS secret
           # key value is not (detect-secrets keyword rules need the plain "key = value" form).
           cd "$GITHUB_WORKSPACE"
-          git diff -U0 "$BASE...$HEAD" -- data/ | grep -E '^\+[^+]' | sed 's/^+//' > added-data.txt || true
+          # data/stats.json is generated (scripts/stats.py): its pretty-printed "tree_commit" line reads as a hex secret, and
+          # detect-secrets never applies an --exclude-lines pattern that spells out the hex (tested with 1.5.0), so every
+          # promotion PR failed here; the file holds only counts and that commit
+          git diff -U0 "$BASE...$HEAD" -- data/ ':!data/stats.json' | grep -E '^\+[^+]' | sed 's/^+//' > added-data.txt || true
           if [ -s added-data.txt ]; then detect-secrets-hook --baseline .secrets.baseline --exclude-lines '"[a-z_]*commit": "[0-9a-f]{40}"' --exclude-lines '"[a-z_]*(sha256|digest)": "[0-9a-f]{64}"' --exclude-lines '"(search|states|verify)": "[0-9a-f]{40}"' --exclude-lines '"source_url": "[^"]*[0-9a-f]{40}[^"]*"' added-data.txt; else echo "no added data lines to scan"; fi
 
   sorry-advisory:
