@@ -172,7 +172,7 @@ jobs:
       - name: The promotion PR, as the bot
         id: pr
         env:
-          BOT_TOKEN: ${{ secrets.TENGOKU_BOT_LYSISTRATE_TOKEN || secrets.TENGOKU_BOT_TOKEN }}
+          BOT_TOKEN: ${{ secrets.TENGOKU_BOT_TOKEN }}
           BRANCH: ${{ needs.promote.outputs.branch }}
           SUMMARY: ${{ needs.promote.outputs.summary }}
         run: |  # pragma: allowlist secret (the token is a variable here, never a value)
