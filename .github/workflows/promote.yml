@@ -107,20 +107,23 @@ jobs:
           # a promotion may only REMOVE staging lines: every staging file becomes main's copy minus the promoted records
           python3 - <<'PY'
           import glob, json, os, subprocess
-          def names(text):
+          def keys(text):   # (name, source_path): what promote.py promotes, file by file
               out = set()
               for l in text.splitlines():
                   if l.strip():
-                      try: out.add(json.loads(l).get("name"))
+                      try:
+                          r = json.loads(l)
+                          out.add((r.get("name"), r.get("source_path")))
                       except ValueError: pass
               return out
           show = lambda p: subprocess.run(["git", "show", f"HEAD:{p}"], capture_output=True, text=True).stdout
           tracked = subprocess.run(["git", "ls-tree", "-r", "--name-only", "HEAD", "data/staging"], capture_output=True, text=True, check=True).stdout.split()
-          # names are unique within a library only: each library's promoted names clean only that library's staging
+          # only the records promote.py actually promoted leave staging: same library, same name AND same source file
+          # (two staged records of one library may share a name across source files; names are unique per library only)
           promoted = {}
           for f in glob.glob("data/trusted/*.jsonl"):
               lib = os.path.splitext(os.path.basename(f))[0]
-              promoted[lib] = names(open(f, encoding="utf-8").read()) - names(show(f))
+              promoted[lib] = keys(open(f, encoding="utf-8").read()) - keys(show(f))
           def library_of(p):   # data/staging/<lib>.jsonl or data/staging/<lib>/<file>.jsonl
               parts = p.split("/")
               return parts[2] if len(parts) == 4 else os.path.splitext(parts[2])[0]
@@ -129,7 +132,9 @@ jobs:
               before = show(p).splitlines()
               def keep(l):   # this pass only removes promoted records: a line that does not parse stays
                   if not l.strip(): return True
-                  try: return json.loads(l).get("name") not in mine
+                  try:
+                      r = json.loads(l)
+                      return (r.get("name"), r.get("source_path")) not in mine
                   except ValueError: return True
               kept = [l for l in before if keep(l)]
               if len(kept) == len(before):
