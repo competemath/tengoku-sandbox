@@ -143,7 +143,7 @@ jobs:
           BOT_TOKEN: ${{ secrets.TENGOKU_BOT_TOKEN }}
           BRANCH: ${{ steps.promote.outputs.branch }}
           SUMMARY: ${{ steps.promote.outputs.summary }}
-        run: |
+        run: |  # pragma: allowlist secret (the token is a variable here, never a value)
           if [ -z "$BOT_TOKEN" ]; then echo "::notice::no TENGOKU_BOT_TOKEN secret: the promotion was computed (artifact 'promotion') but not proposed"; exit 0; fi
           git push -q "https://x-access-token:${BOT_TOKEN}@github.com/${TENGOKU_REPO}.git" "$BRANCH"
           url=$(GH_TOKEN="$BOT_TOKEN" gh pr create -R "$TENGOKU_REPO" --head "$BRANCH" --title "Promote: $SUMMARY records to trusted" \
