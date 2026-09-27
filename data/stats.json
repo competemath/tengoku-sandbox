@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-09-14T16:13:32Z",
-  "last_promoted_at": "2026-09-13T20:23:45Z",
+  "generated_at": "2026-09-27T10:07:29Z",
+  "last_promoted_at": "2026-09-27T10:07:17Z",
   "libraries": {
     "abc-exceptions": {
       "staging": 0,
@@ -65,11 +65,6 @@
     "automatatheory": {
       "staging": 0,
       "tentative": 231,
-      "trusted": 0
-    },
-    "autth": {
-      "staging": 0,
-      "tentative": 3,
       "trusted": 0
     },
     "batteries": {
@@ -158,10 +153,10 @@
       "trusted": 0
     },
     "equational-theories": {
-      "last_promoted_at": "2026-09-13T20:23:45Z",
-      "staging": 32,
+      "last_promoted_at": "2026-09-27T10:07:17Z",
+      "staging": 79,
       "tentative": 13193,
-      "trusted": 8111
+      "trusted": 9249
     },
     "erdos-simonovits-degeneracy": {
       "staging": 0,
@@ -1194,13 +1189,13 @@
       "trusted": 0
     }
   },
-  "library_count": 238,
+  "library_count": 237,
   "toolchain": "leanprover/lean4:v4.34.0-rc2",
   "totals": {
-    "all": 598338,
-    "staging": 32,
-    "tentative": 400944,
-    "trusted": 197362
+    "all": 599520,
+    "staging": 79,
+    "tentative": 400941,
+    "trusted": 198500
   },
-  "tree_commit": "3066ddeb67d25d3733f026ce90a06a47297acde4"
+  "tree_commit": "7cd2ef969a84489f70160109920311c5d2a763fb"
 }
