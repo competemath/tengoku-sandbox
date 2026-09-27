@@ -4,8 +4,10 @@ name: promote
 # attested cache), reduces the staging files to pure removals (a promotion may only remove staging lines: promote.py
 # writes build_error into the records of a file that did not build, which is left out here), and opens ONE promotion
 # PR as the bot (secret TENGOKU_BOT_TOKEN: the promotion class is granted by actor, and a PR opened with the job's own
-# token would start no checks). Only the push step sees that token; the builds run without it. The run waits for its PR
-# (promotions share data/trusted and Tengoku/All.lean) before the next batch starts.
+# token would start no checks). The token never reaches the job that builds: `promote` hands its commit on as a patch
+# (an artifact, data), and `propose`, on a fresh runner, applies it and pushes. Nothing the builds wrote (a git hook, a
+# config) can be there when the token is used. The run waits for its PR (promotions share data/trusted and
+# Tengoku/All.lean) before the next batch starts.
 on:
   schedule:
     - cron: "41 * * * *"
@@ -31,7 +33,11 @@ jobs:
   promote:
     runs-on: ubuntu-latest
     timeout-minutes: 300
-    permissions: { contents: read, pull-requests: read, actions: write }   # actions: write — the next batch
+    permissions: { contents: read }
+    outputs:
+      branch: ${{ steps.promote.outputs.branch }}
+      summary: ${{ steps.promote.outputs.summary }}
+      more: ${{ steps.promote.outputs.more }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with: { ref: main, fetch-depth: 0, filter: "blob:none", persist-credentials: false }
@@ -57,7 +63,8 @@ jobs:
       - name: elan
         if: steps.due.outputs.any == 'true'
         run: |
-          curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
+          # the installer at a fixed commit (a moving `master` would run whatever it says today)
+          curl -sSfL https://raw.githubusercontent.com/leanprover/elan/0e36a07b9bbcc5381fa6250df109f9a4f94d7bac/elan-init.sh | sh -s -- -y --default-toolchain none
           echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
       - name: The compiled tree (the attested cache)
         if: steps.due.outputs.any == 'true'
@@ -93,7 +100,8 @@ jobs:
             for sp in "${files[@]}"; do
               if [ "$budget" -le 0 ]; then more=true; break; fi
               budget=$((budget - 1))
-              python3 scripts/promote.py --corpus "corpora/$lib" --library "$lib" --only "$sp" 2>&1 | grep -E '^(promoted|NOT promoted|WARNING)' | cut -c1-300 || true
+              # quiet for 30 minutes: a file still receiving records would otherwise rebuild once per arrival
+              python3 scripts/promote.py --corpus "corpora/$lib" --library "$lib" --only "$sp" --quiescent 1800 2>&1 | grep -E '^(promoted|NOT promoted|WARNING)' | cut -c1-300 || true
             done
           done < due.txt
           # a promotion may only REMOVE staging lines: every staging file becomes main's copy minus the promoted records
@@ -108,19 +116,29 @@ jobs:
               return out
           show = lambda p: subprocess.run(["git", "show", f"HEAD:{p}"], capture_output=True, text=True).stdout
           tracked = subprocess.run(["git", "ls-tree", "-r", "--name-only", "HEAD", "data/staging"], capture_output=True, text=True, check=True).stdout.split()
-          promoted = set()
+          # names are unique within a library only: each library's promoted names clean only that library's staging
+          promoted = {}
           for f in glob.glob("data/trusted/*.jsonl"):
-              promoted |= names(open(f, encoding="utf-8").read()) - names(show(f))
+              lib = os.path.splitext(os.path.basename(f))[0]
+              promoted[lib] = names(open(f, encoding="utf-8").read()) - names(show(f))
+          def library_of(p):   # data/staging/<lib>.jsonl or data/staging/<lib>/<file>.jsonl
+              parts = p.split("/")
+              return parts[2] if len(parts) == 4 else os.path.splitext(parts[2])[0]
           for p in tracked:
+              mine = promoted.get(library_of(p), set())
               before = show(p).splitlines()
-              kept = [l for l in before if not l.strip() or json.loads(l).get("name") not in promoted]
+              def keep(l):   # this pass only removes promoted records: a line that does not parse stays
+                  if not l.strip(): return True
+                  try: return json.loads(l).get("name") not in mine
+                  except ValueError: return True
+              kept = [l for l in before if keep(l)]
               if len(kept) == len(before):
                   subprocess.run(["git", "checkout", "-q", "HEAD", "--", p], check=True)   # untouched, or only build_error written
               elif not [l for l in kept if l.strip()] and p.count("/") == 3:
                   if os.path.exists(p): os.remove(p)   # a per-PR file with nothing left
               else:
                   open(p, "w", encoding="utf-8").write("\n".join(kept) + ("\n" if kept else ""))
-          print(f"{len(promoted)} records promoted")
+          print(f"{sum(len(v) for v in promoted.values())} records promoted")
           PY
           # nothing moved to trusted: nothing to propose (a regenerated stats.json alone is not a promotion)
           if git diff --quiet -- data/trusted; then
@@ -140,15 +158,29 @@ jobs:
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: steps.promote.outputs.branch != ''
         with: { name: promotion, path: promotion.patch, retention-days: 14 }
+  propose:
+    needs: promote
+    if: needs.promote.outputs.branch != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions: { contents: read, pull-requests: read, actions: write }   # actions: write — the next batch
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: { ref: main, fetch-depth: 0, filter: "blob:none", persist-credentials: false }
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with: { name: promotion, path: promotion }
       - name: The promotion PR, as the bot
-        if: steps.promote.outputs.branch != ''
         id: pr
         env:
-          BOT_TOKEN: ${{ secrets.TENGOKU_BOT_TOKEN }}
-          BRANCH: ${{ steps.promote.outputs.branch }}
-          SUMMARY: ${{ steps.promote.outputs.summary }}
+          BOT_TOKEN: ${{ secrets.TENGOKU_BOT_LYSISTRATE_TOKEN || secrets.TENGOKU_BOT_TOKEN }}
+          BRANCH: ${{ needs.promote.outputs.branch }}
+          SUMMARY: ${{ needs.promote.outputs.summary }}
         run: |  # pragma: allowlist secret (the token is a variable here, never a value)
-          if [ -z "$BOT_TOKEN" ]; then echo "::notice::no TENGOKU_BOT_TOKEN secret: the promotion was computed (artifact 'promotion') but not proposed"; exit 0; fi
+          git switch -q -c "$BRANCH"
+          # -3: main may have moved since the patch was made (a content PR adding staging records)
+          git -c user.name=promote -c user.email=promote@invalid am -3 -q --committer-date-is-author-date promotion/promotion.patch
+          git log -1 --format='%h %an: %s' && git diff --stat HEAD~1 | tail -1
+          if [ -z "$BOT_TOKEN" ]; then echo "::notice::no TENGOKU_BOT_TOKEN secret: the promotion was computed and applies to main, but was not proposed"; exit 0; fi
           git push -q "https://x-access-token:${BOT_TOKEN}@github.com/${TENGOKU_REPO}.git" "$BRANCH"
           url=$(GH_TOKEN="$BOT_TOKEN" gh pr create -R "$TENGOKU_REPO" --head "$BRANCH" --title "Promote: $SUMMARY records to trusted" \
             --body "Promotion by the cloud promote workflow: each source file's module was generated and built on the attested cache before its records moved to trusted.")
@@ -157,7 +189,7 @@ jobs:
           echo "$url"
       - name: Wait for it (promotions share data/trusted and All.lean)
         if: steps.pr.outputs.url != ''
-        env: { GH_TOKEN: "${{ github.token }}", URL: "${{ steps.pr.outputs.url }}", MORE: "${{ steps.promote.outputs.more }}" }
+        env: { GH_TOKEN: "${{ github.token }}", URL: "${{ steps.pr.outputs.url }}", MORE: "${{ needs.promote.outputs.more }}" }
         run: |
           for _ in $(seq 1 180); do
             st=$(gh pr view "$URL" -R "$TENGOKU_REPO" --json state -q .state)
