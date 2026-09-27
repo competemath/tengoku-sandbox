@@ -1,0 +1,169 @@
+name: promote
+# Promotion off the laptop. A staging record becomes trusted once its module builds (scripts/promote.py). Every hour,
+# and again after each merged batch, this promotes up to max_files quiet source files (one build each, on the
+# attested cache), reduces the staging files to pure removals (a promotion may only remove staging lines: promote.py
+# writes build_error into the records of a file that did not build, which is left out here), and opens ONE promotion
+# PR as the bot (secret TENGOKU_BOT_TOKEN: the promotion class is granted by actor, and a PR opened with the job's own
+# token would start no checks). Only the push step sees that token; the builds run without it. The run waits for its PR
+# (promotions share data/trusted and Tengoku/All.lean) before the next batch starts.
+on:
+  schedule:
+    - cron: "41 * * * *"
+  workflow_dispatch:
+    inputs:
+      max_files: { description: "Source files per promotion PR", required: true, default: "150" }
+
+permissions: {}
+
+concurrency:
+  group: promote
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  TENGOKU_REPO: ${{ github.repository }}
+  TENGOKU_VERIFY: require
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    permissions: { contents: read, pull-requests: read, actions: write }   # actions: write — the next batch
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: { ref: main, fetch-depth: 0, filter: "blob:none", persist-credentials: false }
+      - name: Anything to promote?
+        id: due
+        run: |
+          python3 - <<'PY' > due.txt
+          import glob, json, os
+          corpora = json.load(open("schemas/sources.json")).get("corpora", {})
+          for lib in sorted(corpora):
+              files = glob.glob(f"data/staging/{lib}.jsonl") + glob.glob(f"data/staging/{lib}/*.jsonl")
+              n = 0
+              for f in files:
+                  for l in open(f, encoding="utf-8"):
+                      if l.strip():
+                          r = json.loads(l)
+                          n += bool(r.get("source_path") and r.get("context") is not None)
+              if n:
+                  print(lib, n)
+          PY
+          cat due.txt
+          echo "any=$([ -s due.txt ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+      - name: elan
+        if: steps.due.outputs.any == 'true'
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: The compiled tree (the attested cache)
+        if: steps.due.outputs.any == 'true'
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: scripts/cache.sh get 2>&1 | tail -3 && lake build Tengoku.All 2>&1 | tail -1
+      - name: Promote (no token in reach of the builds)
+        if: steps.due.outputs.any == 'true'
+        id: promote
+        env:
+          MAX_FILES: ${{ inputs.max_files || '150' }}
+          BOT: ${{ vars.TENGOKU_BOT }}
+        run: |
+          budget=$MAX_FILES
+          more=false
+          while read -r lib _; do
+            spec=$(python3 -c "import json, sys; c = json.load(open('schemas/sources.json'))['corpora']['$lib']; print(c['repo'], c['commit'])")
+            read -r repo commit <<< "$spec"
+            [ -d "corpora/$lib" ] || { git clone -q --filter=blob:none "$repo" "corpora/$lib" && git -C "corpora/$lib" checkout -q "$commit"; }
+            # quiet source files, oldest first (what scripts/promote-loop.sh promotes)
+            mapfile -t files < <(python3 - "$lib" <<'PY'
+          import glob, json, sys
+          lib = sys.argv[1]; seen = {}
+          for f in [f"data/staging/{lib}.jsonl"] + sorted(glob.glob(f"data/staging/{lib}/*.jsonl")):
+              try: lines = open(f, encoding="utf-8").read().splitlines()
+              except FileNotFoundError: continue
+              for l in lines:
+                  if not l.strip(): continue
+                  r = json.loads(l)
+                  if r.get("source_path") and r.get("context") is not None: seen.setdefault(r["source_path"], r.get("staged_at", ""))
+          for sp, _ in sorted(seen.items(), key=lambda kv: kv[1]): print(sp)
+          PY
+            )
+            for sp in "${files[@]}"; do
+              if [ "$budget" -le 0 ]; then more=true; break; fi
+              budget=$((budget - 1))
+              python3 scripts/promote.py --corpus "corpora/$lib" --library "$lib" --only "$sp" 2>&1 | grep -E '^(promoted|NOT promoted|WARNING)' | cut -c1-300 || true
+            done
+          done < due.txt
+          # a promotion may only REMOVE staging lines: every staging file becomes main's copy minus the promoted records
+          python3 - <<'PY'
+          import glob, json, os, subprocess
+          def names(text):
+              out = set()
+              for l in text.splitlines():
+                  if l.strip():
+                      try: out.add(json.loads(l).get("name"))
+                      except ValueError: pass
+              return out
+          show = lambda p: subprocess.run(["git", "show", f"HEAD:{p}"], capture_output=True, text=True).stdout
+          tracked = subprocess.run(["git", "ls-tree", "-r", "--name-only", "HEAD", "data/staging"], capture_output=True, text=True, check=True).stdout.split()
+          promoted = set()
+          for f in glob.glob("data/trusted/*.jsonl"):
+              promoted |= names(open(f, encoding="utf-8").read()) - names(show(f))
+          for p in tracked:
+              before = show(p).splitlines()
+              kept = [l for l in before if not l.strip() or json.loads(l).get("name") not in promoted]
+              if len(kept) == len(before):
+                  subprocess.run(["git", "checkout", "-q", "HEAD", "--", p], check=True)   # untouched, or only build_error written
+              elif not [l for l in kept if l.strip()] and p.count("/") == 3:
+                  if os.path.exists(p): os.remove(p)   # a per-PR file with nothing left
+              else:
+                  open(p, "w", encoding="utf-8").write("\n".join(kept) + ("\n" if kept else ""))
+          print(f"{len(promoted)} records promoted")
+          PY
+          python3 scripts/stats.py > /dev/null 2>&1 || true
+          git add -A -- data/staging data/trusted data/stats.json Tengoku
+          if git diff --cached --quiet; then echo "nothing promoted"; echo "branch=" >> "$GITHUB_OUTPUT"; exit 0; fi
+          branch="promote/cloud-$(date -u +%Y%m%dT%H%M%SZ)"
+          summary=$(git diff --cached --numstat -- data/trusted | awk '{n += $1} END {print n + 0}')
+          git -c user.name="${BOT:-tengoku-bot}" -c user.email="${BOT:-tengoku-bot}@users.noreply.github.com" \
+            commit -q -s -m "Promote: $summary records to trusted" -m "Promotion by the cloud promote workflow (scripts/promote.py, one build per source file)."
+          git switch -q -c "$branch"
+          git format-patch -1 --stdout > promotion.patch
+          git diff --stat HEAD~1 | tail -1
+          { echo "branch=$branch"; echo "summary=$summary"; echo "more=$more"; } >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: steps.promote.outputs.branch != ''
+        with: { name: promotion, path: promotion.patch, retention-days: 14 }
+      - name: The promotion PR, as the bot
+        if: steps.promote.outputs.branch != ''
+        id: pr
+        env:
+          BOT_TOKEN: ${{ secrets.TENGOKU_BOT_TOKEN }}
+          BRANCH: ${{ steps.promote.outputs.branch }}
+          SUMMARY: ${{ steps.promote.outputs.summary }}
+        run: |
+          if [ -z "$BOT_TOKEN" ]; then echo "::notice::no TENGOKU_BOT_TOKEN secret: the promotion was computed (artifact 'promotion') but not proposed"; exit 0; fi
+          git push -q "https://x-access-token:${BOT_TOKEN}@github.com/${TENGOKU_REPO}.git" "$BRANCH"
+          url=$(GH_TOKEN="$BOT_TOKEN" gh pr create -R "$TENGOKU_REPO" --head "$BRANCH" --title "Promote: $SUMMARY records to trusted" \
+            --body "Promotion by the cloud promote workflow: each source file's module was generated and built on the attested cache before its records moved to trusted.")
+          GH_TOKEN="$BOT_TOKEN" gh pr merge "$url" -R "$TENGOKU_REPO" --auto || true
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "$url"
+      - name: Wait for it (promotions share data/trusted and All.lean)
+        if: steps.pr.outputs.url != ''
+        env: { GH_TOKEN: "${{ github.token }}", URL: "${{ steps.pr.outputs.url }}", MORE: "${{ steps.promote.outputs.more }}" }
+        run: |
+          for _ in $(seq 1 180); do
+            st=$(gh pr view "$URL" -R "$TENGOKU_REPO" --json state -q .state)
+            [ "$st" = MERGED ] && break
+            [ "$st" = CLOSED ] && { echo "::warning::$URL was closed"; exit 1; }
+            if [ "$(gh pr view "$URL" -R "$TENGOKU_REPO" --json comments -q '[.comments[] | select(.body | test("Removed from the merge queue"))] | length')" != 0 ]; then
+              echo "::warning::$URL was removed from the merge queue: left open for a maintainer"; exit 1
+            fi
+            sleep 30
+          done
+          [ "$st" = MERGED ] || { echo "::warning::$URL not merged after 90 min"; exit 1; }
+          echo "merged: $URL"
+          if [ "$MORE" = true ]; then gh workflow run promote.yml -R "$TENGOKU_REPO" --ref main; fi
