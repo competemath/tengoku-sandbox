@@ -122,9 +122,13 @@ jobs:
                   open(p, "w", encoding="utf-8").write("\n".join(kept) + ("\n" if kept else ""))
           print(f"{len(promoted)} records promoted")
           PY
+          # nothing moved to trusted: nothing to propose (a regenerated stats.json alone is not a promotion)
+          if git diff --quiet -- data/trusted; then
+            git checkout -q -- . && git clean -qfd -- Tengoku data
+            echo "nothing promoted"; echo "branch=" >> "$GITHUB_OUTPUT"; exit 0
+          fi
           python3 scripts/stats.py > /dev/null 2>&1 || true
           git add -A -- data/staging data/trusted data/stats.json Tengoku
-          if git diff --cached --quiet; then echo "nothing promoted"; echo "branch=" >> "$GITHUB_OUTPUT"; exit 0; fi
           branch="promote/cloud-$(date -u +%Y%m%dT%H%M%SZ)"
           summary=$(git diff --cached --numstat -- data/trusted | awk '{n += $1} END {print n + 0}')
           git -c user.name="${BOT:-tengoku-bot}" -c user.email="${BOT:-tengoku-bot}@users.noreply.github.com" \
