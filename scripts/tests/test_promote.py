@@ -69,5 +69,42 @@ class PromoteSplitStaging(unittest.TestCase):
         shutil.rmtree(out)
 
 
+class PromoteVacuity(unittest.TestCase):
+    def test_a_vacuous_theorem_stays_in_staging(self):
+        # a pipeline staging group can land records whose file did not build yet, so the gate never assessed them
+        out = Path(tempfile.mkdtemp())
+        corpus = out / "corpus"
+        (corpus / "lib").mkdir(parents=True)
+        (corpus / "lib" / "A.lean").write_text("theorem seed : True := trivial\n")
+        (corpus / "lib" / "B.lean").write_text("theorem seed2 : True := trivial\n")
+        (out / "data" / "staging").mkdir(parents=True)
+        (out / "data" / "trusted").mkdir(parents=True)
+        (out / "data" / "staging" / "lib.jsonl").write_text(json.dumps(rec("Lib.a1", "lib/A.lean")) + "\n" + json.dumps(rec("Lib.b1", "lib/B.lean")) + "\n")
+        (out / "data" / "trusted" / "lib.jsonl").write_text("")
+        (out / "lakefile.toml").write_text('name = "Tengoku"\n')
+        (out / "tools" / "vacuity").mkdir(parents=True)
+        (out / "tools" / "vacuity" / "vacuity.lean").write_text("-- stand-in\n")
+        os.symlink(ROOT / "scripts", out / "scripts")
+        shim = out / "bin"
+        shim.mkdir()
+        (shim / "lake").write_text(
+            '#!/bin/sh\ncase "$*" in *--run*) echo "VACUOUS Lib.b1 Tengoku.Lib.B omega"; echo "    h : 1 < 0";; *) echo "Build completed successfully.";; esac\n'
+        )
+        (shim / "lake").chmod(0o755)
+        env = {**os.environ, "PATH": f"{shim}:{os.environ['PATH']}"}
+        r = subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "promote.py"), "--corpus", str(corpus), "--library", "lib", "--out", str(out)],
+            capture_output=True,
+            text=True,
+            env=env,
+            cwd=out,
+        )
+        trusted = [json.loads(line)["name"] for line in (out / "data" / "trusted" / "lib.jsonl").read_text().splitlines() if line.strip()]
+        staging = [json.loads(line) for line in (out / "data" / "staging" / "lib.jsonl").read_text().splitlines() if line.strip()]
+        self.assertEqual(trusted, ["Lib.a1"], r.stdout + r.stderr)
+        self.assertEqual([s["name"] for s in staging], ["Lib.b1"])
+        self.assertIn("vacuous", staging[0].get("build_error", ""))
+        shutil.rmtree(out)
+
 if __name__ == "__main__":
     unittest.main()
