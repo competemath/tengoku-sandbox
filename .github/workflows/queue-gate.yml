@@ -101,7 +101,7 @@ jobs:
               case "$who" in "$TENGOKU_BOT bank/"*) ;; *) soft=no ;; esac
             done
           fi
-          echo "pipeline staging group: $soft (PRs: $(echo $prs))"
+          echo "pipeline staging group: $soft (PRs: $(tr '\n' ' ' <<< "$prs"))"
           echo "soft=$soft" >> "$GITHUB_OUTPUT"
       - name: Generate candidates and build only them
         if: github.event_name == 'merge_group'
@@ -128,7 +128,7 @@ jobs:
             built=""; failed=""
             for t in $targets; do if lake build "$t" >/dev/null 2>&1; then built="$built $t"; else failed="$failed $t"; fi; done
             for t in $failed; do echo "::warning::$t does not build yet: its records stay in staging (promotion retries them)"; done
-            echo "the pipeline's staging group goes on: $(echo $built | wc -w) candidate(s) built, $(echo $failed | wc -w) not yet"
+            echo "the pipeline's staging group goes on: $(wc -w <<< "$built") candidate(s) built, $(wc -w <<< "$failed") not yet"
             targets="$built"
           fi
           echo "targets=$targets" >> "$GITHUB_OUTPUT"
