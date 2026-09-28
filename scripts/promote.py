@@ -72,7 +72,11 @@ def vacuity_check(cand_mod: str, recs: list[dict], out: Path) -> tuple[int, str]
     if rc != 0:
         return 1, "the vacuity checker failed on this file\n" + o
     names = {r["name"] for r in recs} | {r["name"].rsplit(".", 1)[-1] for r in recs}
-    hit = [m.group(1) for m in re.finditer(r"^VACUOUS (\S+) (\S+) (\S+)$", o, re.M) if m.group(1) in names or m.group(1).rsplit(".", 1)[-1] in names]
+    hit = [
+        m.group(1)
+        for m in re.finditer(r"^VACUOUS (\S+) (\S+) (\S+)$", o, re.M)
+        if m.group(1) in names or m.group(1).rsplit(".", 1)[-1] in names
+    ]
     if hit:
         return 1, f"vacuous (its hypotheses can never all hold): {', '.join(hit)}; a PR acknowledging it (Vacuous-Ack) is needed\n" + o
     return 0, ""

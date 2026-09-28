@@ -79,7 +79,9 @@ class PromoteVacuity(unittest.TestCase):
         (corpus / "lib" / "B.lean").write_text("theorem seed2 : True := trivial\n")
         (out / "data" / "staging").mkdir(parents=True)
         (out / "data" / "trusted").mkdir(parents=True)
-        (out / "data" / "staging" / "lib.jsonl").write_text(json.dumps(rec("Lib.a1", "lib/A.lean")) + "\n" + json.dumps(rec("Lib.b1", "lib/B.lean")) + "\n")
+        (out / "data" / "staging" / "lib.jsonl").write_text(
+            json.dumps(rec("Lib.a1", "lib/A.lean")) + "\n" + json.dumps(rec("Lib.b1", "lib/B.lean")) + "\n"
+        )
         (out / "data" / "trusted" / "lib.jsonl").write_text("")
         (out / "lakefile.toml").write_text('name = "Tengoku"\n')
         (out / "tools" / "vacuity").mkdir(parents=True)
@@ -105,6 +107,7 @@ class PromoteVacuity(unittest.TestCase):
         self.assertEqual([s["name"] for s in staging], ["Lib.b1"])
         self.assertIn("vacuous", staging[0].get("build_error", ""))
         shutil.rmtree(out)
+
 
 if __name__ == "__main__":
     unittest.main()
