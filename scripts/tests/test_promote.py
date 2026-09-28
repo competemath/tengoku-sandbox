@@ -43,6 +43,8 @@ class PromoteSplitStaging(unittest.TestCase):
         (out / "data" / "staging" / "lib" / "pr-7.jsonl").write_text(json.dumps(rec("Lib.b1", "lib/B.lean")) + "\n")
         (out / "data" / "trusted" / "lib.jsonl").write_text("")
         (out / "lakefile.toml").write_text('name = "Tengoku"\n')
+        (out / "tools" / "vacuity").mkdir(parents=True)
+        (out / "tools" / "vacuity" / "vacuity.lean").write_text("-- stand-in (the shim reports nothing vacuous)\n")
         os.symlink(ROOT / "scripts", out / "scripts")  # promote.py runs scripts/generate.py from the tree root
         shim = out / "bin"
         shim.mkdir()
