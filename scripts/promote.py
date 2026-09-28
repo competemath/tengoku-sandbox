@@ -32,6 +32,7 @@ not build.
 import argparse
 import fcntl
 import json
+import re
 import subprocess
 import sys
 import time
@@ -58,6 +59,23 @@ def module_of(lib_ns: str, corpus_prefix: str, source_path: str, lib_dir: Path) 
     if rel.parts and rel.parts[0] == corpus_prefix:
         rel = Path(*rel.parts[1:])
     return f"Tengoku.{lib_ns}." + ".".join(rel.with_suffix("").parts), lib_dir / rel
+
+
+def vacuity_check(cand_mod: str, recs: list[dict], out: Path) -> tuple[int, str]:
+    """The PR gate asks for a Vacuous-Ack when a theorem's hypotheses can never all hold, but it can only assess a
+    module that builds; a pipeline staging group lands records whose file did not build yet. Before such a record is
+    trusted its theorem is checked here: a vacuous one stays in staging (a human acknowledges it in a PR)."""
+    checker = out / "tools" / "vacuity" / "vacuity.lean"
+    if not checker.exists():  # fail closed: nothing is trusted unchecked
+        return 1, f"the vacuity checker ({checker.relative_to(out)}) is missing, so nothing can be trusted"
+    rc, o = run(["lake", "env", "lean", "--run", str(checker), cand_mod], out, 1800)
+    if rc != 0:
+        return 1, "the vacuity checker failed on this file\n" + o
+    names = {r["name"].removeprefix("_root_.") for r in recs}  # full names only: `foo` in another namespace is not this record
+    hit = [m.group(1) for m in re.finditer(r"^VACUOUS (\S+) (\S+) (\S+)$", o, re.M) if m.group(1).removeprefix("_root_.") in names]
+    if hit:
+        return 1, f"vacuous (its hypotheses can never all hold): {', '.join(hit)}; a PR acknowledging it (Vacuous-Ack) is needed\n" + o
+    return 0, ""
 
 
 def run(cmd: list[str], cwd: Path, timeout: float) -> tuple[int, str]:
@@ -107,9 +125,9 @@ def main() -> int:
     def dump_staging(recs):
         """Write the remaining records back to the files they came from (names are unique per library);
         a per-PR file with nothing left is removed, the flat file is kept (possibly empty)."""
-        keep = {r.get("name") for r in recs}
+        keep = {r.get("name"): r for r in recs}
         for f in staging_files():
-            mine = [r for r in load(f) if r.get("name") in keep]
+            mine = [keep[r.get("name")] for r in load(f) if r.get("name") in keep]  # the in-memory record: its build_error too
             if mine or f == staging_p:
                 dump(f, mine)
             else:
@@ -153,6 +171,8 @@ def main() -> int:
                     rc, o = run(["lake", "build", cand_mod], out, 3600)
                     if rc == 0 and "declaration uses `sorry`" in o:
                         rc, o = 1, "a trusted module may not use sorry\n" + o
+                    if rc == 0:
+                        rc, o = vacuity_check(cand_mod, recs, out)
                 if rc != 0:
                     err = " ".join(o.split())[-1500:]
                     ids = {id(r) for r in recs}

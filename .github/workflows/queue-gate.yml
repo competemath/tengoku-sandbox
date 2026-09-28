@@ -82,23 +82,56 @@ jobs:
         if: github.event_name == 'merge_group'
         env: { GH_TOKEN: "${{ github.token }}" }
         run: scripts/cache.sh get 2>&1 | tail -3
+      # A group made only of the pipeline's own staging PRs (author vars.TENGOKU_BOT, branch bank/…, nothing but
+      # data/staging/ changed) is not held back by a file that does not build yet: those records land in staging and
+      # stay there (promotion builds every file again, checks vacuity, and trusts only what builds). Everything else —
+      # a contributor's PR, any `sorry`, the axioms of what did build — is as strict as before.
+      # decided before any Lean runs: the build step compiles the group's code and must never see a token
+      - name: Is this group only the pipeline's staging PRs?
+        if: github.event_name == 'merge_group'
+        id: soft
+        env: { GH_TOKEN: "${{ github.token }}", TENGOKU_BOT: "${{ vars.TENGOKU_BOT }}", BASE: "${{ github.event.merge_group.base_sha }}" }
+        run: |
+          soft=no
+          prs="$(git log --format=%s "$BASE..HEAD" | sed -nE 's/.*\(#([0-9]+)\)$/\1/p')"
+          if [ -n "$TENGOKU_BOT" ] && [ -n "$prs" ] && ! git diff --name-only "$BASE" HEAD | grep -qv '^data/staging/'; then
+            soft=yes
+            for p in $prs; do
+              who="$(gh pr view "$p" -R "$GITHUB_REPOSITORY" --json author,headRefName -q '.author.login + " " + .headRefName' || echo "?")"
+              case "$who" in "$TENGOKU_BOT bank/"*) ;; *) soft=no ;; esac
+            done
+          fi
+          echo "pipeline staging group: $soft (PRs: $(tr '\n' ' ' <<< "$prs"))"
+          echo "soft=$soft" >> "$GITHUB_OUTPUT"
       - name: Generate candidates and build only them
         if: github.event_name == 'merge_group'
         id: build
         shell: bash
+        env: { SOFT: "${{ steps.soft.outputs.soft }}", BASE: "${{ github.event.merge_group.base_sha }}" }
         run: |
           set -o pipefail
-          python3 scripts/ci/queue_targets.py "${{ github.event.merge_group.base_sha }}" HEAD > targets.txt 2> helper.log || { cat helper.log | tee -a build.log; exit 1; }
+          python3 scripts/ci/queue_targets.py "$BASE" HEAD > targets.txt 2> helper.log || { cat helper.log | tee -a build.log; exit 1; }
           cat helper.log
           # `grep` exits 1 on no match; under `bash -e -o pipefail` that alone killed the first tooling-only group.
           targets="$(grep -E '^Tengoku\.' targets.txt | tr '\n' ' ' || true)"
-          echo "targets=$targets" >> "$GITHUB_OUTPUT"
-          if [ -z "$targets" ]; then echo "no Lean targets in this group"; exit 0; fi
+          if [ -z "$targets" ]; then echo "targets=" >> "$GITHUB_OUTPUT"; echo "no Lean targets in this group"; exit 0; fi
           echo "building: $targets"
+          set +e
           # shellcheck disable=SC2086  # targets is a space-separated module list
           lake build $targets 2>&1 | tee -a build.log
+          rc=${PIPESTATUS[0]}
+          set -e
           # lake reports sorry as a warning with file:line:col; restate it as an error so the ejection comment can name the record
           if grep -q "declaration uses .sorry." build.log; then grep -m1 "declaration uses .sorry." build.log | sed -E 's/^.*warning: /error: /' | tee -a build.log; exit 1; fi
+          if [ "$rc" != 0 ]; then
+            if [ "$SOFT" != yes ]; then exit 1; fi
+            built=""; failed=""
+            for t in $targets; do if lake build "$t" >/dev/null 2>&1; then built="$built $t"; else failed="$failed $t"; fi; done
+            for t in $failed; do echo "::warning::$t does not build yet: its records stay in staging (promotion retries them)"; done
+            echo "the pipeline's staging group goes on: $(wc -w <<< "$built") candidate(s) built, $(wc -w <<< "$failed") not yet"
+            targets="$built"
+          fi
+          echo "targets=$targets" >> "$GITHUB_OUTPUT"
       - name: Axioms of every new declaration
         if: github.event_name == 'merge_group' && steps.build.outputs.targets != ''
         shell: bash
