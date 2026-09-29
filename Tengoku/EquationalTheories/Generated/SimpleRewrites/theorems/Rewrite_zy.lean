@@ -1,4 +1,5 @@
--- Tengoku.EquationalTheories.Generated.SimpleRewrites.theorems.Rewrite_zy: verified translations of equational_theories/Generated/SimpleRewrites/theorems/Rewrite_zy.lean (661 theorems)
+-- Tengoku.EquationalTheories.Generated.SimpleRewrites.theorems.Rewrite_zy: verified translations of equational_theories/Generated/SimpleRewrites/theorems/Rewrite_zy.lean (662 theorems)
+import Tengoku
 import Tengoku.Tactic
 import Tengoku.EquationalTheories.Deps.Magma
 import Lean
@@ -2002,6 +2003,9 @@ theorem Equation4637_implies_Equation4636 (G : Type*) [Magma G] (h : Equation463
 
 theorem Equation4642_implies_Equation4635 (G : Type*) [Magma G] (h : Equation4642 G) : Equation4635 G
 := λ x y => h x y y
+
+theorem Selftest.softGood : (3 : Nat) + 4 = 7
+:= rfl
 
 end SimpleRewrites
 

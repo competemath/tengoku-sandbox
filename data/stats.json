@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-09-27T10:07:29Z",
-  "last_promoted_at": "2026-09-27T10:07:17Z",
+  "generated_at": "2026-09-29T03:02:40Z",
+  "last_promoted_at": "2026-09-29T03:02:17Z",
   "libraries": {
     "abc-exceptions": {
       "staging": 0,
@@ -153,10 +153,10 @@
       "trusted": 0
     },
     "equational-theories": {
-      "last_promoted_at": "2026-09-27T10:07:17Z",
+      "last_promoted_at": "2026-09-29T03:02:17Z",
       "staging": 79,
       "tentative": 13193,
-      "trusted": 9249
+      "trusted": 9250
     },
     "erdos-simonovits-degeneracy": {
       "staging": 0,
@@ -1192,10 +1192,10 @@
   "library_count": 237,
   "toolchain": "leanprover/lean4:v4.34.0-rc2",
   "totals": {
-    "all": 599520,
+    "all": 599521,
     "staging": 79,
     "tentative": 400941,
-    "trusted": 198500
+    "trusted": 198501
   },
-  "tree_commit": "7cd2ef969a84489f70160109920311c5d2a763fb"
+  "tree_commit": "932b4225de14bb48d520235c21962d011ac8bf27"
 }
