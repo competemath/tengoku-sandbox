@@ -321,7 +321,7 @@ def apply_credit(statement: str, credit: str, evidence: str) -> str:
     if not m:
         return f"/-- {credit}\n\n{note} -/\n{statement.lstrip()}"
     body = "\n".join(l for l in m.group(2).split("\n") if not re.match(r"\s*Authors?:", l)).rstrip()
-    return f"{m.group(1)}{body}\n\n{credit}\n{note} {m.group(3)}{statement[m.end() :]}"
+    return f"{statement[: m.start()]}{m.group(1)}{body}\n\n{credit}\n{note} {m.group(3)}{statement[m.end() :]}"
 
 
 def tombstoned_names(out: Path, library: str) -> list[str]:

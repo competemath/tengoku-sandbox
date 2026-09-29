@@ -98,8 +98,28 @@ class Retractions(unittest.TestCase):
         r.commit("bad correction")
         rc, out = self.check(r)
         self.assertNotEqual(rc, 0)
-        self.assertIn("credit is an `Author:` line", out)
+        self.assertIn("credit is one `Author:` line", out)
         self.assertIn("evidence is an http(s) link", out)
+
+    def test_a_credit_correction_names_one_author_line(self):
+        for credit in ("Author: Alice\nAuthor: Mallory", "Author: Alice Author: Mallory"):
+            r = Repo()
+            r.append(T, line(credit_correction="Lib.old", credit=credit, evidence="https://example.org/e"))
+            r.commit("two authors")
+            rc, out = self.check(r)
+            self.assertNotEqual(rc, 0, credit)
+            self.assertIn("credit is one `Author:` line", out)
+
+    def test_a_note_finds_a_tombstone_in_a_per_library_file(self):
+        r = Repo()
+        r.git("checkout", "-q", "main")
+        r.write("data/trusted/lib/pr-7.jsonl", line(tombstone="Lib.old", category="duplicate", reason="same as x"))
+        r.commit("base: the tombstone in a per-library file")
+        r.git("checkout", "-q", "-B", "pr")
+        r.append(T, line(tombstone_note="Lib.old", note="see Nat.two", see=["tengoku:Nat.two"]))
+        r.commit("note")
+        rc, out = self.check(r)
+        self.assertEqual(rc, 0, out)
 
     def test_a_tombstone_category_never_changes(self):
         r = Repo()

@@ -57,10 +57,10 @@ class Repo:
 
     def write(self, p, s):
         (self.dir / p).parent.mkdir(parents=True, exist_ok=True)
-        (self.dir / p).write_text(s)
+        (self.dir / p).write_text(s, encoding="utf-8")
 
     def append(self, p, s):
-        with (self.dir / p).open("a") as f:
+        with (self.dir / p).open("a", encoding="utf-8") as f:
             f.write(s)
 
     def commit(self, msg, signoff=True):

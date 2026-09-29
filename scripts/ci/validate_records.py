@@ -34,7 +34,7 @@ def tier(p: str) -> str:
 def tombstone_categories() -> dict[str, str]:
     """name -> the category its first tombstone set (a category never changes)."""
     out: dict[str, str] = {}
-    for f in (ROOT / "data" / "trusted").glob("*.jsonl"):
+    for f in (ROOT / "data" / "trusted").rglob("*.jsonl"):  # flat and per-library files
         for line in f.open(encoding="utf-8"):
             if '"tombstone"' in line:
                 try:
@@ -48,7 +48,7 @@ def tombstone_categories() -> dict[str, str]:
 
 def tombstoned_names() -> set[str]:
     out = set()
-    for f in (ROOT / "data" / "trusted").glob("*.jsonl"):
+    for f in (ROOT / "data" / "trusted").rglob("*.jsonl"):  # flat and per-library files
         for line in f.open(encoding="utf-8"):
             if '"tombstone"' in line:  # decoded as JSON: a name may be written with \u escapes
                 try:
@@ -62,7 +62,7 @@ def tombstoned_names() -> set[str]:
 
 def trusted_names() -> set[str]:
     out = set()
-    for f in (ROOT / "data" / "trusted").glob("*.jsonl"):
+    for f in (ROOT / "data" / "trusted").rglob("*.jsonl"):  # flat and per-library files
         for line in f.open("rb"):
             m = re.search(rb'"name"\s*:\s*"([^"]+)"', line)
             if m:
@@ -122,7 +122,7 @@ for st, p in changed_files(base, head):
                     tombstoned = tombstoned_names() | {
                         json.loads(x)["tombstone"]
                         for _, q in changed_files(base, head)
-                        if match(q, ["data/trusted/*.jsonl"])
+                        if match(q, ["data/trusted/*.jsonl", "data/trusted/*/*.jsonl"])
                         for _, x in added_lines(base, head, q)
                         if '"tombstone"' in x and x.strip()
                     }
@@ -134,8 +134,9 @@ for st, p in changed_files(base, head):
             else:
                 if r["credit_correction"] not in known:
                     errors.append(f"{p}:{no}: credit_correction for unknown name {r['credit_correction']}")
-                if not re.search(r"\bAuthors?:", str(r.get("credit", ""))):
-                    errors.append(f"{p}:{no}: credit is an `Author:` line")
+                credit = str(r.get("credit", ""))
+                if not re.fullmatch(r"Authors?:[^\r\n]+", credit) or len(re.findall(r"\bAuthors?:", credit)) != 1:
+                    errors.append(f"{p}:{no}: credit is one `Author:` line (a single line with a single `Author:`)")
                 if any(d in str(r.get(k, "")) for k in ("credit", "evidence") for d in ("-/", "/-")):
                     errors.append(f"{p}:{no}: credit and evidence may not contain `-/` or `/-` (they are written into a Lean doc comment)")
                 if not LINKISH.fullmatch(str(r.get("evidence", ""))):
