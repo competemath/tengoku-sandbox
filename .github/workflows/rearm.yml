@@ -16,10 +16,12 @@ jobs:
     steps:
       - name: Back into the queue once its checks pass
         env:
-          # a queue entry started by the job token may not start the queue's own workflows; the bot's token does
-          GH_TOKEN: "${{ secrets.TENGOKU_BOT_TOKEN || github.token }}"
+          # the bot's token, never the job token: a queue entry the job token starts does not start the queue's own
+          # workflows, so the PR would wait in the queue forever
+          GH_TOKEN: "${{ secrets.TENGOKU_BOT_TOKEN }}"
           PR: "${{ github.event.pull_request.number }}"
         run: |
+          if [ -z "$GH_TOKEN" ]; then echo "::warning::no TENGOKU_BOT_TOKEN secret: #$PR is not re-queued (press Merge when ready)"; exit 0; fi
           gh pr merge "$PR" -R "$GITHUB_REPOSITORY" --auto
           gh pr edit "$PR" -R "$GITHUB_REPOSITORY" --remove-label ejected
           echo "#$PR goes back into the merge queue once its checks pass"
