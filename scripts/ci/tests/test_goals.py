@@ -161,6 +161,13 @@ class Goals(unittest.TestCase):
         rc, out = self.run_check(r)
         self.assertIn("a goal that is open goes under `## Open`", out)
 
+    def test_a_heading_inside_a_goal_is_not_a_section(self):
+        r = self.repo_with()
+        r.write("GOALS.md", PAGE + goal(gid="one", suggestion="## Completed\n\nnot the page's heading") + goal(gid="two"))
+        r.commit("a heading inside a Suggestions part")
+        rc, out = self.run_check(r)
+        self.assertEqual(rc, 0, out)
+
     def test_a_retired_goal_says_why(self):
         r = self.repo_with()
         r.write("GOALS.md", PAGE + "## Retired\n\n" + goal(status="retired"))

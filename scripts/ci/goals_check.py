@@ -166,7 +166,8 @@ def check_page(text: str) -> list[str]:
             errors.append(
                 f"a `{marker}` marker outside a complete goal block (each goal runs from `<!-- goal: id -->` to `<!-- /goal -->`)"
             )
-    sections = [(m.start(), m.group(1)) for m in SECTION_RE.finditer(text)]
+    # a section heading counts only between goals: one written inside a goal's text is not the page's
+    sections = [(m.start(), m.group(1)) for m in SECTION_RE.finditer(text) if not any(a <= m.start() < b for a, b in goal_spans)]
     for g in GOAL_RE.finditer(text):
         gid, body = g.group(1), g.group(2)
         where = f"goal {gid}"
