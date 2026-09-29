@@ -101,6 +101,26 @@ class Retractions(unittest.TestCase):
         self.assertIn("credit is an `Author:` line", out)
         self.assertIn("evidence is an http(s) link", out)
 
+    def test_a_tombstone_category_never_changes(self):
+        r = Repo()
+        r.git("checkout", "-q", "main")
+        r.append(T, line(tombstone="Lib.old", category="duplicate", reason="same as x"))
+        r.commit("base")
+        r.git("checkout", "-q", "-B", "pr")
+        r.append(T, line(tombstone="Lib.old", category="incorrect", reason="actually wrong"))
+        r.commit("recategorise")
+        rc, out = self.check(r)
+        self.assertNotEqual(rc, 0)
+        self.assertIn("already tombstoned as 'duplicate'", out)
+
+    def test_a_correction_cannot_close_the_doc_comment(self):
+        r = Repo()
+        r.append(T, line(credit_correction="Lib.old", credit="Author: X", evidence="https://example.org/-/"))
+        r.commit("delimiter")
+        rc, out = self.check(r)
+        self.assertNotEqual(rc, 0)
+        self.assertIn("may not contain `-/`", out)
+
     def test_a_credit_correction_for_a_trusted_record_passes(self):
         r = Repo()
         r.append(

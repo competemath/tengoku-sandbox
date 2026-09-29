@@ -31,6 +31,21 @@ def tier(p: str) -> str:
     return p.split("/")[1]
 
 
+def tombstone_categories() -> dict[str, str]:
+    """name -> the category its first tombstone set (a category never changes)."""
+    out: dict[str, str] = {}
+    for f in (ROOT / "data" / "trusted").glob("*.jsonl"):
+        for line in f.open(encoding="utf-8"):
+            if '"tombstone"' in line:
+                try:
+                    r = json.loads(line)
+                except ValueError:
+                    continue
+                if isinstance(r, dict) and "tombstone" in r and r.get("category"):
+                    out.setdefault(str(r["tombstone"]), str(r["category"]))
+    return out
+
+
 def tombstoned_names() -> set[str]:
     out = set()
     for f in (ROOT / "data" / "trusted").glob("*.jsonl"):
@@ -57,6 +72,7 @@ def trusted_names() -> set[str]:
 
 known = None
 tombstoned = None
+categories = None
 LINKISH = re.compile(r"https?://\S+")
 for st, p in changed_files(base, head):
     if not match(
@@ -82,6 +98,11 @@ for st, p in changed_files(base, head):
                     errors.append(f"{p}:{no}: tombstone missing {k}")
             if "category" in r and r["category"] not in schema["tombstone_categories"]:
                 errors.append(f"{p}:{no}: tombstone category {r['category']!r} is not one of {', '.join(schema['tombstone_categories'])}")
+            if categories is None:
+                categories = tombstone_categories()
+            first = categories.setdefault(str(r["tombstone"]), str(r.get("category", "")))
+            if r.get("category") and first and r["category"] != first:
+                errors.append(f"{p}:{no}: {r['tombstone']} is already tombstoned as {first!r}; a category never changes")
             if known is None:
                 known = trusted_names()
             if t == "trusted" and r["tombstone"] not in known:
@@ -115,6 +136,8 @@ for st, p in changed_files(base, head):
                     errors.append(f"{p}:{no}: credit_correction for unknown name {r['credit_correction']}")
                 if not re.search(r"\bAuthors?:", str(r.get("credit", ""))):
                     errors.append(f"{p}:{no}: credit is an `Author:` line")
+                if any(d in str(r.get(k, "")) for k in ("credit", "evidence") for d in ("-/", "/-")):
+                    errors.append(f"{p}:{no}: credit and evidence may not contain `-/` or `/-` (they are written into a Lean doc comment)")
                 if not LINKISH.fullmatch(str(r.get("evidence", ""))):
                     errors.append(f"{p}:{no}: evidence is an http(s) link to what shows the plagiarism")
             continue

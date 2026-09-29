@@ -311,6 +311,8 @@ def credit_corrections(out: Path, library: str) -> dict[str, tuple[str, str]]:
 def apply_credit(statement: str, credit: str, evidence: str) -> str:
     """The statement with its credit corrected (the record stays as it was): the docstring's Author lines give way
     to the corrected one, and the evidence is linked."""
+    # nothing written into the doc comment may end it early (the validator refuses these too)
+    credit, evidence = (x.replace("-/", "- /").replace("/-", "/ -") for x in (credit, evidence))
     note = f"Credit corrected; evidence: {evidence}"
     keyword = re.search(r"^\s*(?:@\[[^\]]*\]\s*)*(?:\w+\s+)*?(?:theorem|lemma)\b", statement, re.M)
     m = re.search(r"(/--)(.*?)(-/)", statement, re.S)  # the docstring, even after a leading ordinary comment
