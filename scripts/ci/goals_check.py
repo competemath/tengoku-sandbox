@@ -153,6 +153,11 @@ def check_page(text: str) -> list[str]:
             errors.append(f"{where}: needs exactly one `<!-- suggestions -->` … `<!-- /suggestions -->` part")
         elif body.index("<!-- suggestions -->") < body.index("<!-- /people -->"):
             errors.append(f"{where}: Suggestions go after the people part")
+        if body.count("<details>") != body.count("</details>"):  # "<details><summary>" counts as an opening too
+            errors.append(f"{where}: every `<details>` needs its `</details>` (a field left open breaks the page)")
+        opened = people[0].count("<details><summary>")
+        if opened != people[0].count("</details>"):
+            errors.append(f"{where}: a field in the people part is not closed with `</details>`")
         fields = FIELD_RE.findall(people[0])
         for f in REQUIRED:
             if f not in fields:
@@ -223,7 +228,7 @@ def proved_goals(text: str) -> list[tuple[str, str]]:
         block = re.search(r"<details><summary>The statement</summary>.*?```lean\n(.*?)```", people[0], re.S)
         t = statement_type(block.group(1)) if block else None
         if t:
-            wanted[t] = gid
+            wanted.setdefault(t, []).append(gid)
     found = []
     if not wanted:
         return found
@@ -236,8 +241,8 @@ def proved_goals(text: str) -> list[tuple[str, str]]:
             except ValueError:
                 continue
             t = statement_type(str(r.get("statement", "")))
-            if t in wanted:
-                found.append((wanted[t], r["name"]))
+            for gid in wanted.get(t, ()):
+                found.append((gid, r["name"]))
     return found
 
 
@@ -251,6 +256,8 @@ def main() -> None:
     if PAGE not in files:
         print("goals: GOALS.md unchanged")
         return
+    if blob(head, PAGE) is None:
+        fail("GOALS.md is deleted by this PR; the goals page stays (edit or remove goals inside it)")
     head_text = text_at(head)
     errors = check_page(head_text) + check_refs(head_text, base, head)
     if ai and ai_changed_people(text_at(base), head_text):

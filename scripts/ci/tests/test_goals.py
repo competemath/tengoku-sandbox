@@ -217,6 +217,43 @@ class Goals(unittest.TestCase):
         self.assertNotEqual(rc, 0)
         self.assertIn("may change only GOALS.md", out)
 
+    def test_deleting_the_page_fails(self):
+        r = self.repo_with(PAGE + goal())
+        (r.dir / "GOALS.md").unlink()
+        r.commit("delete")
+        rc, out = self.run_check(r)
+        self.assertNotEqual(rc, 0)
+        self.assertIn("GOALS.md is deleted", out)
+
+    def test_an_unclosed_field_fails(self):
+        r = self.repo_with()
+        broken = goal().replace("It is small.\n\n</details>", "It is small.\n\n", 1)
+        r.write("GOALS.md", PAGE + broken)
+        r.commit("unclosed")
+        rc, out = self.run_check(r)
+        self.assertNotEqual(rc, 0)
+        self.assertIn("not closed", out)
+
+    def test_two_goals_with_one_statement_are_both_reported(self):
+        r = self.repo_with()
+        rec = {
+            **GOOD,
+            "name": "Lib.twice",
+            "statement": "theorem Lib.twice (n : Nat) : n = n",
+            "status": "trusted",
+            "promoted_at": "2026-01-01T00:00:00Z",
+        }
+        r.git("checkout", "-q", "main")
+        r.append("data/trusted/lib.jsonl", json.dumps(rec) + "\n")
+        r.commit("proved")
+        r.git("checkout", "-q", "-B", "pr")
+        r.write("GOALS.md", PAGE + goal(gid="one") + goal(gid="two"))
+        r.commit("goals")
+        rc, out = self.run_check(r)
+        self.assertEqual(rc, 0, out)
+        self.assertIn("goal one looks proved", out)
+        self.assertIn("goal two looks proved", out)
+
     def test_people_may_change_anything(self):
         r = self.repo_with(PAGE + goal(suggestion="- Old suggestion."))
         r.write("GOALS.md", PAGE + goal(suggestion="", why="Clearer now."))
