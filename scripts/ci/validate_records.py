@@ -149,7 +149,8 @@ for st, p in changed_files(base, head):
                 errors.append(f"{p}:{no}: {n} is already trusted")
         # a contributor names headlines when adding records; promotion carries them into trusted, many PRs at once
         if r.get("headline") is True and t != "trusted":
-            if not re.search(r"\bAuthors?:", str(r.get("statement", ""))):
+            doc = re.search(r"/--(.*?)-/", str(r.get("statement", "")), re.S)  # the credit is in the docstring
+            if not doc or not re.search(r"^\s*Authors?:", doc.group(1), re.M):
                 errors.append(f"{p}:{no}: a headline credits its author: an `Author:` line in the statement's docstring")
             headlines.append(str(n))
         if "sorry" in str(r.get("proof", "")) and t == "trusted":
