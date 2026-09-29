@@ -1,0 +1,21 @@
+cff-version: 1.2.0
+message: "If you use Tengoku, please cite the version you used (release vX.Y.Z) and the commit its snapshot.json names."
+type: dataset
+title: "Tengoku: one verified Lean 4 tree of formal mathematics, with provenance"
+abstract: >-
+  Tengoku gathers theorems from many formal mathematics libraries into one Lean 4 tree on a single pinned
+  toolchain. A theorem is trusted only once the tree builds with it and it uses no sorry and only the standard
+  axioms; every record carries a link to its source at a fixed commit, its licence, and its credit. Monthly
+  snapshots publish the dataset with a manifest and build provenance.
+authors:
+  - name: "Tengoku contributors"
+  - family-names: "Bashir"
+    given-names: "Mikael"
+repository-code: "https://github.com/competemath/tengoku"
+url: "https://competemath.com/tengoku"
+license: Apache-2.0
+keywords:
+  - Lean 4
+  - formal mathematics
+  - theorem proving
+  - provenance

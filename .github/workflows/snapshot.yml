@@ -1,0 +1,63 @@
+# A citable snapshot of the library, monthly and on demand: the dataset (every trusted record with its
+# statement, proof, source, licence and credit; scripts/snapshot.py) and its manifest (version, date, commit,
+# toolchain, counts, the dataset's sha256), published as the release `vX.Y.Z` with build provenance. The version
+# comes from comparing with the previous release (scripts/snapshot.py says how: a new toolchain or a removed field
+# is major, added theorems minor, corrections a patch); a month with no change publishes nothing. Zenodo mints a
+# DOI for every release. A paper cites the version; anyone can check the files against the manifest and the
+# attestation.
+name: snapshot
+on:
+  schedule:
+    - cron: "17 3 1 * *"   # the 1st of every month
+  workflow_dispatch:
+permissions: {}
+concurrency:
+  group: snapshot
+  cancel-in-progress: false
+defaults:
+  run:
+    shell: bash
+jobs:
+  snapshot:
+    if: github.ref == 'refs/heads/main'   # a snapshot is of main, and of exactly the commit it tags
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions: { contents: write, id-token: write, attestations: write }
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: { ref: "${{ github.sha }}", persist-credentials: false }
+      - name: The previous release (its manifest and dataset decide the version)
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          prev="$(gh api "repos/$GITHUB_REPOSITORY/releases" --paginate --jq '.[].tag_name' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1 || true)"
+          if [ -z "$prev" ]; then echo "no previous release: this one is 1.0.0"; exit 0; fi
+          gh release download "$prev" -R "$GITHUB_REPOSITORY" -p snapshot.json -p tengoku-dataset.jsonl.gz -D previous
+          echo "previous release: $prev"
+      - name: Dataset and manifest
+        id: snap
+        run: |
+          args=(--out snapshot); [ -d previous ] && args+=(--previous previous)
+          python3 scripts/snapshot.py "${args[@]}"
+          if [ -f snapshot/unchanged ]; then echo "changed=false" >> "$GITHUB_OUTPUT"; exit 0; fi
+          cp CITATION.cff snapshot/
+          ls -la snapshot
+          { echo "changed=true"
+            echo "version=$(python3 -c 'import json; print(json.load(open("snapshot/snapshot.json"))["version"])')"
+            echo "date=$(python3 -c 'import json; print(json.load(open("snapshot/snapshot.json"))["date"])')"; } >> "$GITHUB_OUTPUT"
+      - name: Attest the files
+        if: steps.snap.outputs.changed == 'true'
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        with: { subject-path: "snapshot/*" }
+      - name: Publish the release
+        if: steps.snap.outputs.changed == 'true'
+        env: { GH_TOKEN: "${{ github.token }}", VERSION: "${{ steps.snap.outputs.version }}", DATE: "${{ steps.snap.outputs.date }}" }
+        run: |
+          # a published version is never changed; the tag decides, not the release (a release can be deleted while its
+          # tag stays)
+          tag="v$VERSION"
+          at="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" --jq .object.sha 2>/dev/null || true)"
+          if [ -n "$at" ] && [ "$at" != "$GITHUB_SHA" ]; then echo "::error::$tag already points at $at, not $GITHUB_SHA"; exit 1; fi
+          if gh release view "$tag" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then echo "$tag already snapshots $GITHUB_SHA"; exit 0; fi
+          records="$(python3 -c 'import json; print(json.load(open("snapshot/snapshot.json"))["dataset"]["records"])')"
+          gh release create "$tag" snapshot/* -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "Tengoku $tag ($DATE)" \
+            --notes "A citable snapshot of Tengoku: ${records} trusted records. \`snapshot.json\` names the commit, toolchain and counts, and the sha256 of the published dataset; every file carries build provenance (\`gh attestation verify <file> -R $GITHUB_REPOSITORY\`). Versions: a new toolchain or a removed field is a new major version, added theorems a minor one, corrections a patch. How to cite: CITATION.cff."
