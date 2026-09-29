@@ -67,13 +67,13 @@ class Repo:
         self.git("add", "-A")
         self.git("commit", "-q", "-m", msg + ("\n\nSigned-off-by: t <t@t>" if signoff else ""))
 
-    def gate(self, script, *args):
+    def gate(self, script, *args, env=None):
         r = subprocess.run(
             [sys.executable, str(CI / script), *(args or ("main", "pr"))],
             cwd=self.dir,
             capture_output=True,
             text=True,
-            env={**os.environ, "TENGOKU_CI_ROOT": str(self.dir)},
+            env={**os.environ, "TENGOKU_CI_ROOT": str(self.dir), **(env or {})},
         )
         return r.returncode, (r.stdout + r.stderr)
 
