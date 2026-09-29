@@ -1,22 +1,26 @@
 # Writing goals
 
-[GOALS.md](../GOALS.md) lists results people would like Tengoku to reach. Each goal opens into the same
-fields, so a reader always knows where to look.
+[GOALS.md](../GOALS.md) lists what people would like Tengoku to have: a theorem, a library translated, a tool,
+anything its users want in it. Each goal opens into the same fields, so a reader always knows where to look.
 
 ## The fields
 
 | Field | What goes in it |
 |---|---|
-| **The statement** | The exact Lean statement, in a ```` ```lean ```` block, if it can be written down; otherwise one sentence saying what is missing before it can be. With a Lean statement, the check notices when a trusted theorem proves exactly it. |
+| **The statement** | For a theorem, the exact Lean statement in a ```` ```lean ```` block (the check then notices when a trusted theorem proves exactly it). For anything else, one or two sentences saying what done looks like. |
 | **Why it matters** | What it unlocks or settles, and for whom. |
 | **Why it looks doable** | Why now: the pieces that exist, a known proof on paper, a recent result. |
 | **What it builds on** | Theorems already in Tengoku (written `tengoku:Name`) and outside sources (links). |
 | **Built on the work of** | The people whose results this goal rests on or who posed it, one line each: who, a link, what they did. Whoever closes the goal is credited by the `Author:` line on their proof; this field is for everyone else. |
 | **Already tried** *(optional)* | Past attempts and where they got stuck, so nobody repeats a dead end. |
 | **Size** *(optional)* | small, medium or large: a rough effort. |
-| **Proved by** *(required once done)* | The theorem that closes it: `tengoku:Name`. |
+| **Proved by** *(a done theorem goal)* | The theorem that closes it: `tengoku:Name`. |
+| **How it was done** *(any other done goal)* | What finished it, with a link (the pull requests, the release). |
+| **Why it was retired** *(required once retired)* | Why the goal was given up: out of reach, no longer wanted, replaced by another goal. |
 
-The status in the title line is one of `open`, `partly done` or `done`.
+The status in the title line is one of `open`, `partly done`, `done` or `retired`, and the goal sits in the
+page's section for it: **Open** (open and partly done), **Completed** (done) or **Retired**. A goal is never
+deleted: a finished one moves to Completed, one given up moves to Retired with its reason.
 
 ## Goals worth adding
 
@@ -25,7 +29,7 @@ nobody has written. A person who agrees writes the goal properly above it.
 
 ## A new goal
 
-Copy this above the *Goals worth adding* part at the end of GOALS.md and fill it in. Keep the marker comments exactly as they are: the check
+Copy this into the Open section of GOALS.md and fill it in. Keep the marker comments exactly as they are: the check
 reads them. The id is lowercase letters, digits and dashes, and never changes once the goal is in.
 
 ````markdown
@@ -79,7 +83,8 @@ theorem name (binders) : claim
 `scripts/ci/goals_check.py` runs on every pull request that changes GOALS.md:
 
 - every goal has a unique id, a title, a status, the fields above and no others, and one Suggestions part
-  after the part people write; the page has at most one more Suggestions part, after the last goal;
+  after the part people write, and sits in the section its status belongs to; a done goal names what did it and
+  a retired one why it was given up; the page has at most one more Suggestions part, after the last goal;
 - every `tengoku:Name` names a record or declaration that exists (the AI reviewer's references included), and
   every link is `http(s)`;
 - a pull request from the AI reviewer (its branch starts with `goals-suggest/`) changes nothing but the text

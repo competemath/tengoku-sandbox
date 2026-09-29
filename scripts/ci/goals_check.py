@@ -3,8 +3,10 @@
 
 Runs when a PR changes GOALS.md (docs/goals.md explains the page). At the PR's head:
 - every goal is a `<!-- goal: id -->` … `<!-- /goal -->` block with a unique id, a title and a status
-  (open, partly done, done), a people part and one Suggestions part after it;
-- the people part has the standard fields (a `done` goal also names what proved it), and no others;
+  (open, partly done, done, retired), a people part and one Suggestions part after it, under the section its
+  status belongs to (`## Open`, `## Completed`, `## Retired`);
+- the people part has the standard fields (a `done` goal also names what did it, a `retired` one why it was given
+  up), and no others;
 - every `tengoku:Name` reference, in either part, names a record or a declaration that exists;
 - every link is http(s).
 A PR from the AI reviewer (its branch starts with `goals-suggest/`, or its author is vars.GOALS_AI_ACCOUNT;
@@ -21,14 +23,16 @@ import sys
 from _git import ROOT, added_lines, blob, changed_files, fail, match
 
 PAGE = "GOALS.md"
-STATUSES = ("open", "partly done", "done")
+STATUSES = ("open", "partly done", "done", "retired")
+SECTION_OF = {"open": "Open", "partly done": "Open", "done": "Completed", "retired": "Retired"}
+SECTION_RE = re.compile(r"^## (Open|Completed|Retired)[ \t]*$", re.M)
 REQUIRED = ("The statement", "Why it matters", "Why it looks doable", "What it builds on", "Built on the work of")
-OPTIONAL = ("Already tried", "Size", "Proved by")
+OPTIONAL = ("Already tried", "Size", "Proved by", "How it was done", "Why it was retired")
 GOAL_RE = re.compile(r"<!-- goal: ([^ ]+) -->\n(.*?)\n<!-- /goal -->", re.S)
 ID_RE = re.compile(r"[a-z0-9][a-z0-9-]*")
 SUMMARY_RE = re.compile(r"<summary><b>(.+?)</b> · (.+?)</summary>")
-PEOPLE_RE = re.compile(r"<!-- people -->\n(.*?)\n<!-- /people -->", re.S)
-SUGGEST_RE = re.compile(r"<!-- suggestions -->\n(.*?)\n<!-- /suggestions -->", re.S)
+PEOPLE_RE = re.compile(r"<!-- people -->\n?(.*?)\n?<!-- /people -->", re.S)
+SUGGEST_RE = re.compile(r"<!-- suggestions -->\n?(.*?)\n?<!-- /suggestions -->", re.S)  # empty is fine
 FIELD_RE = re.compile(r"<details><summary>(.+?)</summary>")
 REF_RE = re.compile(r"tengoku:([^\s`)\]<>,;]+)")
 LINK_RE = re.compile(r"\]\(([^)\s]+)\)|<(\w+:[^>\s]+)>")
@@ -162,8 +166,11 @@ def check_page(text: str) -> list[str]:
             errors.append(
                 f"a `{marker}` marker outside a complete goal block (each goal runs from `<!-- goal: id -->` to `<!-- /goal -->`)"
             )
-    for gid, body in GOAL_RE.findall(text):
+    sections = [(m.start(), m.group(1)) for m in SECTION_RE.finditer(text)]
+    for g in GOAL_RE.finditer(text):
+        gid, body = g.group(1), g.group(2)
         where = f"goal {gid}"
+        section = next((name for at, name in reversed(sections) if at < g.start()), None)
         if not ID_RE.fullmatch(gid):
             errors.append(f"{where}: id must be lowercase letters, digits and dashes")
         if gid in ids:
@@ -177,6 +184,11 @@ def check_page(text: str) -> list[str]:
             status = s.group(2).strip()
             if status not in STATUSES:
                 errors.append(f"{where}: status {status!r} is not one of {', '.join(STATUSES)}")
+            elif section != SECTION_OF[status]:
+                errors.append(
+                    f"{where}: a goal that is {status} goes under `## {SECTION_OF[status]}`"
+                    + (f" (it is under `## {section}`)" if section else "")
+                )
         people = PEOPLE_RE.findall(body)
         suggestions = SUGGEST_RE.findall(body)
         if len(people) != 1:
@@ -200,10 +212,15 @@ def check_page(text: str) -> list[str]:
                 errors.append(f"{where}: unknown field `{f}` (the fields are: {', '.join(REQUIRED + OPTIONAL)})")
         if len(fields) != len(set(fields)):
             errors.append(f"{where}: a field appears twice")
-        if status == "done":
-            proved = people[0].split("<details><summary>Proved by</summary>", 1)
-            if len(proved) != 2 or not REF_RE.search(proved[1].split("</details>", 1)[0]):
-                errors.append(f"{where}: a done goal names what proved it: a `Proved by` field with a `tengoku:Name`")
+
+        def field(name: str) -> str:
+            part = people[0].split(f"<details><summary>{name}</summary>", 1)
+            return part[1].split("</details>", 1)[0] if len(part) == 2 else ""
+
+        if status == "done" and not REF_RE.search(field("Proved by")) and not LINK_RE.search(field("How it was done")):
+            errors.append(f"{where}: a done goal names what did it: `Proved by` with a `tengoku:Name`, or `How it was done` with a link")
+        if status == "retired" and not field("Why it was retired").strip():
+            errors.append(f"{where}: a retired goal says why it was given up: a `Why it was retired` field")
     for m in LINK_RE.finditer(text):
         url = m.group(1) or m.group(2)
         if not re.match(r"[a-zA-Z][a-zA-Z0-9+.-]*:", url):
@@ -253,7 +270,7 @@ def proved_goals(text: str) -> list[tuple[str, str]]:
     wanted = {}
     for gid, body in GOAL_RE.findall(text):
         s = SUMMARY_RE.search(body)
-        if s and s.group(2).strip() == "done":
+        if s and s.group(2).strip() in ("done", "retired"):
             continue
         people = PEOPLE_RE.findall(body)
         if not people:

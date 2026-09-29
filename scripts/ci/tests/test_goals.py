@@ -12,7 +12,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 from test_gates import GOOD, Repo  # noqa: E402
 
-PAGE = "# Goals\n\nIntro.\n\n"
+PAGE = "# Goals\n\nIntro.\n\n## Open\n\n"
 
 
 def goal(gid="sum-odd", status="open", statement="theorem sum_odd (n : Nat) : n = n", suggestion="", extra="", why="Because."):
@@ -126,13 +126,66 @@ class Goals(unittest.TestCase):
 
     def test_a_done_goal_names_what_proved_it(self):
         r = self.repo_with()
-        r.write("GOALS.md", PAGE + goal(status="done"))
+        r.write("GOALS.md", PAGE + "## Completed\n\n" + goal(status="done"))
         r.commit("done without proof")
         rc, out = self.run_check(r)
         self.assertNotEqual(rc, 0)
         self.assertIn("Proved by", out)
-        r.write("GOALS.md", PAGE + goal(status="done", extra="<details><summary>Proved by</summary>\n\n`tengoku:Lib.old`\n\n</details>\n"))
+        r.write(
+            "GOALS.md",
+            PAGE
+            + "## Completed\n\n"
+            + goal(status="done", extra="<details><summary>Proved by</summary>\n\n`tengoku:Lib.old`\n\n</details>\n"),
+        )
         r.commit("done with proof")
+        rc, out = self.run_check(r)
+        self.assertEqual(rc, 0, out)
+
+    def test_a_done_goal_that_is_not_a_theorem_links_how_it_was_done(self):
+        r = self.repo_with()
+        how = "<details><summary>How it was done</summary>\n\n[the pull requests](https://github.com/competemath/tengoku/pulls)\n\n</details>\n"
+        r.write("GOALS.md", PAGE + "## Completed\n\n" + goal(status="done", statement="Most libraries are in.", extra=how))
+        r.commit("done, not a theorem")
+        rc, out = self.run_check(r)
+        self.assertEqual(rc, 0, out)
+
+    def test_each_goal_sits_in_the_section_for_its_status(self):
+        r = self.repo_with()
+        r.write("GOALS.md", PAGE + goal(status="done", extra="<details><summary>Proved by</summary>\n\n`tengoku:Lib.old`\n\n</details>\n"))
+        r.commit("done, under Open")
+        rc, out = self.run_check(r)
+        self.assertNotEqual(rc, 0)
+        self.assertIn("a goal that is done goes under `## Completed` (it is under `## Open`)", out)
+        r.write("GOALS.md", "# Goals\n\n" + goal())
+        r.commit("no sections")
+        rc, out = self.run_check(r)
+        self.assertIn("a goal that is open goes under `## Open`", out)
+
+    def test_a_retired_goal_says_why(self):
+        r = self.repo_with()
+        r.write("GOALS.md", PAGE + "## Retired\n\n" + goal(status="retired"))
+        r.commit("retired without a reason")
+        rc, out = self.run_check(r)
+        self.assertNotEqual(rc, 0)
+        self.assertIn("a retired goal says why it was given up", out)
+        why = "<details><summary>Why it was retired</summary>\n\nOut of reach with today's tools.\n\n</details>\n"
+        r.write("GOALS.md", PAGE + "## Retired\n\n" + goal(status="retired", extra=why))
+        r.commit("retired with a reason")
+        rc, out = self.run_check(r)
+        self.assertEqual(rc, 0, out)
+
+    def test_the_real_page_and_the_template_pass(self):
+        # the template in docs/goals.md has empty Suggestions parts (nothing between the markers); so does the page
+        import re as _re
+
+        tpl = _re.search(r"````markdown\n(.*?)````", (HERE.parents[2] / "docs" / "goals.md").read_text(), _re.S).group(1)
+        r = self.repo_with()
+        r.write("GOALS.md", (HERE.parents[2] / "GOALS.md").read_text())
+        r.commit("the page as it is")
+        rc, out = self.run_check(r)
+        self.assertEqual(rc, 0, out)
+        r.write("GOALS.md", PAGE + tpl.replace("tengoku:Some.Theorem", "tengoku:Lib.old"))  # the one placeholder a real name must replace
+        r.commit("the template, unfilled")
         rc, out = self.run_check(r)
         self.assertEqual(rc, 0, out)
 
