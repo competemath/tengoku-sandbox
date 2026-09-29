@@ -117,18 +117,18 @@ for st, p in changed_files(base, head):
                 errors.append(f"{p}:{no}: a {kind} goes in data/trusted/<library>.jsonl")
             if known is None:
                 known = trusted_names()
+            if tombstoned is None:  # the base's tombstones and the ones this PR adds
+                tombstoned = tombstoned_names()
+                for _, q in changed_files(base, head):
+                    if match(q, ["data/trusted/*.jsonl", "data/trusted/*/*.jsonl"]):
+                        for _, x in added_lines(base, head, q):
+                            try:
+                                added = json.loads(x)
+                            except ValueError:
+                                continue
+                            if isinstance(added, dict) and "tombstone" in added:  # the word alone (a note's text) is not one
+                                tombstoned.add(str(added["tombstone"]))
             if kind == "tombstone_note":
-                if tombstoned is None:  # the base's tombstones and the ones this PR adds
-                    tombstoned = tombstoned_names()
-                    for _, q in changed_files(base, head):
-                        if match(q, ["data/trusted/*.jsonl", "data/trusted/*/*.jsonl"]):
-                            for _, x in added_lines(base, head, q):
-                                try:
-                                    added = json.loads(x)
-                                except ValueError:
-                                    continue
-                                if isinstance(added, dict) and "tombstone" in added:  # the word alone (a note's text) is not one
-                                    tombstoned.add(str(added["tombstone"]))
                 if r["tombstone_note"] not in tombstoned:
                     errors.append(f"{p}:{no}: a tombstone_note is for a retracted record; {r['tombstone_note']} has no tombstone")
                 see = r.get("see", [])
@@ -137,6 +137,8 @@ for st, p in changed_files(base, head):
             else:
                 if r["credit_correction"] not in known:
                     errors.append(f"{p}:{no}: credit_correction for unknown name {r['credit_correction']}")
+                elif r["credit_correction"] in tombstoned:  # a retraction is permanent: the corrected record is never generated
+                    errors.append(f"{p}:{no}: {r['credit_correction']} is retracted; a credit correction for it would have no effect")
                 credit = str(r.get("credit", ""))
                 if not re.fullmatch(r"Authors?:[^\r\n]+", credit) or len(re.findall(r"\bAuthors?:", credit)) != 1:
                     errors.append(f"{p}:{no}: credit is one `Author:` line (a single line with a single `Author:`)")

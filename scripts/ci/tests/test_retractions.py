@@ -101,6 +101,15 @@ class Retractions(unittest.TestCase):
         self.assertIn("credit is one `Author:` line", out)
         self.assertIn("evidence is an http(s) link", out)
 
+    def test_a_credit_correction_for_a_retracted_record_fails(self):
+        r = Repo()
+        r.append(T, line(tombstone="Lib.old", category="incorrect", reason="wrong"))
+        r.append(T, line(credit_correction="Lib.old", credit="Author: Ada", evidence="https://example.org/e"))
+        r.commit("correct a retracted record")
+        rc, out = self.check(r)
+        self.assertNotEqual(rc, 0)
+        self.assertIn("Lib.old is retracted; a credit correction for it would have no effect", out)
+
     def test_a_credit_correction_names_one_author_line(self):
         for credit in ("Author: Alice\nAuthor: Mallory", "Author: Alice Author: Mallory"):
             r = Repo()
