@@ -51,6 +51,15 @@ class Headlines(unittest.TestCase):
         self.assertNotEqual(rc, 0)
         self.assertIn("a headline credits its author", out)
 
+    def test_a_doc_comment_after_the_theorem_does_not_count(self):
+        r = Repo()
+        rec = {**GOOD, "name": "Lib.z", "statement": "theorem Lib.z : 1 + 1 = 2\n/-- Author: Ada -/", "headline": True}
+        r.append("data/staging/lib.jsonl", json.dumps(rec) + "\n")
+        r.commit("a docstring after the declaration")
+        rc, out = r.gate("validate_records.py")
+        self.assertNotEqual(rc, 0)
+        self.assertIn("a headline credits its author", out)
+
     def test_headline_must_be_a_boolean(self):
         r = Repo()
         rec = {**GOOD, "name": "Lib.x", "statement": CREDIT + "theorem Lib.x : 1 + 1 = 2", "headline": "yes"}
