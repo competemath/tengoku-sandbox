@@ -495,6 +495,23 @@ class GateSummary(unittest.TestCase):
             ]
         )
         self.assertIn("all checks passed", out)
+        self.assertIn("Resolve conversation", out)
+
+    def test_both_verdicts_say_how_to_clear_review_conversations(self):
+        passed = self.render(
+            [{"name": "dco", "conclusion": "success", "databaseId": 3, "steps": [{"name": "dco", "conclusion": "success"}]}]
+        )
+        failed = self.render(
+            [{"name": "dco", "conclusion": "failure", "databaseId": 3, "steps": [{"name": "dco", "conclusion": "failure"}]}]
+        )
+        self.assertIn("all checks passed", passed)
+        self.assertIn("check failed", failed)
+        for out in (passed, failed):  # the whole guidance, in each verdict
+            self.assertIn("every review conversation must be resolved", out)
+            self.assertIn("CodeRabbit, Greptile", out)
+            self.assertIn("fix what applies or reply saying why not", out)
+            self.assertIn("**Resolve conversation**", out)
+            self.assertIn("As the PR's author you can resolve them yourself", out)
 
 
 class DeregisteredSource(unittest.TestCase):
