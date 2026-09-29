@@ -7,8 +7,8 @@
 # difference from the nightly cache (a "top-up"), so the services can follow main
 # merge by merge without ever compiling. The merge waits for that publish:
 #   queue-build   compiles the group (runs the group's Lean code; read-only token)
-#   queue-topup   attests and uploads the top-up (write token; runs no code of the group)
-#   queue-gate    the required check: green only when both are
+#   queue-gate    the required check: attests and uploads the top-up (write token; runs no code of the
+#                 group), green only when the build passed and the top-up is published
 # A top-up is invisible until topup-promote.yml names it in cache-latest.json, which
 # happens only for a commit that really is on main — a group that fails or is rebuilt
 # leaves an orphan that is collected, never followed.
@@ -141,7 +141,8 @@ jobs:
           set -o pipefail
           lake build tengoku-axioms 2>&1 | tail -1
           read -ra mods <<< "$TARGETS"
-          for m in "${mods[@]}"; do lake env .lake/build/bin/tengoku-axioms --module "$m" 2>&1 | tee -a build.log; done
+          # as few runs as possible (each imports the whole tree); candidates that clash are split apart (the script says how)
+          python3 scripts/ci/axioms_check.py "${mods[@]}" 2>&1 | tee -a build.log
       - name: Derived files match their generator
         if: github.event_name == 'merge_group'
         run: |
@@ -200,21 +201,28 @@ jobs:
         env: { GH_TOKEN: "${{ github.token }}" }
         run: python3 scripts/ci/queue_comment.py build.log "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" "${{ github.event.merge_group.base_sha }}"
 
-  # Holds the write token, runs nothing from the group: it only signs and uploads what queue-build packed.
-  queue-topup:
+  # The required check. On a pull request it passes at once; in the queue it is green only when the group
+  # compiled AND its top-up is published, so a merge can never outrun the services' cache. It holds the write
+  # token and runs nothing from the group: it only signs and uploads what queue-build packed. (Publishing and the
+  # verdict are one job: a separate verdict job waited up to 24 minutes for a runner, and the queue's 40-minute
+  # check timeout removed groups that had already passed.)
+  queue-gate:
     needs: queue-build
-    if: github.event_name == 'merge_group'
+    if: ${{ !cancelled() }}   # a failed build still gets its verdict; a cancelled entry (rebuilt, or stopped by pr-gate) just stops
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    permissions: { contents: write, id-token: write, attestations: write }
+    permissions: { contents: write, id-token: write, attestations: write, pull-requests: write }
     steps:
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      - if: github.event_name == 'merge_group' && needs.queue-build.result == 'success'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with: { name: topup, path: topup-out }
       - name: Attest the top-up
-        if: needs.queue-build.outputs.topup == 'complete'
+        if: github.event_name == 'merge_group' && needs.queue-build.result == 'success' && needs.queue-build.outputs.topup == 'complete'
         uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
         with: { subject-path: "topup-out/topup-*.tar.zst" }
       - name: Publish it (provisional until this commit is on main)
+        id: publish
+        if: github.event_name == 'merge_group' && needs.queue-build.result == 'success'
         env:
           GH_TOKEN: "${{ github.token }}"
           TEST_FAIL: "${{ vars.TOPUP_TEST_FAIL }}"   # sandbox only: a PR number whose publish is made to fail
@@ -229,24 +237,15 @@ jobs:
             echo "upload attempt $attempt failed; retrying"; sleep $((attempt * 15))
           done
           echo "error: the cache top-up could not be published"; exit 1
-
-  # The required check. On a pull request it passes at once; in the queue it is green only when the group
-  # compiled AND its top-up is published, so a merge can never outrun the services' cache.
-  queue-gate:
-    needs: [queue-build, queue-topup]
-    if: always()
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions: { pull-requests: write }
-    steps:
       - name: Verdict
+        if: ${{ !cancelled() }}
         env:
           GH_TOKEN: "${{ github.token }}"
           BUILD: "${{ needs.queue-build.result }}"
-          TOPUP: "${{ needs.queue-topup.result }}"
+          TOPUP: "${{ steps.publish.outcome }}"
         run: |
           if [ "${{ github.event_name }}" = pull_request ]; then [ "$BUILD" = success ] && exit 0; echo "queue-build: $BUILD"; exit 1; fi
-          echo "queue-build: $BUILD   queue-topup: $TOPUP"
+          echo "queue-build: $BUILD   top-up publish: $TOPUP"
           if [ "$BUILD" = success ] && [ "$TOPUP" = success ]; then exit 0; fi
           if [ "$BUILD" = success ]; then
             pr="$(printf '%s' "$GITHUB_REF" | sed -nE 's#.*/pr-([0-9]+)-[0-9a-f]+$#\1#p')"
