@@ -4,6 +4,28 @@ What Tengoku is built with, and what shaped how it was designed. The mathematics
 it gathers: the seeded packages in [LICENSE-THIRD-PARTY.md](../LICENSE-THIRD-PARTY.md) and every registered library
 in [schemas/sources.json](../schemas/sources.json). Each theorem credits its own authors.
 
+## The main technologies
+
+<table>
+<tr><th></th><th>How it shaped Tengoku</th></tr>
+<tr><td nowrap><img src="https://lean-lang.org/static/apple-touch-icon.png" height="20" alt="">&nbsp;<a href="https://lean-lang.org">Lean 4</a></td><td>The language and its kernel. Every trusted theorem is checked by it, on one pinned toolchain.</td></tr>
+<tr><td nowrap><img src="https://github.com/leanprover-community.png?size=40" height="20" alt="">&nbsp;<a href="https://github.com/leanprover-community/mathlib4">Mathlib</a></td><td>The seed. Tengoku starts from Mathlib and its dependencies, and keeps its layout by topic and its shared build cache.</td></tr>
+<tr><td nowrap><img src="https://cdn.simpleicons.org/github/181717/ffffff" height="20" alt="">&nbsp;<a href="https://github.com/features/actions">GitHub</a></td><td>Pull requests, rulesets and the merge queue gate every change. Actions run the checks, translation and nightly builds; Dependabot keeps actions current; attestations sign every cache and release.</td></tr>
+<tr><td nowrap><img src="https://cdn.simpleicons.org/claude" height="20" alt="">&nbsp;<a href="https://www.anthropic.com/claude-code">Claude Code</a></td><td>Most of Tengoku's tooling was written with it. On Actions, Claude translates libraries and writes the goals Suggestions.</td></tr>
+<tr><td nowrap><img src="https://cdn.simpleicons.org/coderabbit" height="20" alt="">&nbsp;<a href="https://www.coderabbit.ai">CodeRabbit</a></td><td>Reviews every pull request; its comments are answered before anything merges.</td></tr>
+<tr><td nowrap><img src="https://cdn.simpleicons.org/huggingface" height="20" alt="">&nbsp;<a href="https://huggingface.co/spaces">Hugging Face</a></td><td>Spaces host the Leak services. Its hub supplies the model behind search by meaning.</td></tr>
+<tr><td nowrap><img src="https://cdn.simpleicons.org/modelcontextprotocol/000000/ffffff" height="20" alt="">&nbsp;<a href="https://gofastmcp.com">FastMCP</a></td><td>The servers behind Leak I, II and IV and the translation check, on Starlette and uvicorn.</td></tr>
+<tr><td nowrap><img src="https://github.com/nomeata.png?size=40" height="20" alt="">&nbsp;<a href="https://github.com/nomeata/loogle">Loogle</a></td><td>Search by name and by type: the base of Leak I.</td></tr>
+<tr><td nowrap><img src="https://github.com/lenianiva.png?size=40" height="20" alt="">&nbsp;<a href="https://github.com/lenianiva/Pantograph">Pantograph</a></td><td>A machine interface to Lean's proof states: the base of Leak II.</td></tr>
+<tr><td nowrap><img src="https://github.com/leanprover.png?size=40" height="20" alt="">&nbsp;<a href="https://github.com/leanprover/lean4export">lean4export</a>, <a href="https://github.com/leanprover/lean4checker">lean4checker</a>, <a href="https://github.com/ammkrn/nanoda_lib">nanoda</a></td><td>Export every declaration and check it again: the core of the translation check, and a second kernel over the whole tree.</td></tr>
+<tr><td nowrap><img src="https://cdn.simpleicons.org/nextdotjs/000000/ffffff" height="20" alt="">&nbsp;<a href="https://nextjs.org">Next.js</a></td><td>competemath.com/tengoku, its search API, and the Emissary-Archangel console.</td></tr>
+<tr><td nowrap><img src="https://cdn.simpleicons.org/vercel/000000/ffffff" height="20" alt="">&nbsp;<a href="https://vercel.com">Vercel</a></td><td>Hosts competemath.com and its search API.</td></tr>
+<tr><td nowrap><img src="https://cdn.simpleicons.org/neon" height="20" alt="">&nbsp;<a href="https://neon.com">Neon</a></td><td>The Postgres search index, with pgvector for search by meaning.</td></tr>
+<tr><td nowrap><img src="https://github.com/zizmorcore.png?size=40" height="20" alt="">&nbsp;<a href="https://github.com/zizmorcore/zizmor">zizmor</a></td><td>Found two gaps in our workflows. Tengoku's own workflow checker grew from reading it.</td></tr>
+<tr><td nowrap><img src="https://github.com/step-security.png?size=40" height="20" alt="">&nbsp;<a href="https://github.com/step-security/harden-runner">Harden-Runner</a></td><td>Watches and limits what CI jobs reach over the network.</td></tr>
+<tr><td nowrap><img src="https://github.com/trufflesecurity.png?size=40" height="20" alt="">&nbsp;<a href="https://github.com/trufflesecurity/trufflehog">TruffleHog</a> and <a href="https://github.com/Yelp/detect-secrets">detect-secrets</a></td><td>Scan every pull request and every commit for secrets.</td></tr>
+</table>
+
 ## Similar libraries, and what we took from them
 
 - [Mathlib](https://github.com/leanprover-community/mathlib4): the seed. Tengoku keeps its layout by topic and
