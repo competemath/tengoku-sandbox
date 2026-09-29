@@ -22,7 +22,7 @@ import threading
 
 CLASH = "environment already contains"
 TOOL = shlex.split(os.environ.get("AXIOMS_TOOL", "lake env .lake/build/bin/tengoku-axioms"))
-JOBS = max(1, int(os.environ.get("AXIOMS_JOBS", "3")))   # each run holds the tree in memory; the runner has 16 GB
+JOBS = max(1, int(os.environ.get("AXIOMS_JOBS", "3")))  # each run holds the tree in memory; the runner has 16 GB
 
 slots = threading.Semaphore(JOBS)
 lock = threading.Lock()

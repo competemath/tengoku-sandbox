@@ -16,7 +16,7 @@ from pathlib import Path
 
 CI = Path(__file__).resolve().parents[1]
 
-FAKE = r'''
+FAKE = r"""
 import fcntl, os, sys, time
 mods = [sys.argv[i + 1] for i, a in enumerate(sys.argv) if a == "--module"]
 log = os.environ["FAKE_LOG"]
@@ -43,7 +43,7 @@ bad = [m for m in mods if m in os.environ.get("FAKE_BAD", "").split(",")]
 for m in bad: print(f"error: {m}.thm depends on [sorryAx] (allowed: propext, Classical.choice, Quot.sound)")
 print(f"axioms: {len(mods)} declarations checked, {len(bad)} with non-standard axioms")
 sys.exit(1 if bad else 0)
-'''
+"""
 
 
 class AxiomsCheck(unittest.TestCase):
@@ -77,7 +77,7 @@ class AxiomsCheck(unittest.TestCase):
         self.assertEqual(rc, 0, out)
         checked = sorted({m for r in runs for m in r.split()})
         self.assertEqual(checked, sorted(mods))
-        self.assertLessEqual(len(runs), 3, runs)   # all 40, then two halves that each import
+        self.assertLessEqual(len(runs), 3, runs)  # all 40, then two halves that each import
         for r in runs[1:]:
             self.assertFalse({"M3", "M30"} <= set(r.split()), r)
 
@@ -86,7 +86,11 @@ class AxiomsCheck(unittest.TestCase):
         rc, out, runs = self.check(mods, clash="M0:M1,M10:M11,M20:M39,M5:M25")
         self.assertEqual(rc, 0, out)
         self.assertLess(len(runs), 20, runs)
-        passed = [r for r in runs if not any(a in r.split() and b in r.split() for a, b in [("M0", "M1"), ("M10", "M11"), ("M20", "M39"), ("M5", "M25")])]
+        passed = [
+            r
+            for r in runs
+            if not any(a in r.split() and b in r.split() for a, b in [("M0", "M1"), ("M10", "M11"), ("M20", "M39"), ("M5", "M25")])
+        ]
         self.assertEqual(sorted({m for r in passed for m in r.split()}), sorted(mods))
 
     def test_bad_axiom_fails_and_is_reported(self) -> None:
@@ -106,7 +110,7 @@ class AxiomsCheck(unittest.TestCase):
 
     def test_parallel_runs_stay_within_the_limit(self) -> None:
         mods = [f"M{i}" for i in range(32)]
-        clash = ",".join(f"M{i}:M{i + 1}" for i in range(0, 32, 2))   # forces a split down to single modules
+        clash = ",".join(f"M{i}:M{i + 1}" for i in range(0, 32, 2))  # forces a split down to single modules
         rc, out, runs = self.check(mods, jobs=2, clash=clash)
         self.assertEqual(rc, 0, out)
         self.assertLessEqual(self.peak(), 2)
