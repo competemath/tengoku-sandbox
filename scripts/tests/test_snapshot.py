@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import gzip
 import hashlib
 import json
 import shutil
@@ -154,6 +155,29 @@ class Snapshot(unittest.TestCase):
         # the previous release had a field this one lacks: major, whatever else changed
         prev.write_text(json.dumps({**m, "fields": first["fields"] + ["retired"]}))
         self.assertEqual(self.run_snapshot(self.root / "v3", self.root / "v1")["version"], "2.0.0")
+
+    def test_a_library_split_over_files_is_one_library(self):
+        # Mathlib's records are in data/trusted/mathlib-*.jsonl; each names library "mathlib"
+        (self.root / "data" / "trusted" / "big-algebra.jsonl").write_text(
+            json.dumps(rec("Big.x", "theorem Big.x : True", library="big")) + "\n"
+        )
+        (self.root / "data" / "trusted" / "big-topology.jsonl").write_text(
+            json.dumps(rec("Big.y", "theorem Big.y : True", library="big"))
+            + "\n"
+            + json.dumps({"tombstone": "Big.x", "category": "duplicate", "reason": "r", "by": "x", "at": "2026-09-02"})
+            + "\n"
+        )
+        m = self.run_snapshot(self.root / "out")
+        self.assertEqual(m["libraries"]["big"], {"trusted": 1})  # one library, and the retraction in the other file applies
+        self.assertNotIn("big-algebra", m["libraries"])
+        raw = gzip.decompress((self.root / "out" / "tengoku-dataset.jsonl.gz").read_bytes()).decode()
+        self.assertEqual([json.loads(x)["library"] for x in raw.splitlines() if "Big." in x], ["big"])
+
+    def test_retracting_every_record_is_a_patch(self):
+        first = self.run_snapshot(self.root / "v1")
+        self.append(*({"tombstone": n, "category": "incorrect", "reason": "r", "by": "x", "at": "2026-09-09"} for n in ("Lib.a", "Lib.b")))
+        empty = self.run_snapshot(self.root / "v2", self.root / "v1")
+        self.assertEqual((empty["version"], empty["dataset"]["records"], empty["fields"]), ("1.0.1", 0, first["fields"]))
 
 
 if __name__ == "__main__":

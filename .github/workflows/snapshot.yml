@@ -39,11 +39,12 @@ jobs:
           args=(--out snapshot); [ -d previous ] && args+=(--previous previous)
           python3 scripts/snapshot.py "${args[@]}"
           if [ -f snapshot/unchanged ]; then echo "changed=false" >> "$GITHUB_OUTPUT"; exit 0; fi
-          cp CITATION.cff snapshot/
+          version="$(python3 -c 'import json; print(json.load(open("snapshot/snapshot.json"))["version"])')"
+          date="$(python3 -c 'import json; print(json.load(open("snapshot/snapshot.json"))["date"])')"
+          # the release's copy names the version to cite; the repository's copy stays generic
+          { cat CITATION.cff; printf 'version: "%s"\ndate-released: "%s"\n' "$version" "$date"; } > snapshot/CITATION.cff
           ls -la snapshot
-          { echo "changed=true"
-            echo "version=$(python3 -c 'import json; print(json.load(open("snapshot/snapshot.json"))["version"])')"
-            echo "date=$(python3 -c 'import json; print(json.load(open("snapshot/snapshot.json"))["date"])')"; } >> "$GITHUB_OUTPUT"
+          printf 'changed=true\nversion=%s\ndate=%s\n' "$version" "$date" >> "$GITHUB_OUTPUT"
       - name: Attest the files
         if: steps.snap.outputs.changed == 'true'
         uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
@@ -55,7 +56,10 @@ jobs:
           # a published version is never changed; the tag decides, not the release (a release can be deleted while its
           # tag stays)
           tag="v$VERSION"
-          at="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" --jq .object.sha 2>/dev/null || true)"
+          kind="" at=""
+          read -r kind at < <(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" --jq '"\(.object.type) \(.object.sha)"' 2>/dev/null) || true
+          # an annotated tag points at a tag object: compare the commit it tags
+          if [ "${kind:-}" = tag ]; then at="$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$at" --jq .object.sha)"; fi
           if [ -n "$at" ] && [ "$at" != "$GITHUB_SHA" ]; then echo "::error::$tag already points at $at, not $GITHUB_SHA"; exit 1; fi
           if gh release view "$tag" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then echo "$tag already snapshots $GITHUB_SHA"; exit 0; fi
           records="$(python3 -c 'import json; print(json.load(open("snapshot/snapshot.json"))["dataset"]["records"])')"

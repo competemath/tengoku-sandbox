@@ -60,14 +60,35 @@ def library_files(root: Path, tier: str) -> dict[str, list[Path]]:
     return out
 
 
+# every row has every field (null or false when it does not apply), so the fields change only when this code does:
+# a release's version compares them
+FIELDS = (
+    "name",
+    "library",
+    "statement",
+    "proof",
+    "source_url",
+    "licence",
+    "credit",
+    "toolchain",
+    "promoted_at",
+    "credit_corrected_evidence",
+    "headline",
+    "upstream",
+)
+
+
 def dataset(root: Path) -> tuple[list[dict], dict[str, dict[str, int]]]:
     sources = json.loads((root / "schemas" / "sources.json").read_text(encoding="utf-8"))
     licences = sources.get("licences", {})
     records: list[dict] = []
     counts: dict[str, dict[str, int]] = {}
     for tier in ("trusted", "staging", "tentative"):
-        for library, files in library_files(root, tier).items():
-            retracted, corrected, kept = set(), {}, []
+        # a library's records can be spread over several files (Mathlib's are data/trusted/mathlib-*.jsonl), so the
+        # retractions and corrections of a tier apply across all its files, and a record counts for the library it
+        # names (the file's name only when it names none)
+        retracted, corrected, kept = set(), {}, []
+        for stem, files in library_files(root, tier).items():
             for f in files:
                 for r in lines(f):
                     if "tombstone" in r:
@@ -77,30 +98,31 @@ def dataset(root: Path) -> tuple[list[dict], dict[str, dict[str, int]]]:
                         if name not in corrected or at >= corrected[name][0]:
                             corrected[name] = (at, r.get("credit"), r.get("evidence"))
                     elif "tombstone_note" not in r and "name" in r:
-                        kept.append(r)
-            live = [r for r in kept if r["name"] not in retracted]
-            counts.setdefault(library, {})[tier] = len(live)
+                        kept.append((r.get("library") or stem, r))
+        for library, r in kept:
+            if r["name"] in retracted:
+                continue
+            counts.setdefault(library, {})
+            counts[library][tier] = counts[library].get(tier, 0) + 1
             if tier != "trusted":
                 continue
-            for r in live:
-                _, credit, evidence = corrected.get(r["name"], (None, credit_of(str(r.get("statement", ""))), None))
-                row = {
-                    "name": r["name"],
-                    "library": library,
-                    "statement": r.get("statement"),
-                    "proof": r.get("proof"),
-                    "source_url": r.get("source_url"),
-                    "licence": licence_of(str(r.get("source_url", "")), licences),
-                    "credit": credit,
-                    "toolchain": r.get("toolchain"),
-                    "promoted_at": r.get("promoted_at"),
-                    # every row has every field (null or false when it does not apply), so the fields change only
-                    # when this code does: a release's version compares them
-                    "credit_corrected_evidence": evidence or None,
-                    "headline": r.get("headline") is True,
-                    "upstream": r.get("upstream") or None,
-                }
-                records.append(row)
+            _, credit, evidence = corrected.get(r["name"], (None, credit_of(str(r.get("statement", ""))), None))
+            row = {
+                "name": r["name"],
+                "library": library,
+                "statement": r.get("statement"),
+                "proof": r.get("proof"),
+                "source_url": r.get("source_url"),
+                "licence": licence_of(str(r.get("source_url", "")), licences),
+                "credit": credit,
+                "toolchain": r.get("toolchain"),
+                "promoted_at": r.get("promoted_at"),
+                "credit_corrected_evidence": evidence or None,
+                "headline": r.get("headline") is True,
+                "upstream": r.get("upstream") or None,
+            }
+            assert tuple(row) == FIELDS
+            records.append(row)
     return records, counts
 
 
@@ -150,7 +172,7 @@ def main() -> None:
     path.write_bytes(gzip.compress(raw, compresslevel=9, mtime=0))  # mtime 0: the same records give the same bytes
     commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=root, capture_output=True, text=True).stdout.strip() or None
     toolchain = (root / "lean-toolchain").read_text().strip() if (root / "lean-toolchain").exists() else None
-    fields = sorted({k for row in records for k in row})
+    fields = sorted(FIELDS)  # not read from the rows: a release with no records keeps the same fields
     version = next_version(
         previous_release(Path(args.previous) if args.previous else None),
         {r["name"] for r in records},
