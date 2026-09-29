@@ -67,6 +67,11 @@ ADVICE: dict[str, tuple[str, str, str]] = {
         "remove it and rotate it if it was real; a high-entropy string that is not a secret is a known false-positive class — report it and a maintainer adds it to `.secrets.baseline`",
     ),
     "dco": ("low", "every commit carries `Signed-off-by:`", "`git commit -s --amend` (or `git rebase --signoff`) and push"),
+    "goals": (
+        "medium",
+        "GOALS.md keeps its shape (ids, status, the standard fields, one Suggestions part per goal), every `tengoku:Name` exists and links are http(s); the AI reviewer's PRs change only Suggestions",
+        "fix what the message names; the format and a block to copy are in docs/goals.md",
+    ),
     "vacuity": (
         "medium",
         "each new theorem the queue would compile: can `False` be derived from its hypotheses alone (omega, simp_all, decide, linarith, positivity, grind, aesop)? Such a theorem proves nothing",
