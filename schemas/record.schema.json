@@ -22,7 +22,8 @@
       "staged_at",
       "promoted_at",
       "added_by",
-      "build_error"
+      "build_error",
+      "headline"
     ],
     "types": {
       "name": "string",
@@ -36,14 +37,43 @@
       "source_path": "string",
       "staged_at": "string",
       "promoted_at": "string",
-      "added_by": "string"
+      "added_by": "string",
+      "headline": "boolean"
     }
   },
   "tombstone": {
-    "$comment": "Appending {\"tombstone\": \"<name>\", ...} retracts a record. The generator drops it; history stays.",
+    "$comment": "Appending {\"tombstone\": \"<name>\", ...} retracts a record. The generator drops it; history stays. `category` (required on a new tombstone) is one of tombstone_categories and never changes.",
     "required": [
       "tombstone",
+      "category",
       "reason",
+      "by",
+      "at"
+    ]
+  },
+  "tombstone_categories": [
+    "duplicate",
+    "incorrect",
+    "superseded",
+    "licence",
+    "other"
+  ],
+  "tombstone_note": {
+    "required": [
+      "tombstone_note",
+      "note",
+      "by",
+      "at"
+    ],
+    "optional": [
+      "see"
+    ]
+  },
+  "credit_correction": {
+    "required": [
+      "credit_correction",
+      "credit",
+      "evidence",
       "by",
       "at"
     ]

@@ -57,23 +57,23 @@ class Repo:
 
     def write(self, p, s):
         (self.dir / p).parent.mkdir(parents=True, exist_ok=True)
-        (self.dir / p).write_text(s)
+        (self.dir / p).write_text(s, encoding="utf-8")
 
     def append(self, p, s):
-        with (self.dir / p).open("a") as f:
+        with (self.dir / p).open("a", encoding="utf-8") as f:
             f.write(s)
 
     def commit(self, msg, signoff=True):
         self.git("add", "-A")
         self.git("commit", "-q", "-m", msg + ("\n\nSigned-off-by: t <t@t>" if signoff else ""))
 
-    def gate(self, script, *args):
+    def gate(self, script, *args, env=None):
         r = subprocess.run(
             [sys.executable, str(CI / script), *(args or ("main", "pr"))],
             cwd=self.dir,
             capture_output=True,
             text=True,
-            env={**os.environ, "TENGOKU_CI_ROOT": str(self.dir)},
+            env={**os.environ, "TENGOKU_CI_ROOT": str(self.dir), **(env or {})},
         )
         return r.returncode, (r.stdout + r.stderr)
 
@@ -140,7 +140,10 @@ class Gates(unittest.TestCase):
 
     def test_tombstone_is_an_append(self):
         r = Repo()
-        r.append("data/trusted/lib.jsonl", json.dumps({"tombstone": "Lib.old", "reason": "wrong", "by": "t", "at": "2026-09-15"}) + "\n")
+        r.append(
+            "data/trusted/lib.jsonl",
+            json.dumps({"tombstone": "Lib.old", "category": "incorrect", "reason": "wrong", "by": "t", "at": "2026-09-15"}) + "\n",
+        )
         r.commit("retract")
         self.assertEqual(r.gate("append_only.py")[0], 0)
         self.assertEqual(r.gate("validate_records.py")[0], 0)
@@ -304,6 +307,25 @@ class CreditsScope(unittest.TestCase):
 
 
 class QueueComment(unittest.TestCase):
+    def test_only_the_removed_pr_is_told_and_the_wording_follows_the_rearm_setup(self):
+        r = Repo()
+        base = r.git("rev-parse", "HEAD").strip()
+        r.git("commit", "-q", "--allow-empty", "-m", "ahead in the group (#2)")
+        r.git("commit", "-q", "--allow-empty", "-m", "the removed one (#10)")
+        (r.dir / "build.log").write_text("error: Tengoku/Lib/_candidate_Basic.lean:4:2: unsolved goals\n")
+        for rearm, wording in (("1", "AUTO re-queue"), ("", "MANUAL re-queue")):
+            env = {**os.environ, "TENGOKU_CI_ROOT": str(r.dir), "TENGOKU_COMMENT_DRY": "1", "TENGOKU_REARM": rearm}
+            env["GITHUB_REF"] = f"refs/heads/gh-readonly-queue/main/pr-10-{base}"
+            out = subprocess.run(
+                [sys.executable, str(CI / "queue_comment.py"), "build.log", "https://example/run", base],
+                cwd=r.dir,
+                capture_output=True,
+                text=True,
+                env=env,
+            ).stdout
+            self.assertIn("would comment on: #10\n", out)
+            self.assertIn(wording, out)
+
     def test_names_file_line_record_and_every_pr_in_the_group(self):
         r = Repo()
         r.write("Tengoku/Lib/_candidate_Basic.lean", "theorem Lib.old : 1 + 1 = 2 := rfl\n\ntheorem Lib.bad : 1 + 1 = 3 := by\n  decide\n")
@@ -318,7 +340,7 @@ class QueueComment(unittest.TestCase):
             cwd=r.dir,
             capture_output=True,
             text=True,
-            env={**os.environ, "TENGOKU_CI_ROOT": str(r.dir), "TENGOKU_COMMENT_DRY": "1"},
+            env={**os.environ, "TENGOKU_CI_ROOT": str(r.dir), "TENGOKU_COMMENT_DRY": "1", "GITHUB_REF": ""},
         ).stdout
         self.assertIn("would comment on: #2, #10", out)
         self.assertIn("`Tengoku/Lib/_candidate_Basic.lean:4:2`", out)

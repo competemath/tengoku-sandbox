@@ -1,0 +1,27 @@
+# A PR the merge queue removed carries the `ejected` label (scripts/ci/queue_comment.py). Leaving the queue turns
+# "merge when ready" off; this turns it back on at the PR's next push, so the fix goes back into the queue by itself
+# once its checks pass. Nothing of the PR is checked out or run here: two API calls, on main's copy of this file.
+name: rearm
+on:
+  pull_request_target:
+    branches: [main]
+    types: [synchronize]
+permissions: {}
+jobs:
+  rearm:
+    if: contains(github.event.pull_request.labels.*.name, 'ejected')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: { contents: write, pull-requests: write }
+    steps:
+      - name: Back into the queue once its checks pass
+        env:
+          # the bot's token, never the job token: a queue entry the job token starts does not start the queue's own
+          # workflows, so the PR would wait in the queue forever
+          GH_TOKEN: "${{ secrets.TENGOKU_BOT_TOKEN }}"
+          PR: "${{ github.event.pull_request.number }}"
+        run: |
+          if [ -z "$GH_TOKEN" ]; then echo "::warning::no TENGOKU_BOT_TOKEN secret: #$PR is not re-queued (press Merge when ready)"; exit 0; fi
+          gh pr merge "$PR" -R "$GITHUB_REPOSITORY" --auto
+          gh pr edit "$PR" -R "$GITHUB_REPOSITORY" --remove-label ejected
+          echo "#$PR goes back into the merge queue once its checks pass"

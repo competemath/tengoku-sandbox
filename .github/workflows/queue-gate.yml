@@ -198,7 +198,8 @@ jobs:
         with: { name: topup, path: topup-out/, retention-days: 1, if-no-files-found: error }
       - name: Explain the failure to the authors
         if: failure() && github.event_name == 'merge_group'
-        env: { GH_TOKEN: "${{ github.token }}" }
+        # TENGOKU_REARM: whether rearm.yml can put the PR back (it needs the bot's token); only a yes or no reaches the job
+        env: { GH_TOKEN: "${{ github.token }}", TENGOKU_REARM: "${{ secrets.TENGOKU_BOT_TOKEN != '' && '1' || '' }}" }
         run: python3 scripts/ci/queue_comment.py build.log "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" "${{ github.event.merge_group.base_sha }}"
 
   # The required check. On a pull request it passes at once; in the queue it is green only when the group

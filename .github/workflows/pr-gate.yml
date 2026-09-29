@@ -94,6 +94,24 @@ jobs:
       - name: credits
         run: python3 scripts/ci/credits.py "$BASE" "$HEAD" ${{ needs.classify.outputs.class == 'promotion' && '--promotion' || '' }}
 
+  # GOALS.md: its shape, real references, and the AI reviewer writing only Suggestions (docs/goals.md).
+  goals:
+    needs: classify
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: { contents: read }
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
+        with: { egress-policy: audit }
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: { ref: "${{ env.BASE }}", fetch-depth: 0, filter: "blob:none", persist-credentials: false }
+      - name: The PR's commits, as data (the checks are main's)
+        run: git fetch -q --no-tags --filter=blob:none origin "+$PR_REF:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
+      - name: goals
+        env:
+          # the AI reviewer's PRs come from branches goals-suggest/… (or the account in vars.GOALS_AI_ACCOUNT)
+          GOALS_AI: "${{ (startsWith(github.event.pull_request.head.ref, 'goals-suggest/') || (vars.GOALS_AI_ACCOUNT != '' && github.event.pull_request.user.login == vars.GOALS_AI_ACCOUNT)) && '1' || '' }}"
+        run: python3 scripts/ci/goals_check.py "$BASE" "$HEAD"
   dco:
     needs: classify
     runs-on: ubuntu-latest
@@ -257,7 +275,7 @@ jobs:
         run: printf '%s' "$BODY" > body.txt && python3 scripts/ci/depends.py body.txt
 
   pr-gate:
-    needs: [classify, data-rules, credits, dco, secrets, workflows, depends, vacuity]
+    needs: [classify, data-rules, credits, dco, secrets, workflows, depends, vacuity, goals]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 10
