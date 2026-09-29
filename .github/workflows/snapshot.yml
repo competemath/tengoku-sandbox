@@ -57,7 +57,13 @@ jobs:
           # tag stays)
           tag="v$VERSION"
           kind="" at=""
-          read -r kind at < <(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" --jq '"\(.object.type) \(.object.sha)"' 2>/dev/null) || true
+          # only a confirmed 404 means the tag is free; any other failure stops here (a tag on another commit must
+          # never be reused: --target applies only to a new tag)
+          if ref="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" --jq '"\(.object.type) \(.object.sha)"' 2>ref.err)"; then
+            read -r kind at <<< "$ref"
+          elif ! grep -q "HTTP 404" ref.err; then
+            cat ref.err; echo "::error::could not look up the tag $tag"; exit 1
+          fi
           # an annotated tag points at a tag object: compare the commit it tags
           if [ "${kind:-}" = tag ]; then at="$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$at" --jq .object.sha)"; fi
           if [ -n "$at" ] && [ "$at" != "$GITHUB_SHA" ]; then echo "::error::$tag already points at $at, not $GITHUB_SHA"; exit 1; fi
