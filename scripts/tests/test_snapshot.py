@@ -32,7 +32,10 @@ class Snapshot(unittest.TestCase):
     def setUp(self):
         self.root = Path(tempfile.mkdtemp())
         (self.root / "schemas").mkdir()
-        shutil.copy(ROOT / "schemas" / "sources.json", self.root / "schemas" / "sources.json")
+        # its own registry: the test must not depend on what the real one lists
+        (self.root / "schemas" / "sources.json").write_text(
+            json.dumps({"licences": {"https://github.com/fpvandoorn/Carleson": "Apache-2.0"}})
+        )
         (self.root / "lean-toolchain").write_text("leanprover/lean4:v4.34.0-rc2\n")
         (self.root / "data" / "trusted").mkdir(parents=True)
         (self.root / "data" / "staging" / "lib").mkdir(parents=True)
