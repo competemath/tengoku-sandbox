@@ -110,6 +110,14 @@ class Retractions(unittest.TestCase):
             self.assertNotEqual(rc, 0, credit)
             self.assertIn("credit is one `Author:` line", out)
 
+    def test_a_note_that_mentions_the_word_tombstone_is_checked_not_crashed(self):
+        r = Repo()
+        r.append(T, line(tombstone="Lib.old", category="duplicate", reason="same as x"))
+        r.append(T, line(tombstone_note="Lib.old", note="the tombstone says why", see=["tombstone"]))
+        r.commit("a note mentioning the word")
+        rc, out = self.check(r)
+        self.assertEqual(rc, 0, out)
+
     def test_a_note_finds_a_tombstone_in_a_per_library_file(self):
         r = Repo()
         r.git("checkout", "-q", "main")

@@ -119,13 +119,16 @@ for st, p in changed_files(base, head):
                 known = trusted_names()
             if kind == "tombstone_note":
                 if tombstoned is None:  # the base's tombstones and the ones this PR adds
-                    tombstoned = tombstoned_names() | {
-                        json.loads(x)["tombstone"]
-                        for _, q in changed_files(base, head)
-                        if match(q, ["data/trusted/*.jsonl", "data/trusted/*/*.jsonl"])
-                        for _, x in added_lines(base, head, q)
-                        if '"tombstone"' in x and x.strip()
-                    }
+                    tombstoned = tombstoned_names()
+                    for _, q in changed_files(base, head):
+                        if match(q, ["data/trusted/*.jsonl", "data/trusted/*/*.jsonl"]):
+                            for _, x in added_lines(base, head, q):
+                                try:
+                                    added = json.loads(x)
+                                except ValueError:
+                                    continue
+                                if isinstance(added, dict) and "tombstone" in added:  # the word alone (a note's text) is not one
+                                    tombstoned.add(str(added["tombstone"]))
                 if r["tombstone_note"] not in tombstoned:
                     errors.append(f"{p}:{no}: a tombstone_note is for a retracted record; {r['tombstone_note']} has no tombstone")
                 see = r.get("see", [])
