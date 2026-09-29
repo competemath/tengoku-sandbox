@@ -208,7 +208,7 @@ jobs:
   # check timeout removed groups that had already passed.)
   queue-gate:
     needs: queue-build
-    if: always()
+    if: ${{ !cancelled() }}   # a failed build still gets its verdict; a cancelled entry (rebuilt, or stopped by pr-gate) just stops
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions: { contents: write, id-token: write, attestations: write, pull-requests: write }
@@ -238,7 +238,7 @@ jobs:
           done
           echo "error: the cache top-up could not be published"; exit 1
       - name: Verdict
-        if: always()
+        if: ${{ !cancelled() }}
         env:
           GH_TOKEN: "${{ github.token }}"
           BUILD: "${{ needs.queue-build.result }}"

@@ -1,7 +1,7 @@
 """axioms_check.py against a fake tengoku-axioms: clashing modules are split apart, not checked one run per module.
 
 The fake reads its rules from the environment: FAKE_CLASH lists pairs that cannot be imported together
-("A:B,C:D"), FAKE_BAD modules with a non-standard axiom, FAKE_ALONE modules that clash with the tree itself. It logs every run (one line per run) and the number of
+("A:B,C:D"), FAKE_BAD modules with a non-standard axiom, FAKE_ALONE modules that clash with the tree itself, FAKE_HANG modules whose run never ends. It logs every run (one line per run) and the number of
 runs alive at once, so the tests see how many runs were made and that no more than AXIOMS_JOBS overlapped.
 """
 
@@ -28,7 +28,7 @@ def bump(d):
             fcntl.flock(g, fcntl.LOCK_EX); g.seek(0); p = int(g.read() or 0)
             if n > p: g.seek(0); g.truncate(); g.write(str(n))
 bump(1)
-time.sleep(0.05)
+time.sleep(30 if set(mods) & set(os.environ.get("FAKE_HANG", "").split(",")) - {""} else 0.05)
 with open(log, "a") as f: f.write(" ".join(mods) + "\n")
 bump(-1)
 pairs = [p.split(":") for p in os.environ.get("FAKE_CLASH", "").split(",") if p]
@@ -58,6 +58,8 @@ class AxiomsCheck(unittest.TestCase):
 
     def check(self, mods: list[str], jobs: int = 3, **rules: str) -> tuple[int, str, list[str]]:
         env = {**os.environ, "AXIOMS_TOOL": f"{sys.executable} {self.fake}", "AXIOMS_JOBS": str(jobs), "FAKE_LOG": str(self.log)}
+        if "run_timeout" in rules:
+            env["AXIOMS_RUN_TIMEOUT"] = rules.pop("run_timeout")
         env.update({f"FAKE_{k.upper()}": v for k, v in rules.items()})
         p = subprocess.run([sys.executable, str(CI / "axioms_check.py"), *mods], capture_output=True, text=True, env=env)
         runs = self.log.read_text().splitlines() if self.log.exists() else []
@@ -114,6 +116,11 @@ class AxiomsCheck(unittest.TestCase):
         rc, out, runs = self.check(mods, jobs=2, clash=clash)
         self.assertEqual(rc, 0, out)
         self.assertLessEqual(self.peak(), 2)
+
+    def test_a_stuck_run_fails_instead_of_holding_the_queue(self) -> None:
+        rc, out, _ = self.check(["M0", "M1"], hang="M1", run_timeout="1")
+        self.assertEqual(rc, 1)
+        self.assertIn("did not finish in 1 s", out)
 
     def test_no_modules_is_a_usage_error(self) -> None:
         rc, _, runs = self.check([])

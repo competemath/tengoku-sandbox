@@ -278,9 +278,9 @@ jobs:
           # a rebuilt or removed entry's runs keep going (up to 90 minutes) on runners the live entries wait for
           live="$(git ls-remote origin 'refs/heads/gh-readonly-queue/*' | awk '{print $2}' | sed 's#^refs/heads/##')" || { echo "could not list the queue; nothing stopped"; exit 0; }
           grep -qxF "${OWN#refs/heads/}" <<< "$live" || { echo "this entry is not in the listing; nothing stopped"; exit 0; }
-          for status in in_progress queued; do
-            gh api "repos/$GITHUB_REPOSITORY/actions/runs?event=merge_group&status=$status&per_page=100" --jq '.workflow_runs[] | "\(.id) \(.head_branch)"'
-          done | while read -r id branch; do
+          for status in in_progress queued waiting requested pending; do
+            gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs?event=merge_group&status=$status&per_page=100" --jq '.workflow_runs[] | "\(.id) \(.head_branch)"'
+          done | sort -u | while read -r id branch; do
             if ! grep -qxF "$branch" <<< "$live"; then
               gh api -X POST "repos/$GITHUB_REPOSITORY/actions/runs/$id/cancel" >/dev/null 2>&1 && echo "stopped run $id: $branch is no longer in the queue"
             fi

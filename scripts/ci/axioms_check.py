@@ -22,7 +22,10 @@ import threading
 
 CLASH = "environment already contains"
 TOOL = shlex.split(os.environ.get("AXIOMS_TOOL", "lake env .lake/build/bin/tengoku-axioms"))
-JOBS = max(1, int(os.environ.get("AXIOMS_JOBS", "3")))  # each run holds the tree in memory; the runner has 16 GB
+JOBS = max(1, int(os.environ.get("AXIOMS_JOBS", "3")))
+RUN_TIMEOUT = int(
+    os.environ.get("AXIOMS_RUN_TIMEOUT", "1200")
+)  # one run takes about a minute; a stuck one must not hold the queue  # each run holds the tree in memory; the runner has 16 GB
 
 slots = threading.Semaphore(JOBS)
 lock = threading.Lock()
@@ -32,9 +35,14 @@ runs = 0
 def run(mods: list[str]) -> tuple[int, str]:
     global runs
     with slots:
-        p = subprocess.run(TOOL + [a for m in mods for a in ("--module", m)], capture_output=True, text=True)
-    with lock:
-        runs += 1
+        try:
+            p = subprocess.run(TOOL + [a for m in mods for a in ("--module", m)], capture_output=True, text=True, timeout=RUN_TIMEOUT)
+        except subprocess.TimeoutExpired as e:
+            out = (e.stdout or b"").decode(errors="replace") if isinstance(e.stdout, bytes) else (e.stdout or "")
+            return 124, f"{out}error: the axiom check of {len(mods)} module(s) did not finish in {RUN_TIMEOUT} s\n"
+        finally:
+            with lock:
+                runs += 1
     return p.returncode, p.stdout + p.stderr
 
 
