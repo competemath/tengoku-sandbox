@@ -51,24 +51,25 @@ seeded library — is at [competemath.com/about/tengoku](https://competemath.com
 
 ## Tech
 
-| | How it shaped Tengoku |
-|---|---|
-| <img src="https://lean-lang.org/static/apple-touch-icon.png" height="20" alt="">&nbsp;[Lean 4](https://lean-lang.org) | The language and its kernel. Every trusted theorem is checked by it, on one pinned toolchain. |
-| <img src="https://github.com/leanprover-community.png?size=40" height="20" alt="">&nbsp;[Mathlib](https://leanprover-community.github.io) | The seed: Tengoku starts from Mathlib and its dependencies, and follows its conventions. |
-| <img src="https://cdn.simpleicons.org/github/181717/ffffff" height="20" alt="">&nbsp;[GitHub](https://github.com/features/actions) | Pull requests, the merge queue and Actions run every check, the translation pipeline and the releases; artifact attestations sign the builds. |
-| <img src="https://cdn.simpleicons.org/claude" height="20" alt="">&nbsp;[Claude](https://www.anthropic.com/claude-code) | Most of Tengoku's tooling was written with Claude Code; Claude is also the translation agent and the goals reviewer. |
-| <img src="https://cdn.simpleicons.org/coderabbit" height="20" alt="">&nbsp;[CodeRabbit](https://www.coderabbit.ai) | Reviews every pull request; its comments are answered before anything merges. |
-| <img src="https://github.com/greptileai.png?size=40" height="20" alt="">&nbsp;[Greptile](https://www.greptile.com) | A second AI reviewer on every pull request. |
-| <img src="https://cdn.simpleicons.org/huggingface" height="20" alt="">&nbsp;[Hugging Face](https://huggingface.co/spaces) | Spaces host the Leak services: search, proof states and verification. |
-| <img src="https://github.com/nomeata.png?size=40" height="20" alt="">&nbsp;[Loogle](https://github.com/nomeata/loogle) | Search by name and by type: the base of Leak I. |
-| <img src="https://cdn.simpleicons.org/vercel/000000/ffffff" height="20" alt="">&nbsp;[Vercel](https://vercel.com) | Hosts competemath.com and its search API. |
-| <img src="https://cdn.simpleicons.org/neon" height="20" alt="">&nbsp;[Neon](https://neon.tech) | The Postgres database behind competemath.com. |
-| <img src="https://github.com/sigstore.png?size=40" height="20" alt="">&nbsp;[Sigstore](https://www.sigstore.dev) | Signs the provenance attached to every build and release. |
-| <img src="https://github.com/step-security.png?size=40" height="20" alt="">&nbsp;[StepSecurity](https://www.stepsecurity.io) | Audits what the gate's CI jobs reach over the network. |
-| <img src="https://github.com/trufflesecurity.png?size=40" height="20" alt="">&nbsp;[TruffleHog](https://github.com/trufflesecurity/trufflehog) | Scans every pull request for secrets. |
-| <img src="https://github.com/zenodo.png?size=40" height="20" alt="">&nbsp;[Zenodo](https://zenodo.org) | A permanent DOI for every release. |
-| <img src="https://cdn.simpleicons.org/python" height="20" alt="">&nbsp;[Python](https://www.python.org) | The gate and the library's generator. |
-| <img src="https://cdn.simpleicons.org/nodedotjs" height="20" alt="">&nbsp;[Node.js](https://nodejs.org) | Emissary-Archangel, the translation pipeline. |
+<table>
+<tr><th></th><th>How it shaped Tengoku</th></tr>
+<tr><td nowrap><img src="https://lean-lang.org/static/apple-touch-icon.png" height="20" alt="">&nbsp;<a href="https://lean-lang.org">Lean 4</a></td><td>The language and its kernel. Every trusted theorem is checked by it, on one pinned toolchain.</td></tr>
+<tr><td nowrap><img src="https://github.com/leanprover-community.png?size=40" height="20" alt="">&nbsp;<a href="https://leanprover-community.github.io">Mathlib</a></td><td>The seed: Tengoku starts from Mathlib and its dependencies, and follows its conventions.</td></tr>
+<tr><td nowrap><img src="https://cdn.simpleicons.org/github/181717/ffffff" height="20" alt="">&nbsp;<a href="https://github.com/features/actions">GitHub</a></td><td>Pull requests, the merge queue and Actions run every check, the translation pipeline and the releases; artifact attestations sign the builds.</td></tr>
+<tr><td nowrap><img src="https://cdn.simpleicons.org/claude" height="20" alt="">&nbsp;<a href="https://www.anthropic.com/claude-code">Claude</a></td><td>Most of Tengoku's tooling was written with Claude Code; Claude is also the translation agent and the goals reviewer.</td></tr>
+<tr><td nowrap><img src="https://cdn.simpleicons.org/coderabbit" height="20" alt="">&nbsp;<a href="https://www.coderabbit.ai">CodeRabbit</a></td><td>Reviews every pull request; its comments are answered before anything merges.</td></tr>
+<tr><td nowrap><img src="https://github.com/greptileai.png?size=40" height="20" alt="">&nbsp;<a href="https://www.greptile.com">Greptile</a></td><td>A second AI reviewer on every pull request.</td></tr>
+<tr><td nowrap><img src="https://cdn.simpleicons.org/huggingface" height="20" alt="">&nbsp;<a href="https://huggingface.co/spaces">Hugging Face</a></td><td>Spaces host the Leak services: search, proof states and verification.</td></tr>
+<tr><td nowrap><img src="https://github.com/nomeata.png?size=40" height="20" alt="">&nbsp;<a href="https://github.com/nomeata/loogle">Loogle</a></td><td>Search by name and by type: the base of Leak I.</td></tr>
+<tr><td nowrap><img src="https://cdn.simpleicons.org/vercel/000000/ffffff" height="20" alt="">&nbsp;<a href="https://vercel.com">Vercel</a></td><td>Hosts competemath.com and its search API.</td></tr>
+<tr><td nowrap><img src="https://cdn.simpleicons.org/neon" height="20" alt="">&nbsp;<a href="https://neon.tech">Neon</a></td><td>The Postgres database behind competemath.com.</td></tr>
+<tr><td nowrap><img src="https://github.com/sigstore.png?size=40" height="20" alt="">&nbsp;<a href="https://www.sigstore.dev">Sigstore</a></td><td>Signs the provenance attached to every build and release.</td></tr>
+<tr><td nowrap><img src="https://github.com/step-security.png?size=40" height="20" alt="">&nbsp;<a href="https://www.stepsecurity.io">StepSecurity</a></td><td>Audits what the gate's CI jobs reach over the network.</td></tr>
+<tr><td nowrap><img src="https://github.com/trufflesecurity.png?size=40" height="20" alt="">&nbsp;<a href="https://github.com/trufflesecurity/trufflehog">TruffleHog</a></td><td>Scans every pull request for secrets.</td></tr>
+<tr><td nowrap><img src="https://github.com/zenodo.png?size=40" height="20" alt="">&nbsp;<a href="https://zenodo.org">Zenodo</a></td><td>A permanent DOI for every release.</td></tr>
+<tr><td nowrap><img src="https://cdn.simpleicons.org/python" height="20" alt="">&nbsp;<a href="https://www.python.org">Python</a></td><td>The gate and the library's generator.</td></tr>
+<tr><td nowrap><img src="https://cdn.simpleicons.org/nodedotjs" height="20" alt="">&nbsp;<a href="https://nodejs.org">Node.js</a></td><td>Emissary-Archangel, the translation pipeline.</td></tr>
+</table>
 
 Tengoku stands on these projects, and on the authors of every library in it: thank you. The full list of the
 technology, tools and writing that shaped it, from security and infrastructure to design, AI, review and CI, is in
