@@ -52,18 +52,22 @@ seeded library — is at [competemath.com/about/tengoku](https://competemath.com
 ## Tech
 | | | How it shaped Tengoku |
 |---|---|---|
-| <img src="https://github.com/leanprover.png?size=40" height="20" alt=""> | [Lean 4](https://lean-lang.org) | The language and its kernel. Every trusted theorem is checked by it, on one pinned toolchain. |
+| <img src="https://lean-lang.org/static/apple-touch-icon.png" height="20" alt=""> | [Lean 4](https://lean-lang.org) | The language and its kernel. Every trusted theorem is checked by it, on one pinned toolchain. |
 | <img src="https://github.com/leanprover-community.png?size=40" height="20" alt=""> | [Mathlib](https://leanprover-community.github.io) | The seed: Tengoku starts from Mathlib and its dependencies, and follows its conventions. |
 | <img src="https://cdn.simpleicons.org/github/181717/ffffff" height="20" alt=""> | [GitHub](https://github.com/features/actions) | Pull requests, the merge queue and Actions run every check, the translation pipeline and the releases; artifact attestations sign the builds. |
 | <img src="https://cdn.simpleicons.org/claude" height="20" alt=""> | [Claude](https://www.anthropic.com/claude-code) | Most of Tengoku's tooling was written with Claude Code; Claude is also the translation agent and the goals reviewer. |
-| <img src="https://cdn.simpleicons.org/coderabbit" height="20" alt=""> <img src="https://github.com/greptileai.png?size=40" height="20" alt=""> | [CodeRabbit](https://www.coderabbit.ai), [Greptile](https://www.greptile.com) | Review every pull request; their comments are answered before anything merges. |
+| <img src="https://cdn.simpleicons.org/coderabbit" height="20" alt=""> | [CodeRabbit](https://www.coderabbit.ai) | Reviews every pull request; its comments are answered before anything merges. |
+| <img src="https://github.com/greptileai.png?size=40" height="20" alt=""> | [Greptile](https://www.greptile.com) | A second AI reviewer on every pull request. |
 | <img src="https://cdn.simpleicons.org/huggingface" height="20" alt=""> | [Hugging Face](https://huggingface.co/spaces) | Spaces host the Leak services: search, proof states and verification. |
 | <img src="https://github.com/nomeata.png?size=40" height="20" alt=""> | [Loogle](https://github.com/nomeata/loogle) | Search by name and by type: the base of Leak I. |
-| <img src="https://cdn.simpleicons.org/vercel/000000/ffffff" height="20" alt=""> <img src="https://cdn.simpleicons.org/neon" height="20" alt=""> | [Vercel](https://vercel.com), [Neon](https://neon.tech) | competemath.com and its search API, with Postgres on Neon. |
+| <img src="https://cdn.simpleicons.org/vercel/000000/ffffff" height="20" alt=""> | [Vercel](https://vercel.com) | Hosts competemath.com and its search API. |
+| <img src="https://cdn.simpleicons.org/neon" height="20" alt=""> | [Neon](https://neon.tech) | The Postgres database behind competemath.com. |
 | <img src="https://github.com/sigstore.png?size=40" height="20" alt=""> | [Sigstore](https://www.sigstore.dev) | Signs the provenance attached to every build and release. |
-| <img src="https://github.com/step-security.png?size=40" height="20" alt=""> <img src="https://github.com/trufflesecurity.png?size=40" height="20" alt=""> | [StepSecurity](https://www.stepsecurity.io), [TruffleHog](https://github.com/trufflesecurity/trufflehog) | Audit what the gate's CI jobs reach; scan every pull request for secrets. |
-| <img src="https://cdn.simpleicons.org/zenodo" height="20" alt=""> | [Zenodo](https://zenodo.org) | A permanent DOI for every release. |
-| <img src="https://cdn.simpleicons.org/python" height="20" alt=""> <img src="https://cdn.simpleicons.org/nodedotjs" height="20" alt=""> | [Python](https://www.python.org), [Node.js](https://nodejs.org) | The gate, the generator and the translation pipeline. |
+| <img src="https://github.com/step-security.png?size=40" height="20" alt=""> | [StepSecurity](https://www.stepsecurity.io) | Audits what the gate's CI jobs reach over the network. |
+| <img src="https://github.com/trufflesecurity.png?size=40" height="20" alt=""> | [TruffleHog](https://github.com/trufflesecurity/trufflehog) | Scans every pull request for secrets. |
+| <img src="https://github.com/zenodo.png?size=40" height="20" alt=""> | [Zenodo](https://zenodo.org) | A permanent DOI for every release. |
+| <img src="https://cdn.simpleicons.org/python" height="20" alt=""> | [Python](https://www.python.org) | The gate and the library's generator. |
+| <img src="https://cdn.simpleicons.org/nodedotjs" height="20" alt=""> | [Node.js](https://nodejs.org) | Emissary-Archangel, the translation pipeline. |
 
 Tengoku stands on these projects, and on the authors of every library in it: thank you. The full list of the
 technology, tools and writing that shaped it, from security and infrastructure to design, AI, review and CI, is in
