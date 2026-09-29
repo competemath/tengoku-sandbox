@@ -95,6 +95,10 @@ hint = next(
 )
 subjects = run("log", "--format=%s", f"{base_sha}..HEAD") if base_sha else run("log", "--format=%s", "-n", "50")
 prs = sorted({n for n in re.findall(r"(?:Merge pull request #|\(#)(\d+)\)?\s*$", subjects, re.M)}, key=int)
+# The entry's own PR is the one GitHub removed (the ref is gh-readonly-queue/<branch>/pr-<N>-<base>); the others
+# named in the group are retried, so only it is labelled and told.
+own = re.search(r"/pr-(\d+)-[0-9a-f]+$", os.environ.get("GITHUB_REF", ""))
+targets = [own.group(1)] if own and own.group(1) in prs else prs
 group_note = (
     f" This group also contained {', '.join('#' + n for n in prs)}; GitHub removes the newest PR and retries the rest, so if the error is not in your files, wait for the retry."
     if len(prs) > 1
@@ -127,11 +131,13 @@ if not prs:
     print(body.replace("{requeue}", ""))
     sys.exit(0)
 if os.environ.get("TENGOKU_COMMENT_DRY"):  # tests: show what would be posted, post nothing
-    print("would comment on:", ", ".join("#" + n for n in prs))
-    print(body.replace("{requeue}", "Push the fix and the PR goes back into the queue by itself once its checks pass."))
+    print("would comment on:", ", ".join("#" + n for n in targets))
+    print(body.replace("{requeue}", "AUTO re-queue" if os.environ.get("TENGOKU_REARM") == "1" else "MANUAL re-queue"))
     sys.exit(0)
 # The label puts the PR back into the queue on its next push (.github/workflows/rearm.yml): leaving the queue turns
-# "merge when ready" off, and an outside contributor rarely thinks to press it again.
+# "merge when ready" off, and an outside contributor rarely thinks to press it again. Without the bot's token
+# rearm.yml cannot, so the PR is not labelled and the author is asked to re-queue by hand.
+rearm = os.environ.get("TENGOKU_REARM") == "1"
 subprocess.run(
     ["gh", "label", "create", "ejected", "--color", "d93f0b", "--description", "Left the merge queue; the next push re-queues it"],
     check=False,
@@ -139,9 +145,9 @@ subprocess.run(
 )
 AUTO = "Push the fix and the PR goes back into the queue by itself once its checks pass (the `ejected` label does that; remove it to stop)."
 MANUAL = "Re-queue after fixing (`gh pr merge --auto`, or the *Merge when ready* button)."
-for n in prs:
+for n in targets:
     # the promise of an automatic re-queue only where the label that makes it happen is really on the PR
-    labelled = subprocess.run(["gh", "pr", "edit", n, "--add-label", "ejected"], check=False, capture_output=True).returncode == 0
+    labelled = rearm and subprocess.run(["gh", "pr", "edit", n, "--add-label", "ejected"], check=False, capture_output=True).returncode == 0
     r = subprocess.run(
         ["gh", "pr", "comment", n, "--body", body.replace("{requeue}", AUTO if labelled else MANUAL)],
         check=False,
@@ -150,5 +156,7 @@ for n in prs:
     )
     if r.returncode != 0:
         print(f"could not comment on #{n}: {r.stderr.strip()[:200]}")
+        if labelled:  # no re-queue the author was never told about
+            subprocess.run(["gh", "pr", "edit", n, "--remove-label", "ejected"], check=False, capture_output=True)
         continue
     print(f"commented on #{n}" + ("" if labelled else " (no ejected label: asked to re-queue by hand)"))
