@@ -34,10 +34,14 @@ def tier(p: str) -> str:
 def tombstoned_names() -> set[str]:
     out = set()
     for f in (ROOT / "data" / "trusted").glob("*.jsonl"):
-        for line in f.open("rb"):
-            m = re.search(rb'"tombstone"\s*:\s*"([^"]+)"', line)
-            if m:
-                out.add(m.group(1).decode())
+        for line in f.open(encoding="utf-8"):
+            if '"tombstone"' in line:  # decoded as JSON: a name may be written with \u escapes
+                try:
+                    r = json.loads(line)
+                except ValueError:
+                    continue
+                if isinstance(r, dict) and "tombstone" in r:
+                    out.add(str(r["tombstone"]))
     return out
 
 

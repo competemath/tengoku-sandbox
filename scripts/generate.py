@@ -294,22 +294,28 @@ def data_files(out: Path, tier: str, library: str) -> list[Path]:
 
 
 def credit_corrections(out: Path, library: str) -> dict[str, tuple[str, str]]:
-    """name -> (corrected credit, evidence) from credit_correction lines in the trusted files; the newest wins."""
-    out_: dict[str, tuple[str, str]] = {}
+    """name -> (corrected credit, evidence) from credit_correction lines in the trusted files; the newest (by `at`,
+    whatever file it is in) wins."""
+    best: dict[str, tuple[str, tuple[str, str]]] = {}
     for p in data_files(out, "trusted", library):
         for line in p.read_text(encoding="utf-8").splitlines():
             if line.strip():
                 r = json.loads(line)
                 if "credit_correction" in r:
-                    out_[str(r["credit_correction"])] = (str(r.get("credit", "")), str(r.get("evidence", "")))
-    return out_
+                    name, at = str(r["credit_correction"]), str(r.get("at", ""))
+                    if name not in best or at >= best[name][0]:
+                        best[name] = (at, (str(r.get("credit", "")), str(r.get("evidence", ""))))
+    return {n: v for n, (_, v) in best.items()}
 
 
 def apply_credit(statement: str, credit: str, evidence: str) -> str:
     """The statement with its credit corrected (the record stays as it was): the docstring's Author lines give way
     to the corrected one, and the evidence is linked."""
     note = f"Credit corrected; evidence: {evidence}"
-    m = re.match(r"(\s*/--)(.*?)(-/)", statement, re.S)
+    keyword = re.search(r"^\s*(?:@\[[^\]]*\]\s*)*(?:\w+\s+)*?(?:theorem|lemma)\b", statement, re.M)
+    m = re.search(r"(/--)(.*?)(-/)", statement, re.S)  # the docstring, even after a leading ordinary comment
+    if m and keyword and m.start() > keyword.start():
+        m = None  # a doc comment after the keyword is not the declaration's docstring
     if not m:
         return f"/-- {credit}\n\n{note} -/\n{statement.lstrip()}"
     body = "\n".join(l for l in m.group(2).split("\n") if not re.match(r"\s*Authors?:", l)).rstrip()

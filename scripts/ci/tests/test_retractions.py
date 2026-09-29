@@ -41,6 +41,37 @@ class Retractions(unittest.TestCase):
         rc, out = self.check(r)
         self.assertEqual(rc, 0, out)
 
+    def test_a_tombstoned_name_written_with_escapes_matches_its_note(self):
+        r = Repo()
+        r.git("checkout", "-q", "main")
+        r.append(
+            T,
+            json.dumps(
+                {
+                    "name": "Lib.é",
+                    "statement": "theorem Lib.é : True",
+                    "proof": ":= trivial",
+                    "status": "trusted",
+                    "library": "lib",
+                    "source_url": "https://github.com/leanprover-community/mathlib4/blob/x/y.lean",
+                    "toolchain": "t",
+                    "promoted_at": "2026-01-01T00:00:00Z",
+                }
+            )
+            + "\n",
+        )
+        r.append(
+            T, json.dumps({"tombstone": "Lib.é", "category": "incorrect", "reason": "r", "by": "t", "at": "2026-09-29"}) + "\n"
+        )  # ascii-escaped
+        r.commit("base")
+        r.git("checkout", "-q", "-B", "pr")
+        r.append(
+            T, json.dumps({"tombstone_note": "Lib.é", "note": "see elsewhere", "by": "t", "at": "2026-09-29"}, ensure_ascii=False) + "\n"
+        )
+        r.commit("note")
+        rc, out = self.check(r)
+        self.assertEqual(rc, 0, out)
+
     def test_a_note_is_only_for_a_retracted_record(self):
         r = Repo()
         r.append(T, line(tombstone_note="Lib.old", note="look elsewhere"))
