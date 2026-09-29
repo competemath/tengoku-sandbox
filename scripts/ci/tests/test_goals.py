@@ -170,6 +170,53 @@ class Goals(unittest.TestCase):
         self.assertNotEqual(rc, 0)
         self.assertIn("goes after the last goal", out)
 
+    def test_a_qualified_reference_needs_a_real_namespace(self):
+        r = self.repo_with()
+        # `seeded` exists at the root, but there is no namespace `Other`
+        r.write("GOALS.md", PAGE + goal(suggestion="- `tengoku:Other.seeded`"))
+        r.commit("wrong namespace")
+        rc, out = self.run_check(r)
+        self.assertNotEqual(rc, 0)
+        self.assertIn("tengoku:Other.seeded", out)
+
+    def test_a_namespaced_declaration_is_found_by_its_full_name(self):
+        r = self.repo_with()
+        r.git("checkout", "-q", "main")
+        r.write("Tengoku/Nat/Extra.lean", "namespace Nat\n\ntheorem two_eq : 2 = 2 := rfl\n\nend Nat\n")
+        r.commit("seed a namespaced theorem")
+        r.git("checkout", "-q", "-B", "pr")
+        r.write("GOALS.md", PAGE + goal(suggestion="- `tengoku:Nat.two_eq`"))
+        r.commit("ref")
+        rc, out = self.run_check(r)
+        self.assertEqual(rc, 0, out)
+
+    def test_an_additive_name_the_attribute_generates_is_found(self):
+        r = self.repo_with()
+        r.git("checkout", "-q", "main")
+        r.write("Tengoku/Finset/Prod.lean", "namespace Finset\n\n@[to_additive]\ntheorem prod_range_succ : True := trivial\n\nend Finset\n")
+        r.commit("seed")
+        r.git("checkout", "-q", "-B", "pr")
+        r.write("GOALS.md", PAGE + goal(suggestion="- `tengoku:Finset.sum_range_succ`"))
+        r.commit("ref")
+        rc, out = self.run_check(r)
+        self.assertEqual(rc, 0, out)
+
+    def test_a_record_added_by_the_same_pr_can_be_referenced(self):
+        r = self.repo_with()
+        r.append("data/staging/lib.jsonl", json.dumps({**GOOD, "name": "Lib.fresh", "statement": "theorem Lib.fresh : 1 + 1 = 2"}) + "\n")
+        r.write("GOALS.md", PAGE + goal(suggestion="- `tengoku:Lib.fresh` closes it"))
+        r.commit("record and goal")
+        rc, out = self.run_check(r)
+        self.assertEqual(rc, 0, out)
+
+    def test_an_ai_pr_that_leaves_goals_alone_still_may_not_touch_other_files(self):
+        r = self.repo_with(PAGE + goal())
+        r.write("README.md", "# changed by the AI\n")
+        r.commit("only readme")
+        rc, out = self.run_check(r, ai=True)
+        self.assertNotEqual(rc, 0)
+        self.assertIn("may change only GOALS.md", out)
+
     def test_people_may_change_anything(self):
         r = self.repo_with(PAGE + goal(suggestion="- Old suggestion."))
         r.write("GOALS.md", PAGE + goal(suggestion="", why="Clearer now."))

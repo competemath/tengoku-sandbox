@@ -18,7 +18,7 @@ import os
 import re
 import sys
 
-from _git import ROOT, blob, changed_files, fail
+from _git import ROOT, added_lines, blob, changed_files, fail, match
 
 PAGE = "GOALS.md"
 STATUSES = ("open", "partly done", "done")
@@ -44,22 +44,72 @@ def text_at(rev: str) -> str:
     return b.decode("utf-8") if b is not None else ""
 
 
-def known_names() -> tuple[set[str], set[str]]:
-    """(full names, last components) of every record and every declaration in the tree at the base."""
-    full, short = set(), set()
+SCOPE_LINE_RE = re.compile(r"^(?:(?:noncomputable|public|private)\s+)*(namespace|section|end)\b[ \t]*(\S*)")
+
+
+def lean_full_names(text: str, namespaces: set[str] | None = None) -> set[str]:
+    """The full names a Lean file declares: the written name under the namespaces open at that point. The namespaces
+    it opens are added to `namespaces` when given."""
+    out: set[str] = set()
+    stack: list[tuple[str, str]] = []
+    decl_at = {m.start(): m.group(1) for m in DECL_RE.finditer(text)}
+    pos = 0
+    for line in text.splitlines(keepends=True):
+        s = SCOPE_LINE_RE.match(line)
+        if s:
+            kind, name = s.group(1), s.group(2)
+            if kind == "end":
+                if stack:
+                    stack.pop()
+            else:
+                stack.append((kind, name))
+                if kind == "namespace" and name and namespaces is not None:
+                    namespaces.add(".".join([n for k, n in stack if k == "namespace" and n]))
+        for start, written in decl_at.items():
+            if pos <= start < pos + len(line):
+                if written.startswith("_root_."):
+                    out.add(written[len("_root_.") :])
+                else:
+                    ns = [n for k, n in stack if k == "namespace" and n]
+                    out.add(".".join(ns + [written]))
+        pos += len(line)
+    return out
+
+
+def known_names(base: str, head: str) -> tuple[set[str], set[str], set[str]]:
+    """(full names, last components, namespaces) of every record (the base's and the ones this PR adds) and every
+    declaration in the tree."""
+    full: set[str] = set()
+    namespaces: set[str] = set()
     for f in (ROOT / "data").glob("*/**/*.jsonl"):
         for line in f.open("rb"):
             m = re.search(rb'"name"\s*:\s*"([^"]+)"', line)
             if m:
-                n = m.group(1).decode()
-                full.add(n)
-                short.add(n.rsplit(".", 1)[-1])
+                full.add(json.loads(b'"' + m.group(1) + b'"'))
+    for _, p in changed_files(base, head):  # a record added by this PR can be referenced by it
+        if match(p, ["data/*/*.jsonl", "data/*/*/*.jsonl"]):
+            for _, text in added_lines(base, head, p):
+                try:
+                    r = json.loads(text)
+                except ValueError:
+                    continue
+                if isinstance(r, dict) and isinstance(r.get("name"), str):
+                    full.add(r["name"])
     for f in (ROOT / "Tengoku").rglob("*.lean"):
-        for m in DECL_RE.finditer(f.read_text(encoding="utf-8", errors="ignore")):
-            n = m.group(1).removeprefix("_root_.")
-            full.add(n)
-            short.add(n.rsplit(".", 1)[-1])
-    return full, short
+        full |= lean_full_names(f.read_text(encoding="utf-8", errors="ignore"), namespaces)
+    for n in full:  # a record's or declaration's own prefix is a namespace too
+        parts = n.split(".")
+        namespaces.update(".".join(parts[:i]) for i in range(1, len(parts)))
+    return full, {n.rsplit(".", 1)[-1] for n in full}, namespaces
+
+
+# `@[to_additive]` writes the additive lemma from the multiplicative one, so `sum_range_succ` appears in no file:
+# its multiplicative twin does
+ADDITIVE = [("nsmul", "pow"), ("vadd", "smul"), ("sum", "prod"), ("add", "mul"), ("zero", "one"), ("neg", "inv"), ("sub", "div")]
+
+
+def multiplicative(name: str) -> str:
+    return "_".join(next((m for a, m in ADDITIVE if tok == a), tok) for tok in name.split("_"))
 
 
 def check_page(text: str) -> list[str]:
@@ -125,16 +175,22 @@ def check_page(text: str) -> list[str]:
     return errors
 
 
-def check_refs(text: str) -> list[str]:
+def check_refs(text: str, base: str, head: str) -> list[str]:
     refs = sorted({m.group(1).rstrip(".") for m in REF_RE.finditer(text)})
     if not refs:
         return []
-    full, short = known_names()
-    return [
-        f"`tengoku:{r}` names nothing in the library (no record or declaration by that name)"
-        for r in refs
-        if r not in full and r.rsplit(".", 1)[-1] not in short
-    ]
+    full, short, namespaces = known_names(base, head)
+
+    def exists(r: str) -> bool:
+        if r in full:
+            return True
+        ns, _, last = r.rpartition(".")
+        known_last = last in short or multiplicative(last) in short
+        # a qualified name whose namespace is real and whose last part is declared somewhere (a name Lean's core
+        # or an attribute like to_additive generates, which no file spells out); a bare name: any declaration
+        return known_last and (not ns or ns in namespaces)
+
+    return [f"`tengoku:{r}` names nothing in the library (no record or declaration by that name)" for r in refs if not exists(r)]
 
 
 def ai_changed_people(base_text: str, head_text: str) -> bool:
@@ -188,17 +244,17 @@ def proved_goals(text: str) -> list[tuple[str, str]]:
 def main() -> None:
     base, head = sys.argv[1], sys.argv[2]
     files = [p for _, p in changed_files(base, head)]
+    ai = os.environ.get("GOALS_AI") == "1"
+    others = [p for p in files if p != PAGE]
+    if ai and others:  # whether or not GOALS.md changed
+        fail(f"the AI reviewer's PR may change only GOALS.md, not {', '.join(others[:5])}")
     if PAGE not in files:
         print("goals: GOALS.md unchanged")
         return
     head_text = text_at(head)
-    errors = check_page(head_text) + check_refs(head_text)
-    if os.environ.get("GOALS_AI") == "1":
-        if ai_changed_people(text_at(base), head_text):
-            errors.append("the AI reviewer may change only the text inside Suggestions; this PR changes the part people write")
-        others = [p for p in files if p != PAGE]
-        if others:
-            errors.append(f"the AI reviewer's PR may change only GOALS.md, not {', '.join(others[:5])}")
+    errors = check_page(head_text) + check_refs(head_text, base, head)
+    if ai and ai_changed_people(text_at(base), head_text):
+        errors.append("the AI reviewer may change only the text inside Suggestions; this PR changes the part people write")
     for gid, name in proved_goals(head_text):
         print(f"goals: goal {gid} looks proved by the trusted record {name}: mark it done, with `Proved by` tengoku:{name}")
     if errors:
