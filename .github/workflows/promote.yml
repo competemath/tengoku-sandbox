@@ -134,7 +134,8 @@ jobs:
                   if not l.strip(): return True
                   try:
                       r = json.loads(l)
-                      return (r.get("name"), r.get("source_path")) not in mine
+                      # a record without a context is never promoted (promote.py skips it), whatever it shares a key with
+                      return r.get("context") is None or (r.get("name"), r.get("source_path")) not in mine
                   except ValueError: return True
               kept = [l for l in before if keep(l)]
               if len(kept) == len(before):
