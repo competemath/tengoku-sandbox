@@ -9,4 +9,12 @@ enforces that. People may edit anything, Suggestions included.
 
 To add or change a goal, see [docs/goals.md](docs/goals.md).
 
-<!-- The goals follow. Copy the block in docs/goals.md for a new one. -->
+<!-- The goals follow. Copy the block in docs/goals.md for a new one, above the "Goals worth adding" part. -->
+
+<details>
+<summary><b>Goals worth adding</b> (suggested by the AI reviewer)</summary>
+
+<!-- suggestions -->
+<!-- /suggestions -->
+
+</details>

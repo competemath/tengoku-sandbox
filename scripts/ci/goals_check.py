@@ -66,7 +66,14 @@ def check_page(text: str) -> list[str]:
     errors: list[str] = []
     ids: set[str] = set()
     # nothing may sit between goal blocks but the page's own text: a stray marker means a broken block
-    outside = GOAL_RE.sub("", text)
+    # one page-level Suggestions part, after the goals: goals worth adding that nobody has written yet
+    goal_spans = [m.span() for m in GOAL_RE.finditer(text)]
+    page_level = [m for m in SUGGEST_RE.finditer(text) if not any(a <= m.start() < b for a, b in goal_spans)]
+    if len(page_level) > 1:
+        errors.append("at most one page-level Suggestions part (goals worth adding)")
+    if page_level and goal_spans and page_level[0].start() < goal_spans[-1][1]:
+        errors.append("the page-level Suggestions part (goals worth adding) goes after the last goal")
+    outside = SUGGEST_RE.sub("", GOAL_RE.sub("", text))
     for marker in ("<!-- goal:", "<!-- /goal -->", "<!-- people -->", "<!-- suggestions -->"):
         if marker in outside:
             errors.append(

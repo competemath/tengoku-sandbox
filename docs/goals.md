@@ -18,9 +18,14 @@ fields, so a reader always knows where to look.
 
 The status in the title line is one of `open`, `partly done` or `done`.
 
+## Goals worth adding
+
+The page ends with one Suggestions part of its own, **Goals worth adding**, where the AI reviewer proposes goals
+nobody has written. A person who agrees writes the goal properly above it.
+
 ## A new goal
 
-Copy this to the end of GOALS.md and fill it in. Keep the marker comments exactly as they are: the check
+Copy this above the *Goals worth adding* part at the end of GOALS.md and fill it in. Keep the marker comments exactly as they are: the check
 reads them. The id is lowercase letters, digits and dashes, and never changes once the goal is in.
 
 ````markdown
@@ -74,7 +79,7 @@ theorem name (binders) : claim
 `scripts/ci/goals_check.py` runs on every pull request that changes GOALS.md:
 
 - every goal has a unique id, a title, a status, the fields above and no others, and one Suggestions part
-  after the part people write;
+  after the part people write; the page has at most one more Suggestions part, after the last goal;
 - every `tengoku:Name` names a record or declaration that exists (the AI reviewer's references included), and
   every link is `http(s)`;
 - a pull request from the AI reviewer (its branch starts with `goals-suggest/`) changes nothing but the text

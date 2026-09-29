@@ -157,6 +157,19 @@ class Goals(unittest.TestCase):
         self.assertNotEqual(rc, 0)
         self.assertIn("may change only GOALS.md", out)
 
+    def test_a_page_level_suggestions_part_after_the_goals(self):
+        tail = "<details>\n<summary><b>Goals worth adding</b></summary>\n\n<!-- suggestions -->\n{s}\n<!-- /suggestions -->\n\n</details>\n"
+        r = self.repo_with(PAGE + goal() + tail.format(s=""))
+        r.write("GOALS.md", PAGE + goal() + tail.format(s="- A goal nobody wrote: the converse, via `tengoku:Lib.old`."))
+        r.commit("ai adds a goal idea")
+        rc, out = self.run_check(r, ai=True)
+        self.assertEqual(rc, 0, out)
+        r.write("GOALS.md", PAGE + tail.format(s="") + goal())
+        r.commit("before the goals")
+        rc, out = self.run_check(r)
+        self.assertNotEqual(rc, 0)
+        self.assertIn("goes after the last goal", out)
+
     def test_people_may_change_anything(self):
         r = self.repo_with(PAGE + goal(suggestion="- Old suggestion."))
         r.write("GOALS.md", PAGE + goal(suggestion="", why="Clearer now."))
