@@ -91,7 +91,7 @@ else:
         detail += "\n\nFiles that differ from the generator's output:\n" + "\n".join(f"- `{f}`" for f in stat[:10])
 hint = next(
     (h for pat, h in HINTS if re.search(pat, msg, re.I)),
-    "Reproduce locally with the commands in CONTRIBUTING.md, fix, push, and the PR re-enters the queue.",
+    "Reproduce locally with the commands in CONTRIBUTING.md, fix, and push: the PR goes back into the queue by itself.",
 )
 subjects = run("log", "--format=%s", f"{base_sha}..HEAD") if base_sha else run("log", "--format=%s", "-n", "50")
 prs = sorted({n for n in re.findall(r"(?:Merge pull request #|\(#)(\d+)\)?\s*$", subjects, re.M)}, key=int)
@@ -119,7 +119,7 @@ The queue build failed at {where}.{group_note}
 
 Full log: {run_url}
 
-Re-queue after fixing (`gh pr merge --queue`, or the *Merge when ready* button). This message is generated; an AI reviewer will add more context later.
+Push the fix and the PR goes back into the queue by itself once its checks pass (the `ejected` label does that; remove it to stop). This message is generated; an AI reviewer will add more context later.
 
 If your change is right and the queue is not (candidate generation, the axiom scan and the regeneration diff are the complex parts): **[Report a gate bug]({issue_link})** — a maintainer looks at every one."""
 # A squash merge group carries one commit per PR, subject "<title> (#N)"; a merge-commit group says "Merge pull request #N".
@@ -130,9 +130,17 @@ if os.environ.get("TENGOKU_COMMENT_DRY"):  # tests: show what would be posted, p
     print("would comment on:", ", ".join("#" + n for n in prs))
     print(body)
     sys.exit(0)
+# The label puts the PR back into the queue on its next push (.github/workflows/rearm.yml): leaving the queue turns
+# "merge when ready" off, and an outside contributor rarely thinks to press it again.
+subprocess.run(
+    ["gh", "label", "create", "ejected", "--color", "d93f0b", "--description", "Left the merge queue; the next push re-queues it"],
+    check=False,
+    capture_output=True,
+)
 for n in prs:
     r = subprocess.run(["gh", "pr", "comment", n, "--body", body], check=False, capture_output=True, text=True)
     if r.returncode != 0:
         print(f"could not comment on #{n}: {r.stderr.strip()[:200]}")
         continue
     print(f"commented on #{n}")
+    subprocess.run(["gh", "pr", "edit", n, "--add-label", "ejected"], check=False, capture_output=True)
