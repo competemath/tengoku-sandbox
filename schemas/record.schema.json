@@ -22,7 +22,8 @@
       "staged_at",
       "promoted_at",
       "added_by",
-      "build_error"
+      "build_error",
+      "headline"
     ],
     "types": {
       "name": "string",
@@ -36,7 +37,8 @@
       "source_path": "string",
       "staged_at": "string",
       "promoted_at": "string",
-      "added_by": "string"
+      "added_by": "string",
+      "headline": "boolean"
     }
   },
   "tombstone": {

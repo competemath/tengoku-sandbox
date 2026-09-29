@@ -3,7 +3,8 @@
 Checks only the lines a PR adds to data/*/*.jsonl: JSON, required fields per
 tier (schemas/record.schema.json), status matches the tier, library matches
 the file, source on the allowlist (schemas/sources.json), no duplicate names
-in the PR or against trusted, tombstones point at existing names, file ≤ 50 MB."""
+in the PR or against trusted, tombstones point at existing names, file ≤ 50 MB, at most ten
+headline records per PR, each crediting its author."""
 
 from __future__ import annotations
 
@@ -14,6 +15,7 @@ import sys
 from _git import ROOT, added_lines, blob, changed_files, fail, library_of, load_schema, match
 
 MAX_BYTES = 50 * 1024 * 1024
+MAX_HEADLINES = 10  # the results a PR is about, shown first; more would be clutter
 base, head = sys.argv[1], sys.argv[2]
 schema = load_schema("record.schema.json")
 NAME_RE = re.compile(r"[^\s,\x00-\x1f]+")
@@ -21,6 +23,7 @@ sources_doc = load_schema("sources.json")
 sources = sources_doc["allowed"]
 corpora = sources_doc.get("corpora", {})
 errors, seen, names_by_tier = [], set(), {}
+headlines: list[str] = []
 
 
 def tier(p: str) -> str:
@@ -98,8 +101,17 @@ for st, p in changed_files(base, head):
                 known = trusted_names()
             if n in known:
                 errors.append(f"{p}:{no}: {n} is already trusted")
+        # a contributor names headlines when adding records; promotion carries them into trusted, many PRs at once
+        if r.get("headline") is True and t != "trusted":
+            if not re.search(r"\bAuthors?:", str(r.get("statement", ""))):
+                errors.append(f"{p}:{no}: a headline credits its author: an `Author:` line in the statement's docstring")
+            headlines.append(str(n))
         if "sorry" in str(r.get("proof", "")) and t == "trusted":
             errors.append(f"{p}:{no}: a trusted record cannot contain sorry")
+if len(headlines) > MAX_HEADLINES:
+    errors.append(
+        f"{len(headlines)} headline records; a PR names at most {MAX_HEADLINES} (the results it is about): {', '.join(headlines[:12])}"
+    )
 if errors:
     fail("record validation:\n  " + "\n  ".join(errors[:25]) + ("" if len(errors) <= 25 else f"\n  … {len(errors) - 25} more"))
 print(f"records OK ({len(seen)} added)")
