@@ -3,8 +3,9 @@
 Checks only the lines a PR adds to data/*/*.jsonl: JSON, required fields per
 tier (schemas/record.schema.json), status matches the tier, library matches
 the file, source on the allowlist (schemas/sources.json), no duplicate names
-in the PR or against trusted, tombstones point at existing names, file ≤ 50 MB, at most ten
-headline records per PR, each crediting its author."""
+in the PR or against trusted, tombstones point at existing names and carry a fixed category, a note on
+where to look instead points at a tombstoned name, a credit correction names a trusted record and links its
+evidence, file ≤ 50 MB."""
 
 from __future__ import annotations
 
@@ -30,6 +31,16 @@ def tier(p: str) -> str:
     return p.split("/")[1]
 
 
+def tombstoned_names() -> set[str]:
+    out = set()
+    for f in (ROOT / "data" / "trusted").glob("*.jsonl"):
+        for line in f.open("rb"):
+            m = re.search(rb'"tombstone"\s*:\s*"([^"]+)"', line)
+            if m:
+                out.add(m.group(1).decode())
+    return out
+
+
 def trusted_names() -> set[str]:
     out = set()
     for f in (ROOT / "data" / "trusted").glob("*.jsonl"):
@@ -41,6 +52,8 @@ def trusted_names() -> set[str]:
 
 
 known = None
+tombstoned = None
+LINKISH = re.compile(r"https?://\S+")
 for st, p in changed_files(base, head):
     if not match(
         p, ["data/tentative/*.jsonl", "data/staging/*.jsonl", "data/trusted/*.jsonl", "data/tentative/*/*.jsonl", "data/staging/*/*.jsonl"]
@@ -63,10 +76,43 @@ for st, p in changed_files(base, head):
             for k in schema["tombstone"]["required"]:
                 if k not in r:
                     errors.append(f"{p}:{no}: tombstone missing {k}")
+            if "category" in r and r["category"] not in schema["tombstone_categories"]:
+                errors.append(f"{p}:{no}: tombstone category {r['category']!r} is not one of {', '.join(schema['tombstone_categories'])}")
             if known is None:
                 known = trusted_names()
             if t == "trusted" and r["tombstone"] not in known:
                 errors.append(f"{p}:{no}: tombstone for unknown name {r['tombstone']}")
+            continue
+        if "tombstone_note" in r or "credit_correction" in r:
+            kind = "tombstone_note" if "tombstone_note" in r else "credit_correction"
+            for k in schema[kind]["required"]:
+                if k not in r:
+                    errors.append(f"{p}:{no}: {kind} missing {k}")
+            if t != "trusted":
+                errors.append(f"{p}:{no}: a {kind} goes in data/trusted/<library>.jsonl")
+            if known is None:
+                known = trusted_names()
+            if kind == "tombstone_note":
+                if tombstoned is None:  # the base's tombstones and the ones this PR adds
+                    tombstoned = tombstoned_names() | {
+                        json.loads(x)["tombstone"]
+                        for _, q in changed_files(base, head)
+                        if match(q, ["data/trusted/*.jsonl"])
+                        for _, x in added_lines(base, head, q)
+                        if '"tombstone"' in x and x.strip()
+                    }
+                if r["tombstone_note"] not in tombstoned:
+                    errors.append(f"{p}:{no}: a tombstone_note is for a retracted record; {r['tombstone_note']} has no tombstone")
+                see = r.get("see", [])
+                if not isinstance(see, list) or not all(isinstance(x, str) for x in see):
+                    errors.append(f"{p}:{no}: see is a list of tengoku names or links")
+            else:
+                if r["credit_correction"] not in known:
+                    errors.append(f"{p}:{no}: credit_correction for unknown name {r['credit_correction']}")
+                if not re.search(r"\bAuthors?:", str(r.get("credit", ""))):
+                    errors.append(f"{p}:{no}: credit is an `Author:` line")
+                if not LINKISH.fullmatch(str(r.get("evidence", ""))):
+                    errors.append(f"{p}:{no}: evidence is an http(s) link to what shows the plagiarism")
             continue
         req = schema["record"]["required"] + schema["record"].get("required_by_tier", {}).get(t, [])
         for k in req:

@@ -293,6 +293,29 @@ def data_files(out: Path, tier: str, library: str) -> list[Path]:
     return ([flat] if flat.exists() else []) + nested
 
 
+def credit_corrections(out: Path, library: str) -> dict[str, tuple[str, str]]:
+    """name -> (corrected credit, evidence) from credit_correction lines in the trusted files; the newest wins."""
+    out_: dict[str, tuple[str, str]] = {}
+    for p in data_files(out, "trusted", library):
+        for line in p.read_text(encoding="utf-8").splitlines():
+            if line.strip():
+                r = json.loads(line)
+                if "credit_correction" in r:
+                    out_[str(r["credit_correction"])] = (str(r.get("credit", "")), str(r.get("evidence", "")))
+    return out_
+
+
+def apply_credit(statement: str, credit: str, evidence: str) -> str:
+    """The statement with its credit corrected (the record stays as it was): the docstring's Author lines give way
+    to the corrected one, and the evidence is linked."""
+    note = f"Credit corrected; evidence: {evidence}"
+    m = re.match(r"(\s*/--)(.*?)(-/)", statement, re.S)
+    if not m:
+        return f"/-- {credit}\n\n{note} -/\n{statement.lstrip()}"
+    body = "\n".join(l for l in m.group(2).split("\n") if not re.match(r"\s*Authors?:", l)).rstrip()
+    return f"{m.group(1)}{body}\n\n{credit}\n{note} {m.group(3)}{statement[m.end() :]}"
+
+
 def tombstoned_names(out: Path, library: str) -> list[str]:
     """Names retracted by tombstone lines in the library's trusted files."""
     names = []
@@ -334,13 +357,16 @@ def main():
         # A tombstone line {"tombstone": "<name>", ...} in a trusted file retracts every record of that name
         # (history stays in the file). The campaign found the schema accepted tombstones that changed nothing.
         retracted = set(tombstoned_names(out, library))
+        corrected = credit_corrections(out, library)
         for tier in DATA_TIERS:
             for p in data_files(out, tier, library):
                 for line in p.read_text(encoding="utf-8").splitlines():
                     if line.strip():
                         r = json.loads(line)
-                        if "tombstone" in r or r.get("name") in retracted:
+                        if any(k in r for k in ("tombstone", "tombstone_note", "credit_correction")) or r.get("name") in retracted:
                             continue
+                        if r.get("name") in corrected:
+                            r = dict(r, statement=apply_credit(r["statement"], *corrected[r["name"]]))
                         if r.get("source_path") and r.get("context") is not None:
                             records.append(r)
         if args.candidate:

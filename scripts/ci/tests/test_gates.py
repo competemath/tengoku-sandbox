@@ -140,7 +140,10 @@ class Gates(unittest.TestCase):
 
     def test_tombstone_is_an_append(self):
         r = Repo()
-        r.append("data/trusted/lib.jsonl", json.dumps({"tombstone": "Lib.old", "reason": "wrong", "by": "t", "at": "2026-09-15"}) + "\n")
+        r.append(
+            "data/trusted/lib.jsonl",
+            json.dumps({"tombstone": "Lib.old", "category": "incorrect", "reason": "wrong", "by": "t", "at": "2026-09-15"}) + "\n",
+        )
         r.commit("retract")
         self.assertEqual(r.gate("append_only.py")[0], 0)
         self.assertEqual(r.gate("validate_records.py")[0], 0)
