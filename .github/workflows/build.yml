@@ -61,7 +61,7 @@ jobs:
       # Full history, no file contents: `cache.sh get` picks the newest cache that is an ANCESTOR of this
       # commit and `put` keeps a top-up that is AHEAD of it; a depth-1 clone can answer neither once main
       # has moved since the last cache (the seed step silently fell back to the Actions cache for days).
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { fetch-depth: 0, filter: "blob:none", persist-credentials: false }
 
       - name: Install elan (toolchain pinned by lean-toolchain)
@@ -169,7 +169,7 @@ jobs:
     outputs:
       published: ${{ steps.publish.outputs.tag != '' }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { fetch-depth: 0, filter: "blob:none", persist-credentials: false }
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with: { name: cache-parts, path: cache-out }

@@ -48,7 +48,7 @@ jobs:
       - name: The commit, in full (the run title names it, and a release matches the title exactly)
         env: { WANT: "${{ inputs.commit }}" }
         run: '[ -z "$WANT" ] || [[ "$WANT" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::commit must be the full 40-character SHA: git rev-parse <commit>"; exit 1; }'
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { ref: "${{ inputs.commit || github.sha }}", fetch-depth: 0, filter: "blob:none", persist-credentials: false }
       - name: A commit of main, checked by the newest checker
         env: { WANT: "${{ inputs.commit }}" }
