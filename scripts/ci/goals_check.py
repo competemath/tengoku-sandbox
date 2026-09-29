@@ -47,9 +47,34 @@ def text_at(rev: str) -> str:
 SCOPE_LINE_RE = re.compile(r"^(?:(?:noncomputable|public|private)\s+)*(namespace|section|end)\b[ \t]*(\S*)")
 
 
+def blank_comments(text: str) -> str:
+    """The text with every Lean comment (`-- …` and `/- … -/`, nested, docstrings included) turned into spaces, lines
+    kept: a `namespace` or `theorem` written inside a comment declares nothing."""
+    out, i, depth, n = list(text), 0, 0, len(text)
+    while i < n:
+        if depth == 0 and text.startswith("--", i):
+            while i < n and text[i] != "\n":
+                out[i] = " "
+                i += 1
+        elif text.startswith("/-", i):
+            depth += 1
+            out[i] = out[i + 1] = " "
+            i += 2
+        elif depth and text.startswith("-/", i):
+            depth -= 1
+            out[i] = out[i + 1] = " "
+            i += 2
+        else:
+            if depth and text[i] != "\n":
+                out[i] = " "
+            i += 1
+    return "".join(out)
+
+
 def lean_full_names(text: str, namespaces: set[str] | None = None) -> set[str]:
     """The full names a Lean file declares: the written name under the namespaces open at that point. The namespaces
     it opens are added to `namespaces` when given."""
+    text = blank_comments(text)
     out: set[str] = set()
     stack: list[tuple[str, str]] = []
     decl_at = {m.start(): m.group(1) for m in DECL_RE.finditer(text)}
@@ -97,6 +122,11 @@ def known_names(base: str, head: str) -> tuple[set[str], set[str], set[str]]:
                     full.add(r["name"])
     for f in (ROOT / "Tengoku").rglob("*.lean"):
         full |= lean_full_names(f.read_text(encoding="utf-8", errors="ignore"), namespaces)
+    for _, p in changed_files(base, head):  # a declaration this PR adds (the checkout is the base; the PR is read as data)
+        if p.startswith("Tengoku/") and p.endswith(".lean"):
+            b = blob(head, p)
+            if b is not None:
+                full |= lean_full_names(b.decode("utf-8", errors="ignore"), namespaces)
     for n in full:  # a record's or declaration's own prefix is a namespace too
         parts = n.split(".")
         namespaces.update(".".join(parts[:i]) for i in range(1, len(parts)))
@@ -123,7 +153,10 @@ def check_page(text: str) -> list[str]:
         errors.append("at most one page-level Suggestions part (goals worth adding)")
     if page_level and goal_spans and page_level[0].start() < goal_spans[-1][1]:
         errors.append("the page-level Suggestions part (goals worth adding) goes after the last goal")
-    outside = SUGGEST_RE.sub("", GOAL_RE.sub("", text))
+    between = GOAL_RE.sub("", text)
+    if between.count("<details>") != between.count("</details>"):  # the page-level part's wrapper, and any other
+        errors.append("outside the goals, every `<details>` needs its `</details>` (the Goals worth adding part is one)")
+    outside = SUGGEST_RE.sub("", between)
     for marker in ("<!-- goal:", "<!-- /goal -->", "<!-- people -->", "<!-- suggestions -->"):
         if marker in outside:
             errors.append(

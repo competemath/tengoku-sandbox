@@ -179,6 +179,39 @@ class Goals(unittest.TestCase):
         self.assertNotEqual(rc, 0)
         self.assertIn("tengoku:Other.seeded", out)
 
+    def test_a_namespace_or_theorem_inside_a_comment_declares_nothing(self):
+        r = self.repo_with()
+        r.git("checkout", "-q", "main")
+        lean = (
+            "/- an old draft:\nnamespace Fake\ntheorem gone : True := trivial\n-/\n-- namespace Fake2\ntheorem actual : True := trivial\n"
+        )
+        r.write("Tengoku/Nat/Draft.lean", lean)
+        r.commit("seed")
+        r.git("checkout", "-q", "-B", "pr")
+        for ref, ok in (("actual", True), ("Fake.actual", False), ("gone", False), ("Fake2.actual", False)):
+            r.write("GOALS.md", PAGE + goal(suggestion=f"- `tengoku:{ref}`"))
+            r.commit(f"ref {ref}")
+            rc, out = self.run_check(r)
+            self.assertEqual(rc == 0, ok, f"{ref}: {out}")
+
+    def test_a_declaration_the_pr_adds_is_read_from_the_pr(self):
+        r = self.repo_with()
+        r.write("Tengoku/Nat/New.lean", "namespace Nat\n\ntheorem brand_new : 3 = 3 := rfl\n\nend Nat\n")
+        r.write("GOALS.md", PAGE + goal(suggestion="- `tengoku:Nat.brand_new`"))
+        r.commit("a tooling PR adds a lemma and a goal cites it")
+        r.git("checkout", "-q", "main")  # as in CI: the checkout is the base, the PR only data
+        rc, out = self.run_check(r)
+        self.assertEqual(rc, 0, out)
+
+    def test_an_unclosed_page_level_part_fails(self):
+        tail = "<details>\n<summary><b>Goals worth adding</b></summary>\n\n<!-- suggestions -->\n\n<!-- /suggestions -->\n\n"
+        r = self.repo_with()
+        r.write("GOALS.md", PAGE + goal() + tail)  # no closing </details>
+        r.commit("unclosed")
+        rc, out = self.run_check(r)
+        self.assertNotEqual(rc, 0)
+        self.assertIn("outside the goals, every `<details>` needs its `</details>`", out)
+
     def test_a_namespaced_declaration_is_found_by_its_full_name(self):
         r = self.repo_with()
         r.git("checkout", "-q", "main")
