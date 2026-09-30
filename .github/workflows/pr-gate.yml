@@ -148,7 +148,7 @@ jobs:
       - name: detect-secrets on the changed files (every class)
         shell: bash
         run: |  # pragma: allowlist secret
-          pip install -q detect-secrets==1.5.0
+          pip install -q --require-hashes -r scripts/ci/requirements/secrets.txt   # main's pins (this job's checkout is main)
           git diff --name-only --diff-filter=AM "$BASE...$HEAD" -- . ':!data/' ':!Tengoku/' ':!.lake/' ':!scripts/ci/campaign/' > changed.txt   # the campaign's fixtures hold fake credentials
           mapfile -t files < changed.txt
           # the PR's versions of those files, scanned against main's baseline (a PR cannot allowlist its own secret)
@@ -258,7 +258,7 @@ jobs:
             git cat-file -e "$HEAD:scripts/ci/workflow_rules.py" 2>/dev/null && { echo "main has no workflow_rules.py yet: this PR adds it"; exit 0; }
             echo "::error::neither main nor this PR has scripts/ci/workflow_rules.py"; exit 1
           fi
-          pip install -q pyyaml==6.0.2
+          pip install -q --require-hashes -r scripts/ci/requirements/yaml.txt
           python3 scripts/ci/workflow_rules.py --online --changed "$BASE" "$HEAD"
 
   depends:
