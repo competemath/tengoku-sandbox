@@ -58,6 +58,7 @@ class AxiomsCheck(unittest.TestCase):
 
     def check(self, mods: list[str], jobs: int = 3, **rules: str) -> tuple[int, str, list[str]]:
         env = {**os.environ, "AXIOMS_TOOL": f"{sys.executable} {self.fake}", "AXIOMS_JOBS": str(jobs), "FAKE_LOG": str(self.log)}
+        env["TENGOKU_CI_ROOT"] = self.dir.name  # module files, when a test writes them
         if "run_timeout" in rules:
             env["AXIOMS_RUN_TIMEOUT"] = rules.pop("run_timeout")
         env.update({f"FAKE_{k.upper()}": v for k, v in rules.items()})
@@ -71,7 +72,7 @@ class AxiomsCheck(unittest.TestCase):
     def test_no_clash_is_one_run(self) -> None:
         rc, out, runs = self.check([f"M{i}" for i in range(40)])
         self.assertEqual((rc, len(runs)), (0, 1), out)
-        self.assertIn("40 modules in 1 run(s)", out)
+        self.assertIn("40 modules in 1 group(s), 1 run(s)", out)
 
     def test_one_clash_splits_far_fewer_runs_than_modules(self) -> None:
         mods = [f"M{i}" for i in range(40)]
@@ -121,6 +122,20 @@ class AxiomsCheck(unittest.TestCase):
         rc, out, _ = self.check(["M0", "M1"], hang="M1", run_timeout="1")
         self.assertEqual(rc, 1)
         self.assertIn("did not finish in 1 s", out)
+
+    def test_modules_that_clash_are_put_in_different_runs_before_any_split(self) -> None:
+        lib = Path(self.dir.name, "Tengoku", "Lib")
+        (lib / "Deps").mkdir(parents=True)
+        (lib / "_candidate_A.lean").write_text("def dup : Nat := 1\ntheorem a : True := trivial\n")
+        (lib / "Deps" / "A.lean").write_text("def dup : Nat := 1\n")  # A's file again, as another candidate's prelude
+        (lib / "_candidate_B.lean").write_text("import Tengoku.Lib.Deps.A\ntheorem b : True := trivial\n")
+        (lib / "_candidate_C.lean").write_text("theorem c : True := trivial\n")
+        mods = ["Tengoku.Lib._candidate_A", "Tengoku.Lib._candidate_B", "Tengoku.Lib._candidate_C"]
+        rc, out, runs = self.check(mods, clash="Tengoku.Lib._candidate_A:Tengoku.Lib._candidate_B")
+        self.assertEqual(rc, 0, out)
+        self.assertIn("3 modules in 2 group(s), 2 run(s)", out)  # no run hit the clash, so nothing was split
+        for r in runs:
+            self.assertFalse({"Tengoku.Lib._candidate_A", "Tengoku.Lib._candidate_B"} <= set(r.split()), r)
 
     def test_no_modules_is_a_usage_error(self) -> None:
         rc, _, runs = self.check([])

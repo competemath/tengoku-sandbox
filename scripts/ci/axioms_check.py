@@ -10,15 +10,23 @@ way is split in half and each half is checked, up to AXIOMS_JOBS runs at a time,
 clashes cost a few extra runs, not one run per module (which took 45 minutes on a staging group and made the queue
 time out). A module that cannot be imported even alone, or a declaration with a non-standard axiom, fails the check.
 Every run's output is printed (the workflow appends it to build.log, which the ejection comment reads).
+
+Splitting alone degenerates when many modules clash (a staging group of 659 records: 227 candidates, dozens of runs,
+still unfinished after an hour), so the modules are first sorted into groups that cannot clash: a module's closure is
+the names it declares plus those of the library modules it imports (transitively); two modules clash when a name is
+declared by different modules in their closures. Each group is then one run, and the split remains only as the
+safety net for a clash this reading misses.
 """
 
 from __future__ import annotations
 
 import os
+import re
 import shlex
 import subprocess
 import sys
 import threading
+from pathlib import Path
 
 CLASH = "environment already contains"
 TOOL = shlex.split(os.environ.get("AXIOMS_TOOL", "lake env .lake/build/bin/tengoku-axioms"))
@@ -26,6 +34,9 @@ JOBS = max(1, int(os.environ.get("AXIOMS_JOBS", "3")))
 RUN_TIMEOUT = int(
     os.environ.get("AXIOMS_RUN_TIMEOUT", "1200")
 )  # one run takes about a minute; a stuck one must not hold the queue  # each run holds the tree in memory; the runner has 16 GB
+
+IMPORT_RE = re.compile(r"^\s*(?:(?:public|private|meta)\s+)*import\s+(\S+)", re.M)
+ROOT = Path(os.environ.get("TENGOKU_CI_ROOT", "."))
 
 slots = threading.Semaphore(JOBS)
 lock = threading.Lock()
@@ -62,14 +73,82 @@ def check(mods: list[str]) -> bool:
     return rc == 0
 
 
+def module_text(mod: str) -> str | None:
+    f = ROOT / Path(*mod.split(".")).with_suffix(".lean")
+    return f.read_text(encoding="utf-8", errors="ignore") if f.is_file() else None
+
+
+def plan_groups(mods: list[str]) -> list[list[str]]:
+    """The modules sorted into as few groups as the reading allows, no two clashing modules in one group."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from _git import declared_names
+
+    names_of: dict[str, set[str]] = {}
+    imports_of: dict[str, list[str]] = {}
+
+    def load(mod: str) -> None:
+        if mod in names_of:
+            return
+        text = module_text(mod)
+        names_of[mod] = declared_names(text) if text else set()
+        imports_of[mod] = IMPORT_RE.findall(text) if text else []
+
+    def closure(mod: str) -> dict[str, str]:
+        """name -> the module that declares it, over the module and the library modules it imports."""
+        lib = ".".join(mod.split(".")[:2])  # Tengoku.<Library>: the seed and the trusted tree are shared by every run
+        out: dict[str, str] = {}
+        todo, seen = [mod], set()
+        while todo:
+            m = todo.pop()
+            if m in seen:
+                continue
+            seen.add(m)
+            load(m)
+            for n in names_of[m]:
+                out.setdefault(n, m)
+            todo += [i for i in imports_of[m] if i.startswith(lib + ".")]
+        return out
+
+    closures = {m: closure(m) for m in mods}
+    clash = {m: set() for m in mods}
+    owners: dict[str, dict[str, set[str]]] = {}  # name -> declaring module -> targets whose closure has it from there
+    for m, c in closures.items():
+        for n, where in c.items():
+            owners.setdefault(n, {}).setdefault(where, set()).add(m)
+    for by_module in owners.values():
+        if len(by_module) > 1:
+            sets = list(by_module.values())
+            for i, a in enumerate(sets):
+                for b in sets[i + 1 :]:
+                    for x in a:
+                        clash[x] |= b
+                    for y in b:
+                        clash[y] |= a
+    groups: list[list[str]] = []
+    for m in sorted(mods, key=lambda m: -len(clash[m])):  # the most constrained first; otherwise the order given
+        for g in groups:
+            if not any(o in clash[m] for o in g):
+                g.append(m)
+                break
+        else:
+            groups.append([m])
+    return groups
+
+
 def main(argv: list[str]) -> int:
     mods = [m for m in argv if m]
     if not mods:
         print("usage: axioms_check.py MODULE...", file=sys.stderr)
         return 2
-    ok = check(mods)
-    print(f"axiom check: {len(mods)} modules in {runs} run(s)")
-    return 0 if ok else 1
+    groups = plan_groups(mods)
+    results: list[bool] = []
+    threads = [threading.Thread(target=lambda g=g: results.append(check(g))) for g in groups]
+    for th in threads:
+        th.start()
+    for th in threads:
+        th.join()
+    print(f"axiom check: {len(mods)} modules in {len(groups)} group(s), {runs} run(s)")
+    return 0 if len(results) == len(groups) and all(results) else 1
 
 
 if __name__ == "__main__":
