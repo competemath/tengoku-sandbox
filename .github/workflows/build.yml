@@ -184,9 +184,19 @@ jobs:
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
       # Every part gets a build-provenance attestation; scripts/cache.sh get refuses parts without one.
       - name: Attest the cache parts
+        id: attest
         uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
         with:
           subject-path: cache-out/tengoku-cache.tar.zst.part-*
+      # The same attestation as a file of the release (mirror of the library PR).
+      - name: The provenance, as a file of the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.publish.outputs.tag }}
+          BUNDLE: ${{ steps.attest.outputs.bundle-path }}
+        run: |
+          cp "$BUNDLE" tengoku-cache.intoto.jsonl
+          gh release upload "$TAG" tengoku-cache.intoto.jsonl -R "$TENGOKU_REPO" --clobber
 
   # Re-dispatches the build: after the time cap (resume), or on the tip when a workflow file landed meanwhile.
   relaunch:
