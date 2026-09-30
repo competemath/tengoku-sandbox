@@ -1,0 +1,2 @@
+data/trusted/mathlib.jsonl
+{"tombstone_note": "Known.gone", "note": "n", "see": ["Known.thm"], "by": "b", "at": "2026-09-30T00:00:00Z"}

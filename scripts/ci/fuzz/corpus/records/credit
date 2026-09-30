@@ -1,0 +1,2 @@
+data/trusted/mathlib.jsonl
+{"credit_correction": "Known.thm", "credit": "Author: X", "evidence": "https://example.org/e", "by": "b", "at": "2026-09-30"}

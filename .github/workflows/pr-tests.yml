@@ -34,7 +34,7 @@ jobs:
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
         with: { egress-policy: audit }
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with: { filter: "blob:none", persist-credentials: false }
+        with: { fetch-depth: 2, filter: "blob:none", persist-credentials: false }
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with: { python-version: "3.12" }
       - run: pip install -q --require-hashes -r scripts/ci/requirements/yaml.txt   # workflow_rules.py reads YAML
@@ -46,5 +46,14 @@ jobs:
           python3 -m unittest scripts.ci.tests.test_gates -v 2>&1 | tail -5
           python3 -m unittest scripts.ci.tests.test_workflow_rules -v 2>&1 | tail -5
           python3 -m unittest scripts.ci.tests.test_axioms_check -v 2>&1 | tail -5
+          python3 -m unittest scripts.ci.tests.test_fuzz -v 2>&1 | tail -5
+      - name: Fuzz the gate scripts this PR changes
+        run: |
+          # a separate assignment: a runner that cannot even list its targets fails the step (bash -e), never skips it
+          targets="$(python3 scripts/ci/fuzz/run.py --changed HEAD^1 HEAD --list)"
+          if [ -z "$targets" ]; then echo "fuzz: no target covers this change"; exit 0; fi
+          python3 -m venv "$RUNNER_TEMP/fuzz"
+          "$RUNNER_TEMP/fuzz/bin/pip" install -q --require-hashes -r scripts/ci/requirements/fuzz.txt
+          "$RUNNER_TEMP/fuzz/bin/python" scripts/ci/fuzz/run.py --changed HEAD^1 HEAD
       - uses: rhysd/actionlint@03d0035246f3e81f36aed592ffb4bebf33a03106 # v1.7.7
         with: { args: -color }

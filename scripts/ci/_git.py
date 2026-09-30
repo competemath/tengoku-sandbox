@@ -180,6 +180,11 @@ def annotation(msg: str) -> str:
     return msg.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
 
 
+def plain(text: str) -> str:
+    """Text for the log that can carry no workflow command (mirror of the library's _git.plain)."""
+    return re.sub(r":(?=:)", ": ", text.replace("\r", ""))
+
+
 def fail(msg: str) -> None:
     if os.environ.get("GITHUB_ACTIONS"):
         # `::error::` becomes a check-run annotation (what the verdict comment quotes); newlines must be
