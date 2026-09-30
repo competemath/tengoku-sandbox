@@ -41,7 +41,7 @@ jobs:
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
         with: { egress-policy: audit }
       - if: github.event_name == 'merge_group'
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { fetch-depth: 0, filter: "blob:none", persist-credentials: false }
       - name: Lean toolchain (pinned by lean-toolchain)
         if: github.event_name == 'merge_group'
@@ -207,7 +207,7 @@ jobs:
           scripts/cache.sh topup-make "$GITHUB_SHA" topup-out
           echo "state=complete" >> "$GITHUB_OUTPUT"
       - if: github.event_name == 'merge_group'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with: { name: topup, path: topup-out/, retention-days: 1, if-no-files-found: error }
       - name: Explain the failure to the authors
         if: failure() && github.event_name == 'merge_group'
@@ -228,11 +228,11 @@ jobs:
     permissions: { contents: write, id-token: write, attestations: write, pull-requests: write }
     steps:
       - if: github.event_name == 'merge_group' && needs.queue-build.result == 'success'
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with: { name: topup, path: topup-out }
       - name: Attest the top-up
         if: github.event_name == 'merge_group' && needs.queue-build.result == 'success' && needs.queue-build.outputs.topup == 'complete'
-        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with: { subject-path: "topup-out/topup-*.tar.zst" }
       - name: Publish it (provisional until this commit is on main)
         id: publish
