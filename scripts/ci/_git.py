@@ -174,11 +174,17 @@ def gh_output(key: str, value: str) -> None:
             f.write(f"{key}={value}\n")
 
 
+def annotation(msg: str) -> str:
+    """A workflow-command message: `%`, CR and LF encoded, so text from a PR (a record name) can never end the line and
+    start another command."""
+    return msg.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+
+
 def fail(msg: str) -> None:
     if os.environ.get("GITHUB_ACTIONS"):
         # `::error::` becomes a check-run annotation (what the verdict comment quotes); newlines must be
         # %0A-encoded or GitHub keeps only the first line. The readable form goes to the log too.
-        print("::error::" + msg.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A"))
+        print("::error::" + annotation(msg))
     print("FAIL: " + msg)
     sys.exit(1)
 
