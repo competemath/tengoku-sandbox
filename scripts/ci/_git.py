@@ -237,6 +237,12 @@ def declared_names(text: str) -> set[str]:
     return names
 
 
+def garbled(record: dict) -> bool:
+    """A record whose text holds U+FFFD is not the text that was verified (a character split across two stream
+    chunks when it was banked): the generator leaves it out (scripts/generate.py), so no module declares it."""
+    return any("\ufffd" in str(record.get(f, "")) for f in ("statement", "proof", "context"))
+
+
 def unplaced(names: set[str], texts: list[str]) -> list[str]:
     """Records no candidate module declares. A module may wrap its records in a library namespace
     (`EquationalTheories`), so a declared name counts when it is the record's name or ends with `.<name>`."""

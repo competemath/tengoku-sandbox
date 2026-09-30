@@ -110,7 +110,8 @@ jobs:
         env: { SOFT: "${{ steps.soft.outputs.soft }}", BASE: "${{ github.event.merge_group.base_sha }}" }
         run: |
           set -o pipefail
-          python3 scripts/ci/queue_targets.py "$BASE" HEAD > targets.txt 2> helper.log || { cat helper.log | tee -a build.log; exit 1; }
+          # the helper's own failure message (FAIL: … and its ::error:: annotation) is on stdout, so targets.txt is shown too
+          python3 scripts/ci/queue_targets.py "$BASE" HEAD > targets.txt 2> helper.log || { cat helper.log targets.txt | tee -a build.log; exit 1; }
           cat helper.log
           # `grep` exits 1 on no match; under `bash -e -o pipefail` that alone killed the first tooling-only group.
           targets="$(grep -E '^Tengoku\.' targets.txt | tr '\n' ' ' || true)"

@@ -638,6 +638,13 @@ class QueuePlacement(unittest.TestCase):
         ncs = "namespace A\nnoncomputable section\ntheorem n : True := trivial\nend\ntheorem after2 : True := trivial\nend A\n"
         self.assertEqual(unplaced({"A.n", "A.after2"}, [ncs]), [])
 
+    def test_a_garbled_record_is_left_out_like_the_generator_does(self):
+        from _git import garbled
+
+        self.assertTrue(garbled({"statement": "theorem t : 1 \ufffd 2"}))
+        self.assertTrue(garbled({"statement": "theorem t : True", "context": "a \ufffd b"}))
+        self.assertFalse(garbled({"statement": "theorem t : 1 ≤ 2", "proof": ":= by decide"}))
+
     def test_comments_and_strings_hide_nothing_and_declare_nothing(self):
         from _git import unplaced
 
