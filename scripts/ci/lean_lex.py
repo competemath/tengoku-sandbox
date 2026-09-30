@@ -70,7 +70,8 @@ def _interpolated(text: str, i: int) -> tuple[str, int]:
             j += 2
         elif text[j] == "{":
             k = _hole_end(text, j)
-            out.append("{" + code_only(text[j + 1 : k - 1]) + "}")
+            closed = text[k - 1 : k] == "}"  # an unclosed hole runs to the end: keep its last character (found by scripts/ci/fuzz)
+            out.append("{" + code_only(text[j + 1 : k - 1 if closed else k]) + "}")
             j = k
         else:
             out.append("\n" if text[j] == "\n" else " ")
