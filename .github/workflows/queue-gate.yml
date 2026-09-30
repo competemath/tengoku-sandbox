@@ -78,7 +78,9 @@ jobs:
         if: github.event_name == 'merge_group'
         env: { BASE: "${{ github.event.merge_group.base_sha }}" }
         run: |
-          if [ -z "$(python3 scripts/ci/fuzz/run.py --changed "$BASE" HEAD --list)" ]; then echo "fuzz: no target covers this group"; exit 0; fi
+          # a separate assignment: a runner that cannot even list its targets fails the step (bash -e), never skips it
+          targets="$(python3 scripts/ci/fuzz/run.py --changed "$BASE" HEAD --list)"
+          if [ -z "$targets" ]; then echo "fuzz: no target covers this group"; exit 0; fi
           python3 -m venv "$RUNNER_TEMP/fuzz"
           "$RUNNER_TEMP/fuzz/bin/pip" install -q --require-hashes -r scripts/ci/requirements/fuzz.txt
           "$RUNNER_TEMP/fuzz/bin/python" scripts/ci/fuzz/run.py --changed "$BASE" HEAD 2>&1 | tee -a build.log   # the ejection comment reads build.log

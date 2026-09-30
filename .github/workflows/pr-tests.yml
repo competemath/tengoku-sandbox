@@ -49,7 +49,9 @@ jobs:
           python3 -m unittest scripts.ci.tests.test_fuzz -v 2>&1 | tail -5
       - name: Fuzz the gate scripts this PR changes
         run: |
-          if [ -z "$(python3 scripts/ci/fuzz/run.py --changed HEAD^1 HEAD --list)" ]; then echo "fuzz: no target covers this change"; exit 0; fi
+          # a separate assignment: a runner that cannot even list its targets fails the step (bash -e), never skips it
+          targets="$(python3 scripts/ci/fuzz/run.py --changed HEAD^1 HEAD --list)"
+          if [ -z "$targets" ]; then echo "fuzz: no target covers this change"; exit 0; fi
           python3 -m venv "$RUNNER_TEMP/fuzz"
           "$RUNNER_TEMP/fuzz/bin/pip" install -q --require-hashes -r scripts/ci/requirements/fuzz.txt
           "$RUNNER_TEMP/fuzz/bin/python" scripts/ci/fuzz/run.py --changed HEAD^1 HEAD
