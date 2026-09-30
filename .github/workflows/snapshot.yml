@@ -47,11 +47,12 @@ jobs:
           printf 'changed=true\nversion=%s\ndate=%s\n' "$version" "$date" >> "$GITHUB_OUTPUT"
       - name: Attest the files
         if: steps.snap.outputs.changed == 'true'
+        id: attest
         uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
         with: { subject-path: "snapshot/*" }
       - name: Publish the release
         if: steps.snap.outputs.changed == 'true'
-        env: { GH_TOKEN: "${{ github.token }}", VERSION: "${{ steps.snap.outputs.version }}", DATE: "${{ steps.snap.outputs.date }}" }
+        env: { GH_TOKEN: "${{ github.token }}", VERSION: "${{ steps.snap.outputs.version }}", DATE: "${{ steps.snap.outputs.date }}", BUNDLE: "${{ steps.attest.outputs.bundle-path }}" }
         run: |
           # a published version is never changed; the tag decides, not the release (a release can be deleted while its
           # tag stays)
@@ -68,6 +69,7 @@ jobs:
           if [ "${kind:-}" = tag ]; then at="$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$at" --jq .object.sha)"; fi
           if [ -n "$at" ] && [ "$at" != "$GITHUB_SHA" ]; then echo "::error::$tag already points at $at, not $GITHUB_SHA"; exit 1; fi
           if gh release view "$tag" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then echo "$tag already snapshots $GITHUB_SHA"; exit 0; fi
+          cp "$BUNDLE" snapshot/tengoku-snapshot.intoto.jsonl   # the attestation as a file of the release (mirror of the library PR)
           records="$(python3 -c 'import json; print(json.load(open("snapshot/snapshot.json"))["dataset"]["records"])')"
           gh release create "$tag" snapshot/* -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "Tengoku $tag ($DATE)" \
             --notes "A citable snapshot of Tengoku: ${records} trusted records. \`snapshot.json\` names the commit, toolchain and counts, and the sha256 of the published dataset; every file carries build provenance (\`gh attestation verify <file> -R $GITHUB_REPOSITORY\`). Versions: a new toolchain or a removed field is a new major version, added theorems a minor one, corrections a patch. How to cite: CITATION.cff."
