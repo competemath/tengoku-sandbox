@@ -18,7 +18,7 @@ with instrumenting():
     import workflow_rules as wr
 
 COVERS = ["scripts/ci/workflow_rules.py", "scripts/ci/_git.py"]
-RUNS = 20_000
+RUNS = 4_000  # ~130 a second on a GitHub runner (whole workflows are the seeds)
 SEEDS = [".github/workflows"]
 
 

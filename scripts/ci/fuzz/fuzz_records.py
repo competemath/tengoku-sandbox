@@ -34,7 +34,7 @@ COVERS = [
     "schemas/sources.json",
     "schemas/allowed-options.json",
 ]
-RUNS = 20_000
+RUNS = 20_000  # ~1,700 a second on a GitHub runner
 
 TREE = Path(tempfile.mkdtemp(prefix="fuzz-records-"))
 shutil.copytree(ROOT / "schemas", TREE / "schemas")

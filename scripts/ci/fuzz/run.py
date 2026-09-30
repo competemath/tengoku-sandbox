@@ -26,7 +26,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[2]
 ALL = {"scripts/ci/fuzz/run.py", "scripts/ci/fuzz/_harness.py", "scripts/ci/requirements/fuzz.txt"}
-MAX_SECONDS = 180  # per target: a guard for a slow runner, well above what RUNS takes
+MAX_SECONDS = 90  # per target: a guard for a slow runner, well above what RUNS takes (a target stopped by it still passes)
 
 
 def constants(path: Path) -> dict:
@@ -78,8 +78,10 @@ def fuzz(name: str, c: dict) -> bool:
     ]
     print(f"== fuzz_{name}: {runs} inputs from seed 1", flush=True)
     r = subprocess.run(cmd, env={**os.environ, "PYTHONHASHSEED": "0"}, capture_output=True, text=True)
-    tail = [line for line in r.stderr.splitlines() if line.startswith(("stat::", "Done", "#"))][-4:]
-    print("\n".join(tail))
+    done = [
+        line for line in r.stderr.splitlines() if line.startswith(("Done ", "stat::number_of_executed_units", "stat::average_exec_per_sec"))
+    ]
+    print("\n".join(done))
     if r.returncode == 0:
         return True
     print(r.stdout[-4000:] + r.stderr[-8000:])

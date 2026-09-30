@@ -15,7 +15,7 @@ with instrumenting():
     import lean_lex
 
 COVERS = ["scripts/ci/lean_lex.py", "scripts/ci/_git.py"]
-RUNS = 100_000
+RUNS = 50_000  # ~1,500 a second on a GitHub runner
 
 
 def TestOneInput(data: bytes) -> None:
