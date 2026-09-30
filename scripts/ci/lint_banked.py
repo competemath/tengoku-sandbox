@@ -78,7 +78,7 @@ def main() -> None:
                         r = json.loads(text)
                     except Exception:
                         continue
-                    if "tombstone" in r:
+                    if not isinstance(r, dict) or "tombstone" in r:  # not an object: validate_records.py refuses it
                         continue
                     body = "\n".join(str(r.get(k, "")) for k in ("context", "statement", "proof"))
                     label = f"{p}:{no} ({r.get('name')})"

@@ -1,0 +1,9 @@
+on: pull_request_target
+permissions: {}
+jobs:
+  a:
+    runs-on: x
+    steps:
+      - run: |
+          echo ${{ github.event.pull_request.title
+            }} && git apply x.patch

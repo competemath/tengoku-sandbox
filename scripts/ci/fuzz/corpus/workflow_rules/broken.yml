@@ -1,0 +1,3 @@
+on: [push
+::stop-commands::t
+permissions: {}

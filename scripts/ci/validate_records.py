@@ -92,6 +92,9 @@ for st, p in changed_files(base, head):
         except Exception as e:
             errors.append(f"{p}:{no}: not JSON ({e})")
             continue
+        if not isinstance(r, dict):  # mirror of the library fix (scripts/ci/fuzz)
+            errors.append(f"{p}:{no}: a record is a JSON object, not {type(r).__name__}")
+            continue
         if "tombstone" in r:
             for k in schema["tombstone"]["required"]:
                 if k not in r:

@@ -1,0 +1,8 @@
+on: push
+permissions: {}
+jobs:
+  a:
+    steps: 5
+  b:
+    steps: [1, x, {uses: ./a}]
+    env: text

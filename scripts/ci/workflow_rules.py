@@ -37,6 +37,7 @@ import urllib.parse
 from pathlib import Path
 
 import yaml
+from _git import annotation, plain
 
 LINE = "__line__"
 SHA = re.compile(r"[0-9a-f]{40}")
@@ -160,7 +161,7 @@ class Checker:
     def run(self) -> Checker:
         try:
             doc = yaml.load(self.text, Loader=Loader)  # noqa: S506 — SafeLoader subclass
-        except yaml.YAMLError as e:
+        except (yaml.YAMLError, RecursionError) as e:  # RecursionError: nested thousands deep
             self.add(1, "yaml", f"not valid YAML: {e}")
             return self
         if not isinstance(doc, dict):
@@ -186,7 +187,7 @@ class Checker:
         return self
 
     def steps(self, steps: list, job_env: dict, wf_env: dict, on: set[str]) -> None:
-        for step in steps:
+        for step in steps if isinstance(steps, list) else []:  # `steps: 5` used to end the check in a traceback (scripts/ci/fuzz)
             if not isinstance(step, dict):
                 continue
             line = step.get(LINE, 1)
@@ -333,6 +334,13 @@ def verify_pins(pins: list[tuple[str, int, str, str, str]]) -> list[tuple[str, i
     return findings
 
 
+def report(path: str, line: int, rule: str, msg: str) -> tuple[str, str]:
+    """A finding as the log prints it, and as a check-run annotation. The path and the message come from the PR (a
+    YAML error quotes the file, lines and all): neither may start a workflow command of its own (scripts/ci/fuzz)."""
+    prop = annotation(path).replace(":", "%3A").replace(",", "%2C")
+    return plain(f"{path}:{line}: [{rule}] {msg}"), f"::error file={prop},line={line},title=workflow rule: {rule}::{annotation(msg)}"
+
+
 def git(*args: str) -> str:
     return subprocess.run(["git", *args], capture_output=True, text=True, check=True).stdout
 
@@ -372,10 +380,11 @@ def main(argv: list[str]) -> int:
         pins += c.pins
     if online:
         findings += verify_pins(pins)
-    for path, line, rule, msg in findings:
-        print(f"{path}:{line}: [{rule}] {msg}")
+    for finding in findings:
+        readable, annotation = report(*finding)
+        print(readable)
         if os.environ.get("GITHUB_ACTIONS"):
-            print(f"::error file={path},line={line},title=workflow rule: {rule}::{msg}")
+            print(annotation)
     pinned = f", {len({(p[2], p[3], p[4]) for p in pins})} pins verified online" if online else ""
     print(f"{len(docs)} files{pinned}: " + (f"{len(findings)} findings" if findings else "every rule holds"))
     return 1 if findings else 0

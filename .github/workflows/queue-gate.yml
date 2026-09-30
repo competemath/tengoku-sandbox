@@ -72,6 +72,16 @@ jobs:
         run: |
           echo "base=${{ github.event.merge_group.base_sha }}" >> "$GITHUB_OUTPUT"
           git diff --name-only "${{ github.event.merge_group.base_sha }}" HEAD | tee changed.txt
+      # The fuzz targets of the gate scripts this group changes (docs/testing.md, "Fuzzing"): each a fixed number of
+      # inputs from a fixed seed, and nothing at all for a group that changes no covered script. A crash fails the group.
+      - name: Fuzz the gate scripts this group changes
+        if: github.event_name == 'merge_group'
+        env: { BASE: "${{ github.event.merge_group.base_sha }}" }
+        run: |
+          if [ -z "$(python3 scripts/ci/fuzz/run.py --changed "$BASE" HEAD --list)" ]; then echo "fuzz: no target covers this group"; exit 0; fi
+          python3 -m venv "$RUNNER_TEMP/fuzz"
+          "$RUNNER_TEMP/fuzz/bin/pip" install -q --require-hashes -r scripts/ci/requirements/fuzz.txt
+          "$RUNNER_TEMP/fuzz/bin/python" scripts/ci/fuzz/run.py --changed "$BASE" HEAD 2>&1 | tee -a build.log   # the ejection comment reads build.log
       - name: Content lint (again, on the merged result)
         if: github.event_name == 'merge_group'
         shell: bash
