@@ -13,7 +13,20 @@ import subprocess
 import sys
 from pathlib import Path
 
-from _git import ROOT, added_lines, changed_files, fail, garbled, library_of, library_of_module, load_schema, match, pascal, unplaced
+from _git import (
+    ROOT,
+    added_lines,
+    annotation,
+    changed_files,
+    fail,
+    garbled,
+    library_of,
+    library_of_module,
+    load_schema,
+    match,
+    pascal,
+    unplaced,
+)
 
 base, head = sys.argv[1], sys.argv[2]
 regenerate = "--regenerate" in sys.argv
@@ -75,11 +88,8 @@ if regenerate:
 
 targets: list[str] = []
 for lib, names in sorted(left_out.items()):
-    print(
-        f"::warning::{lib}: {len(names)} record(s) garbled when banked (U+FFFD) are not compiled; they stay in staging and are "
-        f"never promoted: {', '.join(sorted(names)[:5])}",
-        file=sys.stderr,
-    )
+    msg = f"{lib}: {len(names)} record(s) garbled when banked (U+FFFD) are not compiled; they stay in staging and are never promoted: "
+    print("::warning::" + annotation(msg + ", ".join(sorted(names)[:5])), file=sys.stderr)  # the names come from the PR
 for lib, paths in sorted(work.items()):
     if lib not in corpora:
         print(f"::warning::{lib}: no corpus, records are data only and not compiled", file=sys.stderr)

@@ -645,6 +645,12 @@ class QueuePlacement(unittest.TestCase):
         self.assertTrue(garbled({"statement": "theorem t : True", "context": "a \ufffd b"}))
         self.assertFalse(garbled({"statement": "theorem t : 1 ≤ 2", "proof": ":= by decide"}))
 
+    def test_an_annotation_cannot_start_another_workflow_command(self):
+        from _git import annotation
+
+        self.assertEqual(annotation("a\n::add-mask::x\r%"), "a%0A::add-mask::x%0D%25")
+        self.assertNotIn("\n", annotation("Lib.x\n::stop-commands::t"))
+
     def test_comments_and_strings_hide_nothing_and_declare_nothing(self):
         from _git import unplaced
 
