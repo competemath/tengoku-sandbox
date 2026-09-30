@@ -41,10 +41,12 @@ api() {  # GET a GitHub API path, anonymously or with whatever token exists
 # download, no API call, no rate limit): "<published_at> 1 <tag> <commit>".
 pointer() {
   need curl
-  curl -fsSL "https://github.com/$SRC/releases/download/cache-latest/cache-latest.json" 2>/dev/null | python3 -c '
+  local j  # downloaded as data, then read: nothing downloaded is piped into an interpreter
+  j="$(curl -fsSL "https://github.com/$SRC/releases/download/cache-latest/cache-latest.json" 2>/dev/null || true)"
+  python3 -c '
 import json, sys
-try: d = json.load(sys.stdin); print(d["published_at"], "1", d["tag"], d["commit"])
-except Exception: pass' 2>/dev/null || true
+try: d = json.loads(sys.argv[1]); print(d["published_at"], "1", d["tag"], d["commit"])
+except Exception: pass' "$j" 2>/dev/null || true
 }
 
 # Every asset of a cache release must carry a build-provenance attestation from

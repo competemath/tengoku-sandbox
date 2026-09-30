@@ -4,3 +4,17 @@ updates:
     directory: /
     schedule: { interval: weekly }
     labels: [tooling, dependencies]
+    # routine version updates: one pull request a week for all actions, tested together in the sandbox before it
+    # merges; security updates are not grouped and still arrive at once, one pull request each
+    groups:
+      actions:
+        patterns: ["*"]
+  # the gate's Python packages, pinned by hash in scripts/ci/requirements/*.txt: a weekly pull request updates the
+  # versions and their hashes together
+  - package-ecosystem: pip
+    directory: /scripts/ci/requirements
+    schedule: { interval: weekly }
+    labels: [tooling, dependencies]
+    groups:
+      python:
+        patterns: ["*"]
