@@ -41,7 +41,7 @@ jobs:
       WANT: ${{ inputs.commit }}
       GH_TOKEN: ${{ github.token }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { ref: main, fetch-depth: 0, filter: "blob:none", persist-credentials: false }
       - name: The version, the commit and the cache built from it
         id: pick
@@ -117,7 +117,7 @@ jobs:
             "tengoku-$VERSION-source.tar.gz" "tengoku-$VERSION.cdx.json" "tengoku-$VERSION-cache.json" "tengoku-$VERSION-independent-check.json" \
             "CHANGELOG-$VERSION.md"
       - name: Attest every asset
-        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: |
             tengoku-${{ inputs.version }}-source.tar.gz
@@ -126,7 +126,7 @@ jobs:
             tengoku-${{ inputs.version }}-independent-check.json
             CHANGELOG-${{ inputs.version }}.md
       - name: Attest the bill of materials for the source archive
-        uses: actions/attest-sbom@bd218ad0dbcb3e146bd073d1d9c6d78e08aa8a0b # v2
+        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
         with:
           subject-path: tengoku-${{ inputs.version }}-source.tar.gz
           sbom-path: tengoku-${{ inputs.version }}.cdx.json
