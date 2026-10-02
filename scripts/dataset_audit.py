@@ -57,14 +57,18 @@ def main(path: str) -> None:
                 for part in ("Archive/Imo/", "Archive/Wiedijk100Theorems/"):
                     sources[part.rstrip("/")] += part in r["source_url"]
     names = len(statements_by_name)
-    print(f"records {rows:,}; distinct names {names:,}; names with more than one statement {sum(len(v) > 1 for v in statements_by_name.values()):,}")
+    print(
+        f"records {rows:,}; distinct names {names:,}; names with more than one statement {sum(len(v) > 1 for v in statements_by_name.values()):,}"
+    )
     print("per library:", dict(libs))
     print("toolchains:", dict(toolchains))
     print(f"empty proofs {empty:,}; native_decide {native}; sorry {sorry}")
     print("statements by kind:", dict(sorted(kinds.items(), key=lambda kv: -kv[1])))
     print("reserved fields set (credit, upstream, credit_corrected_evidence, headline):", dict(reserved))
     print(f"name differs from the declared name {mismatched:,} (a Unicode subscript in the declared name: {subscripts:,})")
-    print("Mathlib records by source directory (Archive, MathlibTest, Counterexamples; Archive/Imo and Archive/Wiedijk100Theorems are inside Archive):")
+    print(
+        "Mathlib records by source directory (Archive, MathlibTest, Counterexamples; Archive/Imo and Archive/Wiedijk100Theorems are inside Archive):"
+    )
     print({k: sources[k] for k in ("Mathlib", "Archive", "Archive/Imo", "Archive/Wiedijk100Theorems", "MathlibTest", "Counterexamples")})
 
 
