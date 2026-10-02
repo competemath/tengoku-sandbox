@@ -7,6 +7,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tarfile
 import tempfile
 import unittest
 from pathlib import Path
@@ -719,6 +720,43 @@ class Intake(unittest.TestCase):
         r.commit("rewrite an old module")
         rc, out = r.gate("classify.py", env=self.BOT)
         self.assertNotEqual(rc, 0)  # a record library's module is not part of this bundle: multi-purpose
+
+    def test_a_library_already_in_the_tree_is_not_intaken_again(self):
+        r = self.repo()  # base has Tengoku/Lib/: every new file under it is status A, a duplicate import line is still one added line
+        r.write("Tengoku/Lib/Extra.lean", self.MOD)
+        manifest = {
+            "name": "Fx.good",
+            "statement": "theorem good : 1 + 1 = 2",
+            "module": "Tengoku.Lib.Extra",
+            "library": "lib",
+            "toolchain": "leanprover/lean4:v4.34.0-rc2",
+        }
+        r.write("data/intake/lib/manifest.jsonl", json.dumps(manifest) + "\n")
+        r.write("Tengoku/All.lean", "import Tengoku.Lib\nimport Tengoku.Lib\n")
+        r.commit("add to an existing library")
+        rc, out = r.gate("intake_check.py")
+        self.assertNotEqual(rc, 0)
+        self.assertIn("already in the tree", out)
+
+    def test_the_archive_member_is_the_blobs_own_bytes(self):
+        r = self.repo()
+        self.bundle(r)
+        (r.dir / "Tengoku/FxLib/Fx/Basic.lean").write_bytes(self.MOD.replace("\n", "\r\n").encode())  # CRLF survives
+        r.commit("crlf")
+        tar = Path(tempfile.mkdtemp()) / "bundle.tar"
+        rc, out = r.gate("intake_check.py", "main", "pr", "--tar", str(tar))
+        self.assertEqual(rc, 0, out)
+        with tarfile.open(tar) as t:
+            self.assertEqual(t.extractfile("Tengoku/FxLib/Fx/Basic.lean").read(), self.MOD.replace("\n", "\r\n").encode())
+
+    def test_a_module_that_is_not_utf8_fails_cleanly(self):
+        r = self.repo()
+        self.bundle(r)
+        (r.dir / "Tengoku/FxLib/Fx/Basic.lean").write_bytes(b"theorem x : True := trivial -- \xff\n")
+        r.commit("not utf-8")
+        rc, out = r.gate("intake_check.py")
+        self.assertNotEqual(rc, 0)
+        self.assertIn("not valid UTF-8", out)
 
     def test_the_rebuilt_archive_is_the_factorys_archive(self):
         r = self.repo()

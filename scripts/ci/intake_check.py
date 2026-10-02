@@ -25,7 +25,7 @@ import json
 import re
 import sys
 
-from _git import ROOT, changed_files, fail, pascal, run
+from _git import ROOT, blob, changed_files, fail, pascal, run
 from allowlist import violations
 from bundle_tar import write_tar
 
@@ -34,6 +34,7 @@ base, head = args[0], args[1]
 lint_mode = args[args.index("--lint") + 1] if "--lint" in args else "strict"
 tar_out = args[args.index("--tar") + 1] if "--tar" in args else ""
 MAX_FILES, MAX_BYTES = 20000, 400 * 1024 * 1024
+ALL = "Tengoku/All.lean"
 NOTATION_OK = re.compile(r"`(?:notation3?|infix[lr]?|prefix|postfix|scoped|local)`")
 HEADER = re.compile(r"^\s*(?:(?:public|private|meta)\s+)*import\s+(?:all\s+)?(\S+)\s*$|^\s*(?:module|prelude)\s*$")
 TREE_IMPORT = re.compile(r"(?:Tengoku|Lean|Std|Init)(?:\.|$)")
@@ -47,7 +48,7 @@ ns = pascal(lib)
 
 
 def allowed_paths(p: str) -> bool:
-    return p in (f"data/intake/{lib}/manifest.jsonl", f"data/intake/{lib}/report.json", f"Tengoku/{ns}.lean", "Tengoku/All.lean") or (
+    return p in (f"data/intake/{lib}/manifest.jsonl", f"data/intake/{lib}/report.json", f"Tengoku/{ns}.lean", ALL) or (
         p.startswith(f"Tengoku/{ns}/") and p.endswith(".lean")
     )
 
@@ -56,24 +57,29 @@ errors: list[str] = []
 for st, p in files:
     if not allowed_paths(p):
         errors.append(f"{p}: not part of {lib}'s bundle")
-    elif p != "Tengoku/All.lean" and st != "A":
+    elif p != ALL and st != "A":
         errors.append(f"{p}: an intake PR only adds files (status {st}); a library already in the tree is not intaken again")
+# a library already in the tree is not intaken again: its root file or directory must not exist at base (new files under an
+# existing Tengoku/<Ns>/ are all status A, so the status check above does not see them)
+if run("ls-tree", "--name-only", base, f"Tengoku/{ns}.lean", f"Tengoku/{ns}").strip():
+    errors.append(f"{lib} is already in the tree (Tengoku/{ns} exists at base): a library is intaken once")
 if len(files) > MAX_FILES:
     errors.append(f"{len(files)} files (cap {MAX_FILES}): split the bundle")
 
 
 def show(path: str) -> str:
-    return run("show", f"{head}:{path}")
+    """The blob as text; raises on a blob that is not UTF-8 (Lean source must be)."""
+    return (blob(head, path) or b"").decode("utf-8")
 
 
 # Tengoku/All.lean: exactly one new import line, nothing removed
 all_diff = [
     ln
-    for ln in run("diff", "-U0", f"{base}...{head}", "--", "Tengoku/All.lean").splitlines()
+    for ln in run("diff", "-U0", f"{base}...{head}", "--", ALL).splitlines()
     if ln[:1] in "+-" and ln[:3] not in ("+++", "---")
 ]
 if all_diff != [f"+import Tengoku.{ns}"] and all_diff != [f"+public import Tengoku.{ns}"]:
-    errors.append(f"Tengoku/All.lean must gain exactly `import Tengoku.{ns}` and change nothing else (diff: {all_diff[:4]})")
+    errors.append(f"{ALL} must gain exactly `import Tengoku.{ns}` and change nothing else (diff: {all_diff[:4]})")
 
 # manifest
 toolchain = (ROOT / "lean-toolchain").read_text().strip()
@@ -117,8 +123,12 @@ for i, r in enumerate(manifest, 1):
 # lint
 allowed_options = set(json.loads((ROOT / "schemas" / "allowed-options.json").read_text())["allowed"])
 total = 0
-for p in sorted(p for _, p in files if p.endswith(".lean") and p != "Tengoku/All.lean"):
-    text = show(p)
+for p in sorted(p for _, p in files if p.endswith(".lean") and p != ALL):
+    try:
+        text = show(p)
+    except UnicodeDecodeError:
+        errors.append(f"{p}: not valid UTF-8")
+        continue
     total += len(text)
     body = []
     for ln in text.split("\n"):
@@ -143,8 +153,11 @@ if errors:
 if tar_out:
     members = {}
     for _, p in files:
-        if p == "Tengoku/All.lean":
+        if p == ALL:
             continue
-        members[p.split("/", 3)[3] if p.startswith("data/intake/") else p] = show(p).encode("utf-8")
+        raw = blob(head, p)  # the blob's own bytes: text mode would turn CRLF into LF and choke on invalid UTF-8
+        if raw is None:
+            fail(f"{p} is not readable at {head}")
+        members[p.split("/", 3)[3] if p.startswith("data/intake/") else p] = raw
     print(f"archive rebuilt: {tar_out} sha256 {write_tar(members, tar_out)}")
 print(f"intake ok: {lib}: {len(modules)} modules, {len(manifest)} theorems, lint {lint_mode}")

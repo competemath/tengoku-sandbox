@@ -26,8 +26,13 @@ def write_tar(files: dict[str, bytes], out: str) -> str:
 
 
 def read_dir(d: str) -> dict[str, bytes]:
-    root = Path(d)
-    return {str(p.relative_to(root)): p.read_bytes() for p in sorted(root.rglob("*")) if p.is_file()}
+    """The regular files under `d`. A symlink is never followed (the directory may come from a job that ran code of a library)."""
+    root = Path(d).resolve()
+    return {
+        str(p.relative_to(root)): p.read_bytes()
+        for p in sorted(root.rglob("*"))
+        if p.is_file() and not p.is_symlink() and root in p.resolve().parents
+    }
 
 
 if __name__ == "__main__":
