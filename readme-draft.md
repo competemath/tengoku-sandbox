@@ -21,7 +21,7 @@ New to Lean? Start with the web search: it finds theorems from a plain-English d
 
 # search from code (JSON: name, statement, status, library, source link)
 curl -s 'https://competemath.com/api/tengoku/search?q=IsCompact.image' | head -c 230
-# {"results":[{"id":3916779000,"name":"IsCompact.image","statement":"∀ {X : Type u} {Y : Type v} [inst : TopologicalSpace X] [inst_1 : TopologicalSpace Y] {s : Set X} {f : X → Y}, IsCompact s → Continuous f → IsCompact (f '' s)","pr
+# {"results":[{"id":3916779000,"name":"IsCompact.image","statement":"∀ {X : Type u} {Y : Type v} [inst : TopologicalSpace X] [inst_1 : TopologicalSpace Y] {s : Set X} {f : X → Y}, IsCompact s → Continuous f → IsCompact (f ''
 
 # give an AI agent the search tool (Claude Code; no sign-up)
 claude mcp add --transport sse tengoku-search \
