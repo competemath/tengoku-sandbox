@@ -33,6 +33,16 @@ Three commitments, each already visible in the code:
 | **Theorems readable by non-Lean people** | An informal sentence beside each Lean statement, labelled as generated, so a mathematician who has never used Lean can see what a result says and decide whether it is the one they want. | *an idea* |
 | **A flywheel** | Every proof an agent finds enters the library with the AI credited, so the next agent starts richer than the last. The pieces exist (the services, the gates, the credit line); the loop is not yet closed automatically. | *an idea* |
 
+## The next steps, concretely
+
+Each is checkable; none depends on a date being met.
+
+1. **Close the known gaps.** Move CompeteMath's 262 records out of *trusted* until they are built in; account for the Mathlib index records the nightly check does not match by name; regenerate `data/stats.json` and the coverage table nightly instead of after a promotion.
+2. **Promote the staged libraries**, starting with the largest (IMO Shortlist, physlib, formal-mathfin, FLT, Carleson), and say how many of each library's theorems promoted.
+3. **Publish the evidence**: the benchmark report, then the matched before-and-after run on Tengoku.
+4. **Show the library following Lean**: when the next Lean release candidate lands, move the library onto it and publish how long it took and what broke.
+5. **Pilot the *reviewed* tier** on a small set (for instance the problems a benchmark uses), with each review recorded.
+
 ## What Tengoku is not trying to be
 
 - A replacement for Mathlib. Mathlib is the curated centre; Tengoku adds what it does not hold, checked by machine.
