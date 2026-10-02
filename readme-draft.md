@@ -51,6 +51,8 @@ Every record (a theorem or definition, with its proof, source, licence and credi
 
 A second, independent kernel ([nanoda](https://github.com/ammkrn/nanoda_lib)) re-checks every declaration of the library nightly. The stages are in [TRUST.md](trust-draft.md).
 
+**Known gaps** (2026-10-02): the nightly check matches 136,444 of the 161,646 distinct trusted names to declarations in the library, and all of those rest only on the standard axioms; the rest are Mathlib search-index entries it does not match by name. 262 problems from CompeteMath are marked trusted but were verified separately and are not yet built into the library ([details](trust-draft.md#known-gaps)).
+
 Trusted does **not** mean the Lean statement says what its source says, that a translation is equivalent to its original, or that a person reviewed it. [Benchmarks have the same gap](https://arxiv.org/abs/2606.29493).
 
 ## For the authors of the projects Tengoku draws on

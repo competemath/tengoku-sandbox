@@ -23,11 +23,11 @@ flowchart LR
   A["theorem + credit line<br/>(a record)"] --> B["gate"] --> C["merge queue"] --> D["tentative / staging"] --> E["promotion"] --> F(["trusted"])
 ```
 
-1. **Gate.** The record has the right shape; its source is on the list of accepted sources (with their licences); it carries an `Author:` line naming the human and any AI used; its Lean uses only constructs on an allow-list (no code that runs when the library compiles); it contains no secrets. Every pull request passes through it, the maintainer's included.
+1. **Gate.** The record has the right shape; its source is on the list of accepted sources (with their licences); it carries an `Author:` line naming the human and any AI used; its Lean is checked for constructs that run code when the library compiles (a list of banned constructs, and an allow-list of `set_option`s; a stricter allow-list of everything a record may contain is proposed); it contains no secrets. Every pull request passes through it, the maintainer's included.
 2. **Merge queue.** The new modules are built together with the whole compiled library, with every named declaration checked for `sorry` and for any axiom beyond `propext`, `Classical.choice` and `Quot.sound`.
 3. **Translation checks** (for records translated from another Lean version). Check one: the translated script compiles in the library's environment with no errors, no warnings and no `sorry`. Check two: the original theorem is replayed from an export of its own module into the same environment, and the kernel accepts that the translated statement implies the original, so the translation proves at least what the original did.
 4. **Promotion.** A fresh build of the record's module against the compiled library, the axiom check again, and a **vacuity** check: the theorem's hypotheses are tested for contradiction, and a theorem from which `False` follows is refused unless a person acknowledges it with a reason.
-5. **Nightly independent check.** Every declaration of the compiled library (745,847 today, from a 110-million-line export) is checked again by [nanoda](https://github.com/ammkrn/nanoda_lib), a type checker written separately from Lean, and a separate program computes the axioms every constant rests on.
+5. **Nightly independent check.** Every declaration of the compiled library (about 745,000 on the latest run, from a 110-million-line export) is checked again by [nanoda](https://github.com/ammkrn/nanoda_lib), a type checker written separately from Lean, and a separate program computes the axioms every constant rests on.
 
 ## What "trusted" does not mean
 
@@ -40,3 +40,10 @@ flowchart LR
 ## What is kept
 
 Records are append-only. A mistake is retracted by a tombstone with a category (duplicate, incorrect, superseded, licence, other) and a note; credit changes only on documented evidence of plagiarism. Copyleft sources are not accepted, and a source whose licence is found incompatible is removed.
+
+## Known gaps
+
+Counted on 2026-10-02. They are why the README says "built into the library" only where it is true.
+
+- **Not every trusted name is matched in the nightly check.** The check matches 136,444 of the 161,646 distinct trusted names to declarations in the compiled library, and all of those rest only on the standard axioms. The other 25,202 are mostly Mathlib search-index entries (by topic: algebra, data, analysis, …) that are not matched by name; the check counts them and does not fail on them.
+- **CompeteMath's 262 problems.** They are marked trusted and are in the v1.0.0 dataset, but the library has no module for them: they were verified by the Leak IV verifier on Lean v4.29.1 and v4.32.0, not on the library's toolchain. 103 of them use `native_decide`, which trusts the compiler, and one (`quadratic_echo`) contains `sorry`. The gate that bans these constructs only judges the lines a pull request adds, so it never saw records added in bulk. Until they are re-checked, they are an exception to everything above; the proposal is to move them to *tentative*.
