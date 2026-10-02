@@ -45,6 +45,11 @@ Most of these are different things with the same name, so one definition each is
 
 **A real inconsistency:** the 262 CompeteMath records in `data/trusted/competemath.jsonl` are marked *trusted* and are in the v1.0.0 dataset, but the library has no module for them, so they are not built into it; they were verified by the Leak IV verifier on Lean v4.29.1 and v4.32.0, not on the library's v4.34.0-rc2; and 103 of the 262 use `native_decide`, which trusts the compiler. That contradicts "a trusted theorem is machine-checked against the whole library" and "only the standard axioms" for 0.13% of the trusted records. Two ways out: move them to *tentative* until they are translated and built (a data change, and a corrected dataset release), or translate them. Until then the README should not say that every trusted theorem is built into the library.
 
+**Two more things the counting found** (details in [data-draft.md](data-draft.md)):
+
+- In 4,004 records the `name` is cut at a Unicode subscript (`A₂_mem_circumsphere` is stored as `A`). A hypothesis, not yet tested: this is part of why the nightly check cannot match about 25,000 trusted names to declarations (the rest being the 1,798 records from Mathlib's `Archive`, `MathlibTest` and `Counterexamples`, which the library does not compile, and declarations whose recorded name is not their full name). Fixing the extraction of names may close much of that gap.
+- `docs/why-tengoku.md` is stale: it gives 5,404 theorems in staging from 45 libraries (now 8,969 from 60) and says the second-kernel check is in progress (it has run nightly for days).
+
 ## 4. No immediate way to use it on the README's first screen
 
 Today the README opens with a tagline and two badges, then "About" and "Developers". The ways to try Tengoku (the browser search, the MCP endpoint, the HTTP API, `scripts/cache.sh get`) are scattered over README, `docs/api.md`, `docs/why-tengoku.md` and the site. There is no table of the problems it solves, no picture of how a theorem becomes trusted, and no demo.
