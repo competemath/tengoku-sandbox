@@ -1,6 +1,6 @@
 # Data card: the trusted dataset, v1.0.0 (draft)
 
-What the downloadable dataset is, field by field, what is in it, and what is wrong with it. Counted from the release file on 2026-10-02.
+What the downloadable dataset is, field by field, what is in it, and what is wrong with it. Counted from the release file on 2026-10-02 by [`scripts/dataset_audit.py`](scripts/dataset_audit.py), which anyone can rerun on the file (`python3 scripts/dataset_audit.py tengoku-dataset.jsonl.gz`).
 
 ## Get it, check it
 
