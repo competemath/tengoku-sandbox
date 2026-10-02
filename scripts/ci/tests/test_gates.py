@@ -611,6 +611,136 @@ class DeregisteredSource(unittest.TestCase):
         self.assertIn("provenance", out)
 
 
+
+class Intake(unittest.TestCase):
+    """An intake PR: one library's verified Lean modules (a factory bundle), judged by shape, manifest, lint and provenance."""
+
+    MOD = "import Tengoku\n\nnamespace Fx\n\ntheorem good : 1 + 1 = 2 := rfl\n\nend Fx\n"
+
+    def repo(self):
+        r = Repo()
+        r.write("lean-toolchain", "leanprover/lean4:v4.34.0-rc2\n")
+        r.write("Tengoku/All.lean", "import Tengoku.Lib\n")
+        r.commit("toolchain and All")
+        r.git("checkout", "-q", "main")
+        r.git("merge", "-q", "--ff-only", "pr")
+        r.git("checkout", "-q", "pr")
+        return r
+
+    def bundle(self, r, mod=None, **over):
+        manifest = {"name": "Fx.good", "statement": "theorem good : 1 + 1 = 2", "module": "Tengoku.FxLib.Fx.Basic", "source_path": "Fx/Basic.lean",
+                    "library": "fx-lib", "toolchain": "leanprover/lean4:v4.34.0-rc2", "via": "equal", **over}
+        r.write("Tengoku/FxLib/Fx/Basic.lean", mod if mod is not None else self.MOD)
+        r.write("Tengoku/FxLib.lean", "import Tengoku.FxLib.Fx.Basic\n")
+        r.write("data/intake/fx-lib/manifest.jsonl", json.dumps(manifest) + "\n")
+        r.write("data/intake/fx-lib/report.json", "{}\n")
+        r.write("Tengoku/All.lean", "import Tengoku.Lib\nimport Tengoku.FxLib\n")
+        r.commit("intake fx-lib")
+
+    BOT = {"PR_ACTOR": "tengoku-bot", "TENGOKU_BOT": "tengoku-bot"}
+
+    def test_a_bundle_from_the_factory_is_class_intake_and_passes(self):
+        r = self.repo()
+        self.bundle(r)
+        rc, out = r.gate("classify.py", env=self.BOT)
+        self.assertEqual(rc, 0, out)
+        self.assertIn("class=intake", out)
+        rc, out = r.gate("intake_check.py")
+        self.assertEqual(rc, 0, out)
+        self.assertIn("intake ok: fx-lib: 1 modules, 1 theorems", out)
+
+    def test_only_the_factory_account_may_send_one(self):
+        r = self.repo()
+        self.bundle(r)
+        rc, out = r.gate("classify.py", env={"PR_ACTOR": "someone", "TENGOKU_BOT": "tengoku-bot"})
+        self.assertNotEqual(rc, 0)
+        self.assertIn("factory's account", out)
+
+    def test_an_intake_pr_is_nothing_but_the_bundle(self):
+        r = self.repo()
+        self.bundle(r)
+        r.write("scripts/x.py", "print(2)\n")
+        r.commit("and a script")
+        rc, out = r.gate("classify.py", env=self.BOT)
+        self.assertNotEqual(rc, 0)
+        self.assertIn("nothing else", out)
+
+    def test_code_that_runs_while_compiling_fails_the_lint(self):
+        r = self.repo()
+        self.bundle(r, mod=self.MOD + "\n#eval IO.println \"x\"\n")
+        rc, out = r.gate("intake_check.py")
+        self.assertNotEqual(rc, 0)
+        self.assertIn("no # commands", out)
+
+    def test_an_import_outside_the_tree_fails(self):
+        r = self.repo()
+        self.bundle(r, mod="import Mathlib.Data.Nat.Basic\n" + self.MOD)
+        rc, out = r.gate("intake_check.py")
+        self.assertNotEqual(rc, 0)
+        self.assertIn("not the tree", out)
+
+    def test_notation_needs_the_proposed_lint(self):
+        r = self.repo()
+        self.bundle(r, mod=self.MOD + '\nnotation "ℓ" => 1\n')
+        self.assertNotEqual(r.gate("intake_check.py")[0], 0)
+        rc, out = r.gate("intake_check.py", "main", "pr", "--lint", "proposed")
+        self.assertEqual(rc, 0, out)
+
+    def test_the_manifest_must_name_a_module_of_the_pr_and_the_trees_toolchain(self):
+        r = self.repo()
+        self.bundle(r, module="Tengoku.FxLib.Other")
+        rc, out = r.gate("intake_check.py")
+        self.assertNotEqual(rc, 0)
+        self.assertIn("not a file of this PR", out)
+        r2 = self.repo()
+        self.bundle(r2, toolchain="leanprover/lean4:v4.29.1")
+        self.assertIn("toolchain", r2.gate("intake_check.py")[1])
+
+    def test_all_lean_may_gain_one_line_only(self):
+        r = self.repo()
+        self.bundle(r)
+        r.write("Tengoku/All.lean", "import Tengoku.FxLib\n")  # drops Lib's line
+        r.commit("tamper")
+        rc, out = r.gate("intake_check.py")
+        self.assertNotEqual(rc, 0)
+        self.assertIn("All.lean", out)
+
+    def test_existing_files_are_never_rewritten(self):
+        r = self.repo()
+        self.bundle(r)
+        r.write("Tengoku/Lib/Basic.lean", "theorem Lib.old : 1 + 1 = 2 := by decide\n")
+        r.commit("rewrite an old module")
+        rc, out = r.gate("classify.py", env=self.BOT)
+        self.assertNotEqual(rc, 0)  # a record library's module is not part of this bundle: multi-purpose
+
+    def test_the_rebuilt_archive_is_the_factorys_archive(self):
+        r = self.repo()
+        self.bundle(r)
+        tar = Path(tempfile.mkdtemp()) / "bundle.tar"
+        rc, out = r.gate("intake_check.py", "main", "pr", "--tar", str(tar))
+        self.assertEqual(rc, 0, out)
+        # what the factory does (scripts/bump/bundle_tar.py in competemath/emissary-archangel): the bundle directory as one canonical archive
+        sys.path.insert(0, str(CI))
+        import bundle_tar
+
+        d = Path(tempfile.mkdtemp())
+        for rel in ("Tengoku/FxLib/Fx/Basic.lean", "Tengoku/FxLib.lean"):
+            (d / rel).parent.mkdir(parents=True, exist_ok=True)
+            (d / rel).write_text((r.dir / rel).read_text())
+        (d / "manifest.jsonl").write_text((r.dir / "data/intake/fx-lib/manifest.jsonl").read_text())
+        (d / "report.json").write_text((r.dir / "data/intake/fx-lib/report.json").read_text())
+        out2 = Path(tempfile.mkdtemp()) / "factory.tar"
+        bundle_tar.write_tar(bundle_tar.read_dir(str(d)), str(out2))
+        self.assertEqual(tar.read_bytes(), out2.read_bytes())
+
+    def test_the_archive_is_the_same_bytes_on_every_machine(self):
+        sys.path.insert(0, str(CI))
+        import bundle_tar
+
+        out = Path(tempfile.mkdtemp()) / "g.tar"
+        # the same vector, the same digest, in competemath/emissary-archangel's tests: the two copies of the function must not drift
+        self.assertEqual(bundle_tar.write_tar({"a.txt": b"hello\n", "dir/b.lean": b"theorem x : True := trivial\n"}, str(out)), "69860ced3534fa1c7d35bcaf779a68ea88028baf4f447748b381fab33d64e100")
+
 class QueuePlacement(unittest.TestCase):
     """queue_targets.py fails a group whose records land in no module the queue compiles."""
 
