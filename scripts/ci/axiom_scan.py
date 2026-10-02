@@ -24,7 +24,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
+import tempfile
 from array import array
 from pathlib import Path
 
@@ -38,9 +40,11 @@ except ImportError:  # 3-4x slower, same result
 STANDARD = {"propext", "Classical.choice", "Quot.sound"}
 PRELUDE = STANDARD | {"sorryAx", "Lean.ofReduceBool", "Lean.ofReduceNat", "Lean.trustCompiler"}
 DECLS = ("axiom", "def", "thm", "opaque", "quot", "inductive")
+# term kinds that join the axioms of two sub-terms: kind -> the keys of the two
+_BINARY = {"app": ("fn", "arg"), "forallE": ("type", "body"), "lam": ("type", "body")}
 
 
-class Sets:
+class AxiomSets:
     """Sets of axioms, interned: every term carries a small id, unions are cached."""
 
     def __init__(self) -> None:
@@ -69,7 +73,7 @@ class Sets:
 
 class Scan:
     def __init__(self) -> None:
-        self.S = Sets()
+        self.S = AxiomSets()
         self.E = array("I")  # term index -> axiom-set id
         self.name_pre = array("I", [0])
         self.name_part: list[str] = [""]
@@ -88,20 +92,12 @@ class Scan:
 
     def term(self, o: dict) -> int:
         U, E = self.S.union, self.E
-        if "app" in o:
-            v = o["app"]
-            return U(E[v["fn"]], E[v["arg"]])
+        for kind, (first, second) in _BINARY.items():
+            if kind in o:
+                v = o[kind]
+                return U(E[v[first]], E[v[second]])
         if "const" in o:
-            n = o["const"]["name"]
-            m = self.decl.get(n)
-            if m is None:
-                self.early.add(n)
-                return 0
-            return m
-        for k in ("forallE", "lam"):
-            if k in o:
-                v = o[k]
-                return U(E[v["type"]], E[v["body"]])
+            return self.constant(o["const"]["name"])
         if "letE" in o:
             v = o["letE"]
             return U(U(E[v["type"]], E[v["value"]]), E[v["body"]])
@@ -112,28 +108,41 @@ class Scan:
             return U(E[v["struct"]], self.decl.get(v["typeName"], 0))
         return 0  # bvar, sort, natVal, strVal
 
-    def declaration(self, o: dict) -> None:
+    def constant(self, n: int) -> int:
+        """The axiom set of a constant; one mentioned before its declaration reads as resting on nothing for now."""
+        m = self.decl.get(n)
+        if m is None:
+            self.early.add(n)
+            return 0
+        return m
+
+    def inductive_block(self, v: dict) -> tuple[list[int], int]:
+        """The names of an inductive block's types, constructors and recursors, and the axioms the block rests on."""
         U, E = self.S.union, self.E
-        if "inductive" in o:
-            v = o["inductive"]
-            members = v["types"] + v["ctors"] + v["recs"]
-            names = [x["name"] for x in members]
-            m = 0
-            for x in members:
-                m = U(m, E[x["type"]])
-            for r in v["recs"]:
-                for rule in r["rules"]:
-                    m = U(m, E[rule["rhs"]])
-        else:
-            kind = next(k for k in DECLS if k in o)
-            v = o[kind]
-            names = [v["name"]]
-            m = E[v["type"]]
-            if "value" in v:
-                m = U(m, E[v["value"]])
-            if kind == "axiom":
-                self.axioms.append(v["name"])
-                m = U(m, self.S.of(frozenset([len(self.axioms) - 1])))
+        members = v["types"] + v["ctors"] + v["recs"]
+        m = 0
+        for x in members:
+            m = U(m, E[x["type"]])
+        for r in v["recs"]:
+            for rule in r["rules"]:
+                m = U(m, E[rule["rhs"]])
+        return [x["name"] for x in members], m
+
+    def single_declaration(self, o: dict) -> tuple[list[int], int]:
+        """The name of an axiom, definition, theorem, opaque constant or quotient, and the axioms it rests on."""
+        U, E = self.S.union, self.E
+        kind = next(k for k in DECLS if k in o)
+        v = o[kind]
+        m = E[v["type"]]
+        if "value" in v:
+            m = U(m, E[v["value"]])
+        if kind == "axiom":
+            self.axioms.append(v["name"])
+            m = U(m, self.S.of(frozenset([len(self.axioms) - 1])))
+        return [v["name"]], m
+
+    def declaration(self, o: dict) -> None:
+        names, m = self.inductive_block(o["inductive"]) if "inductive" in o else self.single_declaration(o)
         for n in names:
             self.decl[n] = m
         mine = self.early.intersection(names)
@@ -141,7 +150,7 @@ class Scan:
             self.early -= mine
             if m:  # the early mentions were read as resting on nothing: re-read them and every term above them
                 for i, t in self.buffer:
-                    E[i] = self.term(t)
+                    self.E[i] = self.term(t)
         if not self.early:
             self.buffer.clear()
 
@@ -163,8 +172,8 @@ class Scan:
                     v = o.get("str") or o["num"]
                     self.name_pre.append(v["pre"])
                     self.name_part.append(v["str"] if "str" in v else str(v["i"]))
-                elif "il" in o:
-                    pass
+                elif "il" in o:  # a universe level: it carries no axiom
+                    continue
                 elif "meta" in o:
                     fmt = o["meta"]["format"]["version"]
                     if not fmt.startswith("3."):
@@ -199,6 +208,86 @@ def trusted_records(d: Path) -> dict[str, set[str]]:
     return {n: libs for n, libs in names.items() if n not in gone}
 
 
+def checked_path(arg: Path) -> Path:
+    """A path given on the command line, resolved; it must lie in the working directory or the temporary directory
+    (where CI keeps the export), so an argument cannot point the scan or its output anywhere else."""
+    p = arg.resolve()
+    roots = [Path.cwd(), Path(tempfile.gettempdir())] + ([Path(os.environ["RUNNER_TEMP"])] if os.environ.get("RUNNER_TEMP") else [])
+    if not any(p.is_relative_to(r.resolve()) for r in roots):
+        raise SystemExit(f"axiom-scan: {arg} is outside the working directory and the temporary directory")
+    return p
+
+
+def resting_users(s: Scan, declared: list[str]) -> dict[str, list[str]]:
+    """For each declared axiom outside the standard three: the constants that rest on it (the axioms themselves excluded)."""
+    resting: dict[str, list[str]] = {x: [] for x in declared if x not in STANDARD}
+    own = set(s.axioms)
+    for sid, ax in enumerate(s.S.sets):
+        hit = [x for x in (s.name(s.axioms[b]) for b in ax) if x in resting]
+        if hit:
+            users = [s.name(n) for n, m in s.decl.items() if m == sid and n not in own]
+            for x in hit:
+                resting[x] += users
+    return resting
+
+
+def print_resting(resting: dict[str, list[str]]) -> None:
+    for x, users in resting.items():
+        shown = sorted(users, key=lambda u: (u.count("._") > 0, u))[:25]  # user-facing names first
+        print(f"  {x}: {len(users)} constants rest on it{': ' + ', '.join(shown) if shown else ''}{' …' if len(users) > 25 else ''}")
+
+
+def constant_of(record: str, by_name: dict[str, int], by_last: dict[str, list[str]]) -> int | None:
+    """The constant a record names: by its full name, else (declared inside a namespace) the one constant that ends in it."""
+    n = by_name.get(record)
+    if n is not None:
+        return n
+    hits = [k for k in by_last.get(record.rsplit(".", 1)[-1], []) if k.endswith("." + record)]
+    return by_name[hits[0]] if len(hits) == 1 else None
+
+
+def audit_records(s: Scan, records_dir: Path, by_name: dict[str, int]) -> tuple[dict, list[str]]:
+    """Every trusted record must be in the export and rest only on the standard axioms. Returns the report and the failures."""
+    records = trusted_records(records_dir)
+    by_last: dict[str, list[str]] = {}
+    for k in by_name:
+        by_last.setdefault(k.rsplit(".", 1)[-1], []).append(k)
+    tree = records_dir.resolve().parents[1] / "Tengoku"  # data/trusted -> <checkout>/Tengoku
+    missing: list[str] = []
+    extra: list[str] = []
+    absent: dict[str, int] = {}
+    for r, libs in records.items():
+        n = constant_of(r, by_name, by_last)
+        if n is None:
+            if any((tree / f"{pascal(lib)}.lean").exists() for lib in libs):  # a compiled library claims it
+                missing.append(r)
+            else:
+                lib = min(libs)
+                absent[lib] = absent.get(lib, 0) + 1
+            continue
+        beyond = [x for x in s.rests_on(n) if x not in STANDARD]
+        if beyond:
+            extra.append(f"{r} rests on {beyond}")
+    held = len(records) - len(missing) - sum(absent.values())
+    print(f"axiom-scan: {len(records)} trusted records, {held} in the export, {held - len(extra)} of them rest only on the standard axioms")
+    if absent:
+        print(
+            "  not in the export, from libraries the tree does not compile: "
+            + ", ".join(f"{k} {v}" for k, v in sorted(absent.items(), key=lambda x: -x[1]))
+        )
+    bad = [f"{len(missing)} trusted records of compiled libraries are not in the export: {missing[:10]}"] if missing else []
+    bad += extra[:50]
+    report = {
+        "total": len(records),
+        "in_export": held,
+        "resting_only_on_standard_axioms": held - len(extra),
+        "resting_on_more": extra,
+        "missing_from_compiled_libraries": missing,
+        "not_in_export_libraries_not_compiled": dict(sorted(absent.items())),
+    }
+    return report, bad
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("export", type=Path)
@@ -206,30 +295,20 @@ def main() -> int:
     ap.add_argument("--permitted", type=Path, help="write the declared axioms here (a JSON list)")
     ap.add_argument("--report", type=Path, help="write the verdict here as JSON")
     a = ap.parse_args()
+    export, records_dir = checked_path(a.export), a.records and checked_path(a.records)
+    permitted, report_path = a.permitted and checked_path(a.permitted), a.report and checked_path(a.report)
 
     s = Scan()
-    s.run(a.export)
+    s.run(export)
     bad: list[str] = []
     if s.early:
         bad.append(f"mentioned and never declared: {sorted(s.name(n) for n in s.early)[:10]}")
     declared = [s.name(n) for n in s.axioms]
     print(f"axiom-scan: {s.lines} lines, {len(s.E)} terms, {len(s.decl)} constants, axioms declared: {declared}")
-    for x in declared:
-        if x not in PRELUDE:
-            bad.append(f"the export declares the axiom {x}")
+    bad += [f"the export declares the axiom {x}" for x in declared if x not in PRELUDE]
 
-    by_name = {s.name(n): n for n in s.decl}
-    resting: dict[str, list[str]] = {x: [] for x in declared if x not in STANDARD}
-    own = set(s.axioms)
-    for sid, ax in enumerate(s.S.sets):
-        hit = [x for x in (s.name(s.axioms[b]) for b in ax) if x in resting]
-        if hit:
-            users = [s.name(n) for n, m in s.decl.items() if m == sid and n not in own]  # not the axioms themselves
-            for x in hit:
-                resting[x] += users
-    for x, users in resting.items():
-        shown = sorted(users, key=lambda u: (u.count("._") > 0, u))[:25]  # user-facing names first
-        print(f"  {x}: {len(users)} constants rest on it{': ' + ', '.join(shown) if shown else ''}{' …' if len(users) > 25 else ''}")
+    resting = resting_users(s, declared)
+    print_resting(resting)
     if resting.get("sorryAx"):
         bad.append(f"{len(resting['sorryAx'])} constants rest on sorryAx")
 
@@ -239,55 +318,16 @@ def main() -> int:
         "standard_axioms": sorted(STANDARD),
         "resting_on_other_axioms": {x: sorted(users) for x, users in resting.items()},
     }
-    if a.records:
-        records = trusted_records(a.records)
-        by_last: dict[str, list[str]] = {}
-        for k in by_name:
-            by_last.setdefault(k.rsplit(".", 1)[-1], []).append(k)
-        tree = a.records.resolve().parents[1] / "Tengoku"  # data/trusted -> <checkout>/Tengoku
-        missing, extra, absent = [], [], {}
-        for r, libs in records.items():
-            n = by_name.get(r)
-            if n is None:  # declared inside a namespace: the record's name is the end of the constant's
-                hits = [k for k in by_last.get(r.rsplit(".", 1)[-1], []) if k.endswith("." + r)]
-                n = by_name[hits[0]] if len(hits) == 1 else None
-            if n is None:
-                if any((tree / f"{pascal(lib)}.lean").exists() for lib in libs):  # a compiled library claims it
-                    missing.append(r)
-                else:
-                    lib = min(libs)
-                    absent[lib] = absent.get(lib, 0) + 1
-                continue
-            beyond = [x for x in s.rests_on(n) if x not in STANDARD]
-            if beyond:
-                extra.append(f"{r} rests on {beyond}")
-        held = len(records) - len(missing) - sum(absent.values())
-        print(
-            f"axiom-scan: {len(records)} trusted records, {held} in the export, {held - len(extra)} of them rest only on the standard axioms"
-        )
-        if absent:
-            print(
-                "  not in the export, from libraries the tree does not compile: "
-                + ", ".join(f"{k} {v}" for k, v in sorted(absent.items(), key=lambda x: -x[1]))
-            )
-        if missing:
-            bad.append(f"{len(missing)} trusted records of compiled libraries are not in the export: {missing[:10]}")
-        bad += extra[:50]
-        report["trusted_records"] = {
-            "total": len(records),
-            "in_export": held,
-            "resting_only_on_standard_axioms": held - len(extra),
-            "resting_on_more": extra,
-            "missing_from_compiled_libraries": missing,
-            "not_in_export_libraries_not_compiled": dict(sorted(absent.items())),
-        }
+    if records_dir:
+        report["trusted_records"], record_failures = audit_records(s, records_dir, {s.name(n): n for n in s.decl})
+        bad += record_failures
 
-    if a.permitted:
-        a.permitted.write_text(json.dumps(declared))
-    if a.report:
+    if permitted:
+        permitted.write_text(json.dumps(declared))
+    if report_path:
         report["failures"] = bad
         report["passed"] = not bad
-        a.report.write_text(json.dumps(report, indent=2) + "\n")
+        report_path.write_text(json.dumps(report, indent=2) + "\n")
     for b in bad:
         print(f"::error::axiom-scan: {b}")
     return 1 if bad else 0

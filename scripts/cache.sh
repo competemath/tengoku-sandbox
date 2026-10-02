@@ -26,15 +26,16 @@ TOPUPS="${TENGOKU_TOPUPS:-0}"                         # 1 = follow top-ups (the 
 TOPUP_RELEASE="cache-topups"                          # one rolling release holding topup-<commit>.tar.zst + .json
 cmd="${1:-}"
 
-need() { command -v "$1" >/dev/null 2>&1 || { echo "missing: $1" >&2; exit 1; }; }
+need() { local tool="$1"; command -v "$tool" >/dev/null 2>&1 || { echo "missing: $tool" >&2; exit 1; }; }
 need zstd; need tar; need git; need python3
 
 command -v sha256sum >/dev/null 2>&1 || sha256sum() { shasum -a 256 "$@"; }
 have_gh() { command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; }
 
 api() {  # GET a GitHub API path, anonymously or with whatever token exists
-  if have_gh; then gh api "$1"
-  else need curl; curl --proto '=https' --tlsv1.2 -fsSL -H 'Accept: application/vnd.github+json' ${GH_TOKEN:+-H "Authorization: Bearer $GH_TOKEN"} "https://api.github.com/$1"; fi
+  local path="$1"
+  if have_gh; then gh api "$path"
+  else need curl; curl --proto '=https' --tlsv1.2 -fsSL -H 'Accept: application/vnd.github+json' ${GH_TOKEN:+-H "Authorization: Bearer $GH_TOKEN"} "https://api.github.com/$path"; fi
 }
 
 # The newest cache, from the fixed-tag pointer the nightly updates (a plain
@@ -52,7 +53,7 @@ except Exception: pass' "$j" 2>/dev/null || true
 # Every asset of a cache release must carry a build-provenance attestation from
 # this repository's build workflow (docs/tengoku-security-plan.md §6). With gh
 # present the check is enforced; without it a warning is printed for now.
-pointer_json_of() { need curl; curl --proto '=https' --tlsv1.2 -fsSL "https://github.com/$1/releases/download/cache-latest/cache-latest.json?t=$(date +%s)" 2>/dev/null || true; }
+pointer_json_of() { local repo="$1"; need curl; curl --proto '=https' --tlsv1.2 -fsSL "https://github.com/$repo/releases/download/cache-latest/cache-latest.json?t=$(date +%s)" 2>/dev/null || true; }
 pointer_json() { pointer_json_of "$SRC"; }        # what consumers follow
 # Whatever WRITES the pointer (put, topup-promote, topup-gc) must read the pointer of the repository it
 # writes to. They used to read the consumers' source: in a sandbox that seeds from the library that is
@@ -151,8 +152,8 @@ for a in json.load(sys.stdin).get("assets", []):
 case "$cmd" in
   put)
     tmp="$(mktemp -d)"
+    trap 'rm -rf "$tmp"' EXIT   # whichever of pack and publish fails (set -e), the packed parts go
     "$0" pack "$tmp" && "$0" publish "$tmp"
-    rc=$?; rm -rf "$tmp"; exit $rc
     ;;
   pack)
     dir="${2:?usage: cache.sh pack <dir>}"
@@ -162,7 +163,7 @@ case "$cmd" in
       echo "refusing to pack a cache on macOS — let the nightly build (or workflow_dispatch) publish it" >&2; exit 1
     fi
     sha="$(git rev-parse HEAD)"
-    [ -d .lake/build ] || { echo "nothing to pack: .lake/build missing" >&2; exit 1; }
+    [[ -d .lake/build ]] || { echo "nothing to pack: .lake/build missing" >&2; exit 1; }
     mkdir -p "$dir"
     rm -f "$dir"/tengoku-cache.tar.zst.part-* "$dir/commit"   # a larger earlier pack would leave surplus parts behind
     echo "packing .lake/build for $sha …"

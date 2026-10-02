@@ -12,7 +12,7 @@ the nightly run did not cover: `gh workflow run independent-check.yml -f commit=
 | Asset | What it is |
 | --- | --- |
 | `tengoku-<v>-source.tar.gz` | The buildable tree at the release commit: `Tengoku/`, the root modules, the Lake and toolchain files, the licences and `SEED.md`. |
-| `tengoku-<v>.cdx.json` | The bill of materials (CycloneDX 1.5): the Lean toolchain, every package the tree was seeded from, and every library whose records the tree holds, each with its exact commit and licence. |
+| `tengoku-<v>.cdx.json` | The bill of materials (CycloneDX 1.5): the Lean toolchain, every package the tree was seeded from, and every library whose records the tree holds. A seeded package and a library the tree compiles carry their exact commit; a licence is listed where the registry names one, and a library with no corpus (CompeteMath's own problems) is listed as data, with no version. |
 | `tengoku-<v>-cache.json` | The compiled cache built from the release commit: its release tag and the SHA-256 digest of each part. |
 | `tengoku-<v>-independent-check.json` | The axiom report: the independent check's verdict on the release commit. It lists how many declarations nanoda type-checked again (and with which axioms admitted), which axioms the export declares, every constant resting on an axiom other than `propext`, `Classical.choice` and `Quot.sound`, and how many trusted records rest only on those three. It also carries the run that produced it and the pinned lean4export and nanoda commits. |
 | `CHANGELOG-<v>.md` | The PRs merged since the previous release. |

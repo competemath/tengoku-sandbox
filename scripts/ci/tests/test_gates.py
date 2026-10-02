@@ -926,7 +926,9 @@ class Sbom(unittest.TestCase):
             self.assertEqual(by["mathlib"]["purl"], "pkg:github/leanprover-community/mathlib4@" + "a" * 40)
             self.assertEqual(by["equational-theories"]["version"], "c" * 40)
             records = {p["name"]: p["value"] for p in by["equational-theories"]["properties"]}
-            self.assertEqual(records["tengoku:trusted-records"], "2")  # the tombstone is not a record
+            self.assertEqual(
+                records["tengoku:trusted-records"], "1"
+            )  # a tombstone is not a record, and the record it retracts is not counted
             self.assertEqual(by["competemath"]["licenses"][0]["license"]["id"], "Apache-2.0")
 
 
