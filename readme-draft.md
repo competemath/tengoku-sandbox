@@ -37,7 +37,7 @@ So AI provers, and the people who work with them, can search everything already 
 
 ## Why the services matter: a measured case
 
-Tengoku's search and verification services (the Leak MCP services above) are what let an agent use the library while it proves. They were measured on [FATE-X](https://arxiv.org/abs/2411.14052), a benchmark of graduate-level algebra problems in Lean 4, with the same model (Claude Sonnet 5), the same time budget and no web search:
+Tengoku's search and verification services (the Leak MCP services above) are what let an agent use the library while it proves. They were measured on [FATE-X](https://github.com/frenzymath/FATE-X/releases/tag/v4.28.0), a benchmark of graduate-level algebra problems in Lean 4, with the same model (Claude Sonnet 5), the same time budget and no web search:
 
 | Same agent, given… | Proved |
 |---|---|
@@ -46,7 +46,7 @@ Tengoku's search and verification services (the Leak MCP services above) are wha
 
 The no-tools arm was stopped after 42 problems, so the two rows count different numbers of problems. This was measured on Mathlib at Lean v4.29.1, before Tengoku. [Full report: TODO link once published]. The same measurement is planned again on Tengoku after it has grown, so the difference the library makes is measured, not claimed.
 
-<!-- CHECK BEFORE PUBLISHING: (1) the FATE-X link is the right paper; (2) hosted Leak I/II/IV now serve Tengoku (a Tengoku-only declaration resolves on each); (3) the report is public; (4) say nothing about Leak II's benefit: no completed run isolates it (Control IV). -->
+<!-- CHECK BEFORE PUBLISHING: (1) the FATE-X link: the report cites this release, v4.28.0, while the runs used a v4.29.1 Mathlib; (2) hosted Leak I/II/IV now serve Tengoku (a Tengoku-only declaration resolves on each); (3) the report is public; (4) say nothing about Leak II's benefit: no completed run isolates it (Control IV). -->
 
 ## How a theorem earns trust
 
