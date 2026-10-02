@@ -24,7 +24,7 @@ claude mcp add --transport sse tengoku-search \
 # the trusted records with source, licence and credit (18 MB, one JSON object per line)
 curl -LO https://github.com/competemath/tengoku/releases/download/v1.0.0/tengoku-dataset.jsonl.gz
 
-# import it into Lean: about two minutes (needs git, zstd and elan, Lean's version manager)
+# import it into Lean: a few minutes, mostly one download (needs git, zstd and elan, Lean's version manager)
 git clone --filter=blob:none https://github.com/competemath/tengoku
 cd tengoku && scripts/cache.sh get
 ```
