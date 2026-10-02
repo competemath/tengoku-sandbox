@@ -173,6 +173,28 @@ class Gates(unittest.TestCase):
         for needle in ["status 'trusted'", "allowlist", "already trusted", "not JSON", "library 'other'"]:
             self.assertIn(needle, out)
 
+    def test_source_path_stays_in_the_corpus(self):
+        r = Repo()
+        paths = ["../../.github/workflows/x.lean", "/etc/passwd", "-rf/x.lean", "A/../../B.lean", "A\\B.lean", "~/x.lean"]
+        for i, sp in enumerate(paths):
+            r.append(
+                "data/staging/lib.jsonl",
+                json.dumps({**GOOD, "name": f"Lib.p{i}", "statement": f"theorem Lib.p{i} : 1 + 1 = 2", "source_path": sp}) + "\n",
+            )
+        r.commit("paths that leave the corpus")
+        rc, out = r.gate("validate_records.py")
+        self.assertEqual(rc, 1)
+        self.assertEqual(out.count("is not a path inside the corpus"), len(paths), out)
+        ok = Repo()
+        ok.append(
+            "data/staging/lib.jsonl",
+            json.dumps({**GOOD, "name": "Lib.fine", "statement": "theorem Lib.fine : 1 + 1 = 2", "source_path": "Lib/Sub/File.lean"})
+            + "\n",
+        )
+        ok.commit("a path inside the corpus")
+        rc, out = ok.gate("validate_records.py")
+        self.assertNotIn("is not a path inside the corpus", out)
+
     def test_content_lint(self):
         r = Repo()
         for i, (body, why) in enumerate(

@@ -34,7 +34,7 @@ have_gh() { command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; }
 
 api() {  # GET a GitHub API path, anonymously or with whatever token exists
   if have_gh; then gh api "$1"
-  else need curl; curl -fsSL -H 'Accept: application/vnd.github+json' ${GH_TOKEN:+-H "Authorization: Bearer $GH_TOKEN"} "https://api.github.com/$1"; fi
+  else need curl; curl --proto '=https' --tlsv1.2 -fsSL -H 'Accept: application/vnd.github+json' ${GH_TOKEN:+-H "Authorization: Bearer $GH_TOKEN"} "https://api.github.com/$1"; fi
 }
 
 # The newest cache, from the fixed-tag pointer the nightly updates (a plain
@@ -42,7 +42,7 @@ api() {  # GET a GitHub API path, anonymously or with whatever token exists
 pointer() {
   need curl
   local j  # downloaded as data, then read: nothing downloaded is piped into an interpreter
-  j="$(curl -fsSL "https://github.com/$SRC/releases/download/cache-latest/cache-latest.json" 2>/dev/null || true)"
+  j="$(curl --proto '=https' --tlsv1.2 -fsSL "https://github.com/$SRC/releases/download/cache-latest/cache-latest.json" 2>/dev/null || true)"
   python3 -c '
 import json, sys
 try: d = json.loads(sys.argv[1]); print(d["published_at"], "1", d["tag"], d["commit"])
@@ -52,7 +52,7 @@ except Exception: pass' "$j" 2>/dev/null || true
 # Every asset of a cache release must carry a build-provenance attestation from
 # this repository's build workflow (docs/tengoku-security-plan.md §6). With gh
 # present the check is enforced; without it a warning is printed for now.
-pointer_json_of() { need curl; curl -fsSL "https://github.com/$1/releases/download/cache-latest/cache-latest.json?t=$(date +%s)" 2>/dev/null || true; }
+pointer_json_of() { need curl; curl --proto '=https' --tlsv1.2 -fsSL "https://github.com/$1/releases/download/cache-latest/cache-latest.json?t=$(date +%s)" 2>/dev/null || true; }
 pointer_json() { pointer_json_of "$SRC"; }        # what consumers follow
 # Whatever WRITES the pointer (put, topup-promote, topup-gc) must read the pointer of the repository it
 # writes to. They used to read the consumers' source: in a sandbox that seeds from the library that is
@@ -79,7 +79,7 @@ apply_topup() {
   mkdir -p "$store"
   for f in "topup-$commit.tar.zst" "topup-$commit.json"; do
     [ -s "$store/$f" ] && continue
-    curl -fsSL --retry 2 -o "$store/$f.part" "https://github.com/$SRC/releases/download/$TOPUP_RELEASE/$f" && mv "$store/$f.part" "$store/$f" \
+    curl --proto '=https' --tlsv1.2 -fsSL --retry 2 -o "$store/$f.part" "https://github.com/$SRC/releases/download/$TOPUP_RELEASE/$f" && mv "$store/$f.part" "$store/$f" \
       || { rm -f "$store/$f.part"; echo "warning: could not fetch $f; using the base only" >&2; return 0; }
   done
   if [ -n "$digest" ] && [ "$(sha256sum "$store/topup-$commit.tar.zst" | cut -d' ' -f1)" != "$digest" ]; then
@@ -143,7 +143,7 @@ for a in json.load(sys.stdin).get("assets", []):
     [ -n "$urls" ] || { echo "no cache parts on $tag" >&2; exit 1; }
     for u in $urls; do
       echo "  $u"
-      curl -fL --retry 3 -o "$dir/$(basename "$u")" "$u"
+      curl --proto '=https' --tlsv1.2 -fL --retry 3 -o "$dir/$(basename "$u")" "$u"
     done
   fi
 }

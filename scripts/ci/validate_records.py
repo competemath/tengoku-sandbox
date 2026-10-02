@@ -20,6 +20,24 @@ MAX_HEADLINES = 10  # the results a PR is about, shown first; more would be clut
 base, head = sys.argv[1], sys.argv[2]
 schema = load_schema("record.schema.json")
 NAME_RE = re.compile(r"[^\s,\x00-\x1f]+")
+# source_path names a file inside the corpus checkout, and the generator builds the module's path from it: a path that
+# leaves the checkout (absolute, a `..` segment, a backslash), starts like an option, or has control characters is refused
+SOURCE_PATH_BAD = re.compile(r"[\x00-\x1f\\]")
+
+
+def bad_source_path(sp: object) -> str:
+    """Why `sp` cannot be a path inside the corpus, or ''."""
+    if not isinstance(sp, str):
+        return ""  # the type check reports it
+    if SOURCE_PATH_BAD.search(sp):
+        return "a backslash or control character"
+    if sp.startswith(("/", "-", "~")):
+        return "it starts with /, - or ~"
+    if ".." in sp.split("/"):
+        return "a .. segment"
+    return ""
+
+
 sources_doc = load_schema("sources.json")
 sources = sources_doc["allowed"]
 corpora = sources_doc.get("corpora", {})
@@ -165,6 +183,9 @@ for st, p in changed_files(base, head):
             errors.append(
                 f"{p}:{no}: a {lib} record needs source_path and context, or it is never compiled (see schemas/sources.json corpora)"
             )
+        why = bad_source_path(r.get("source_path"))
+        if why:
+            errors.append(f"{p}:{no}: source_path {r.get('source_path')!r} is not a path inside the corpus ({why})")
         if not any(str(r.get("source_url", "")).startswith(s) for s in sources):
             errors.append(f"{p}:{no}: source_url not on the allowlist (schemas/sources.json): {r.get('source_url')}")
         n = r.get("name")

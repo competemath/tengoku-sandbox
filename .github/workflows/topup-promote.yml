@@ -50,7 +50,7 @@ jobs:
           want="$(git rev-parse origin/main)"
           if gh api "repos/$GITHUB_REPOSITORY/releases/tags/cache-topups" -q '.assets[].name' 2>/dev/null | grep -qx "topup-$want.json"; then
             for _ in $(seq 1 30); do
-              j="$(curl -fsSL "https://github.com/$GITHUB_REPOSITORY/releases/download/cache-latest/cache-latest.json" 2>/dev/null || true)"
+              j="$(curl --proto '=https' --tlsv1.2 -fsSL "https://github.com/$GITHUB_REPOSITORY/releases/download/cache-latest/cache-latest.json" 2>/dev/null || true)"
               seen="$(python3 -c 'import json,sys; print((json.loads(sys.argv[1]).get("topup") or {}).get("commit",""))' "$j" 2>/dev/null || true)"
               [ "$seen" = "$want" ] && break
               sleep 3
@@ -59,6 +59,6 @@ jobs:
           fi
           for space in $SPACES; do
             host="$(echo "$space" | tr '/A-Z' '-a-z').hf.space"
-            out="$(curl -sS -m 30 -X POST "https://$host/refresh" 2>&1 | head -c 300)" || true
+            out="$(curl --proto '=https' --tlsv1.2 -sS -m 30 -X POST "https://$host/refresh" 2>&1 | head -c 300)" || true
             echo "$space: ${out:-no answer}"
           done
