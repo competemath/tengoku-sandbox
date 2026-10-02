@@ -4,15 +4,15 @@ Counted from `data/trusted/` and `data/staging/` of `competemath/tengoku` on 202
 
 | Tier | What it means | Records |
 |---|---|---|
-| **trusted** | built into the library and checked | 198,172 (188,989 from Mathlib and its dependencies; 8,921 from Equational Theories, the one research library promoted so far; 262 CompeteMath problems, marked trusted but not yet built into the library: [known gaps](trust-draft.md#known-gaps)) |
+| **trusted** | built into the library and checked (the 262 CompeteMath records carry the label without a build) | 198,172 (188,989 from Mathlib and its dependencies; 8,921 from Equational Theories, the one research library promoted so far; 262 CompeteMath problems, marked trusted but not yet built into the library: [known gaps](trust-draft.md#known-gaps)) |
 | **staging** | translated onto the toolchain, awaiting promotion | 8,969 in 60 libraries |
 | **tentative** | a real proof at its source, indexed and searchable, not yet translated or re-checked here | hundreds of thousands, from about a hundred libraries (about 401,000 on `data/stats.json` of 2026-09-21) |
 
-Of the 106 registered libraries that have a corpus the tree can compile, **1 has trusted records today** (Equational Theories), **60 have translations in staging** (Equational Theories among them), 41 are tentative only, and 5 have no records yet. Translating them is the first goal in [GOALS.md](GOALS.md).
+Of the 106 registered sources that have a corpus the library can compile, **1 has trusted records today** (Equational Theories), **60 have translations in staging** (Equational Theories among them), 41 are tentative only, and 5 have no records yet. Translating them is the first goal in [GOALS.md](GOALS.md).
 
-## Libraries with translations in staging or trusted
+## Sources with translations in staging or trusted
 
-| Library | Trusted | Staging | Tentative |
+| Source | Trusted | Staging | Tentative |
 |---|---:|---:|---:|
 | `equational-theories` | 8,921 | 81 | 13,193 |
 | `imoshortlist` | 0 | 1,062 | 2,367 |

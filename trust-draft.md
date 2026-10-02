@@ -10,7 +10,7 @@ This page defines the words the README uses, step by step, and says plainly what
 | **tier** | where a record stands: **tentative**, **staging** or **trusted** |
 | **tentative** | a real proof from a real source, indexed and searchable, not yet translated or re-checked here |
 | **staging** | translated onto the library's toolchain and accepted by the translation checks, awaiting promotion |
-| **trusted** | built into the library and passed every check below |
+| **trusted** | built into the library and passed every check below (with the exceptions in [known gaps](#known-gaps)) |
 | **gate** | the checks that run on every pull request, before anything is merged |
 | **merge queue** | the step that builds a change together with the whole library before it can merge |
 | **promotion** | the step that moves a record from staging to trusted, after a fresh build and two more checks |
@@ -24,7 +24,7 @@ flowchart LR
 ```
 
 1. **Gate.** The record has the right shape; its source is on the list of accepted sources (with their licences); it carries an `Author:` line naming the human and any AI used; its Lean is checked for constructs that run code when the library compiles (a list of banned constructs, and an allow-list of `set_option`s; a stricter allow-list of everything a record may contain is proposed); it contains no secrets. Every pull request passes through it, the maintainer's included.
-2. **Merge queue.** The new modules are built together with the whole compiled library, with every named declaration checked for `sorry` and for any axiom beyond `propext`, `Classical.choice` and `Quot.sound`.
+2. **Merge queue.** For records heading to trusted, the new modules are built together with the whole compiled library, with every named declaration checked for `sorry` and for any axiom beyond `propext`, `Classical.choice` and `Quot.sound`.
 3. **Translation checks** (for records translated from another Lean version). Check one: the translated script compiles in the library's environment with no errors, no warnings and no `sorry`. Check two: the original theorem is replayed from an export of its own module into the same environment, and the kernel accepts that the translated statement implies the original, so the translation proves at least what the original did.
 4. **Promotion.** A fresh build of the record's module against the compiled library, the axiom check again, and a **vacuity** check: the theorem's hypotheses are tested for contradiction, and a theorem from which `False` follows is refused unless a person acknowledges it with a reason.
 5. **Nightly independent check.** Every declaration of the compiled library (about 745,000 on the latest run, from a 110-million-line export) is checked again by [nanoda](https://github.com/ammkrn/nanoda_lib), a type checker written separately from Lean, and a separate program computes the axioms every constant rests on.
@@ -39,7 +39,7 @@ flowchart LR
 
 ## What is kept
 
-Records are append-only. A mistake is retracted by a tombstone with a category (duplicate, incorrect, superseded, licence, other) and a note; credit changes only on documented evidence of plagiarism. Copyleft sources are not accepted, and a source whose licence is found incompatible is removed.
+Records are append-only. A mistake is retracted by a tombstone with a category (duplicate, incorrect, superseded, licence, other) and a note (moving a record out of trusted would need a category of its own: *demoted*); credit changes only on documented evidence of plagiarism. Copyleft sources are not accepted, and a source whose licence is found incompatible is removed.
 
 ## Known gaps
 

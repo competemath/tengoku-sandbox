@@ -4,7 +4,7 @@ What already exists, what Tengoku does differently, and how it relates. Figures 
 
 | Project | What it is | How Tengoku relates |
 |---|---|---|
-| **[Mathlib](https://github.com/leanprover-community/mathlib4)** | The curated Lean 4 mathematics library, reviewed line by line by its community. | The base. Tengoku does not fork or replace it: its Mathlib content is Mathlib, and what belongs in Mathlib belongs upstream. Tengoku adds what Mathlib does not hold, checked by machine instead of by review. |
+| **[Mathlib](https://github.com/leanprover-community/mathlib4)** | The curated Lean 4 mathematics library, reviewed line by line by its community. | The base. Tengoku carries a pinned, renamed copy of it (under `Tengoku.*` names) rather than a fork that diverges, and does not replace it; what belongs in Mathlib belongs upstream. Tengoku adds what Mathlib does not hold, checked by machine instead of by review. |
 | **Individual research projects** (Carleson, PFR, FLT, Equational Theories, …) | Each a Lean project pinned to its own Lean and Mathlib version, maintained by its authors. | Registered as sources. Tengoku translates their theorems to its toolchain and links every theorem to the original at a fixed commit and licence. The originals stay canonical and keep evolving; the translations are copies that carry their provenance. |
 | **[Reservoir](https://reservoir.lean-lang.org)** | The official registry that indexes Lean packages and their versions. | Finds and versions packages; it does not make them importable together. Tengoku works on the part Reservoir leaves to each project: one toolchain for all. |
 | **[LeanDojo](https://arxiv.org/abs/2306.15626)** | A toolkit and benchmark that traces Lean projects (102,514 theorems in LeanDojo Benchmark 4) for retrieval-augmented provers. | LeanDojo extracts a dataset from Mathlib at one point in time. Tengoku is a library that keeps growing, with a tier and a source on every theorem. |
@@ -16,7 +16,7 @@ What already exists, what Tengoku does differently, and how it relates. Figures 
 
 ## What is unusual about Tengoku
 
-Not any one piece, which exist elsewhere, but the combination, all in the open: translation of whole libraries onto one toolchain; a machine-checked definition of trust that includes a check for vacuous theorems; provenance, licence and credit on every record; services an agent can call while it proves; and a measurement of what those services do for provers, repeated as the library grows.
+Not any one piece, which exist elsewhere, but the combination, all in the open: translation of whole libraries onto one toolchain; a machine-checked definition of trust that includes a check for vacuous theorems; provenance, licence and credit on every record; services an agent can call while it proves; and a measurement of what those services do for provers, to be repeated as the library grows.
 
 ## What would be a mistake to claim
 

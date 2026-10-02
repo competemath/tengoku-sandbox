@@ -12,16 +12,16 @@ One source for what Tengoku is, why it exists and what it is not, so the README,
 
 ## The pitch at three lengths
 
-- **Repository description (under 120 characters):** One verified Lean 4 library of formal mathematics, with every theorem's source and credit, for AI provers and people.
-- **Tagline:** Formal mathematics from many projects, in one verified Lean 4 library.
-- **Paragraph:** Tengoku (天国, "heaven") gathers theorems from many formal mathematics projects into one Lean 4 library on a single pinned toolchain. A theorem is *trusted* only once the library builds with it, it uses no `sorry` and only the standard axioms, and its assumptions are checked not to contradict. Every record links to its source at a fixed commit and carries its licence and credit. It is built so that AI provers, and the people who work with them, can search everything already proven and rely on it.
+- **Repository description (under 120 characters):** Formal mathematics from many Lean projects, translated onto one Lean version and machine-checked.
+- **Tagline:** Formal mathematics from many Lean projects, translated onto one Lean version and machine-checked.
+- **Paragraph:** Tengoku (天国) gathers theorems from many formal mathematics projects into one Lean 4 library on a single pinned toolchain. A theorem is *trusted* only once the library builds with it, it uses no `sorry` and only the standard axioms, and its assumptions are checked not to contradict. Every record links to its source at a fixed commit and carries its licence and credit. It is built so that AI provers, and the people who work with them, can search everything already proven and rely on it.
 
 ## Words
 
 | Say | Not | Why |
 |---|---|---|
 | **library** | "tree", "knowledge tree", "dataset" in prose | One noun for the thing you import. "Tree" is fine for the directory in technical docs. |
-| **dataset** | | Only for the monthly snapshot release (the file with its DOI). |
+| **dataset** | | Only for the versioned release file with its DOI. |
 | **trusted** / **tentative** / **staging** | "verified" alone | "Verified" is the library's job description; a record has a tier. Tentative: a real proof at its source, not yet checked here. Staging: translated, awaiting promotion. Trusted: built into the library and checked. |
 | **registered sources** | "libraries" for both the sources and the library | Tengoku is *the* library; what it draws from are *sources*. |
 | **Leak** | | The verification and search services (Leak I search over MCP, Leak IV verifier). One sentence on first use. |
@@ -44,15 +44,15 @@ A benchmark figure is quoted with what it measured: the model, the benchmark, th
 
 - Not a replacement for Mathlib: it builds on Mathlib and adds what Mathlib does not hold, checked by machine instead of by line-by-line review.
 - Not a proof assistant: it is a library for one.
-- Not CompeteMath: CompeteMath is the competition site, one user of Tengoku (it checks its problems and answers against the library). Tengoku does not need CompeteMath to be used.
+- Not CompeteMath: CompeteMath is the competition site, a separate project by the same developer; it uses the Leak verifier, and so Tengoku, to check problems and answers. Tengoku does not need CompeteMath to be used.
 
 ## Where each surface says it
 
 | Surface | Uses |
 |---|---|
-| `competemath/tengoku` GitHub description and README | description, tagline, then the problem table |
+| `competemath/tengoku` GitHub description and README | description, tagline, then the short intro |
 | `competemath/tengoku-sandbox` description | "A public testing sandbox for Tengoku's checks, not the library. Use at your own risk. Official repository: competemath/tengoku." |
-| `competemath/emissary-archangel` README first line | "Translates verified Lean theorems onto the Tengoku library's toolchain (Emissary) and checks each translation twice (Archangel)." |
+| `competemath/emissary-archangel` README first line | see [surfaces-draft.md](surfaces-draft.md) |
 | competemath.com `/tengoku` (search page) | tagline, the three-point list from this page, the live numbers |
 | competemath.com `/about/tengoku` | the paragraph, then the full breakdown |
 | competemath.com `/about`, `/faq` | one sentence: Tengoku is the open Lean 4 library CompeteMath checks its problems against; link to `/about/tengoku` |

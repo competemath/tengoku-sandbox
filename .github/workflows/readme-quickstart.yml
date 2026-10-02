@@ -39,15 +39,17 @@ jobs:
           git clone --filter=blob:none https://github.com/competemath/tengoku
           cd tengoku
           scripts/cache.sh get
-          # the README's example: Mathlib's ℕ and a theorem of the Equational Theories project, in one file
+          # the README's example, verbatim: a Mathlib structure and a theorem of the Equational Theories project, in one file
           cat > Try.lean <<'LEAN'
           import Tengoku.All
           open EquationalTheories
 
           instance : Magma ℕ := ⟨fun a b => a + b⟩
 
-          example (h : Equation1723 ℕ) : Equation2 ℕ := Equation1723_implies_Equation2 ℕ h
-
-          #check Nat.add_comm
+          -- addition on ℕ does not satisfy law 1723: the law would make ℕ trivial
+          example : ¬ Equation1723 ℕ := fun h => by
+            have h2 := Equation1723_implies_Equation2 ℕ h
+            have := h2 0 1
+            omega
           LEAN
           time lake env lean Try.lean

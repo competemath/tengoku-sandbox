@@ -22,7 +22,7 @@ One JSON object per line; **only trusted records**. Tentative and staging record
 | CompeteMath's problems | 262 | marked trusted, [not built into the library](trust-draft.md#known-gaps) |
 | **Total** | **198,172** | 161,646 distinct names |
 
-All records are Apache-2.0 (Mathlib and Equational Theories are Apache-2.0 upstream). Of the statements, 78,554 + 8,875 begin `theorem`, 36,692 + 40 begin `lemma`; the rest (73,749) are written as a bare type, as the search service shows them.
+All records are Apache-2.0 (Mathlib and Equational Theories are Apache-2.0 upstream). Of the 197,910 Mathlib and Equational Theories statements, 87,429 begin `theorem`, 36,732 begin `lemma`, and 73,749 are written as a bare type, as the search service shows them; the 262 CompeteMath statements begin `import Mathlib`.
 
 ## Fields
 
@@ -38,7 +38,7 @@ All records are Apache-2.0 (Mathlib and Equational Theories are Apache-2.0 upstr
 | `promoted_at` | when it became trusted (empty in the records of the first release) |
 | `credit`, `upstream`, `credit_corrected_evidence`, `headline` | reserved: **empty in every record of v1.0.0**. Authors of seeded content are in the headers of the source files, not in the data. |
 
-There is no tier field (every record is trusted by definition, including the 262 that should not be) and no stable id. The key to use is (`name`, `source_url`).
+There is no tier field (every record in the file carries the trusted label, the 262 included) and no stable id. The key to use is (`name`, `source_url`).
 
 ## Problems you should know about
 
