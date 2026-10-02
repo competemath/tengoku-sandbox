@@ -1,3 +1,8 @@
+> [!WARNING]
+> **This is a public testing sandbox, not the library.** It exists to try out changes to Tengoku's checks and build before they reach the real repository. Anything in it can be broken, wrong or deleted at any time, and none of it is released or supported. **Download or use anything in this repository at your own risk.**
+>
+> You may have intended to find the official Tengoku repository: **[competemath/tengoku](https://github.com/competemath/tengoku)**.
+
 <p align="center"><img src="logo.png" alt="Tengoku" width="200"></p>
 
 # Tengoku (天国)
