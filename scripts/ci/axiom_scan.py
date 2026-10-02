@@ -205,7 +205,7 @@ def pascal(s: str) -> str:
     return "".join(w[:1].upper() + w[1:] for w in s.replace("_", "-").split("-") if w)
 
 
-def trusted_records(d: Path) -> dict[str, set[str]]:
+def live_records(d: Path) -> dict[str, set[str]]:
     """record name -> its libraries (data/trusted/<library>.jsonl or data/trusted/<library>/<file>.jsonl)."""
     names: dict[str, set[str]] = {}
     gone: set[str] = set()
@@ -267,7 +267,7 @@ def constant_of(record: str, by_name: dict[str, int], by_last: dict[str, list[st
 
 def audit_records(s: Scan, records_dir: Path, by_name: dict[str, int]) -> tuple[dict, list[str]]:
     """Every trusted record must be in the export and rest only on the standard axioms. Returns the report and the failures."""
-    records = trusted_records(records_dir)
+    records = live_records(records_dir)
     by_last: dict[str, list[str]] = {}
     for k in by_name:
         by_last.setdefault(k.rsplit(".", 1)[-1], []).append(k)
