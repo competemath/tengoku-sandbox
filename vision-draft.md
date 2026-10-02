@@ -25,6 +25,8 @@ Three commitments, each already visible in the code:
 | **A public record of what the library does for provers** | The same benchmark, repeated as the library grows, published each time: does a bigger, better-checked library make provers better, and by how much? The first measurement exists; the second is planned for after growth. | *planned* |
 | **Fresh problems that nobody has trained on** | Competition-style problems formalised before their solutions are public (CompeteMath publishes a new problem every week), with a time stamp, so a prover's score cannot come from memorisation. | *an idea* |
 | **A bridge from open problems to proofs** | Sources such as Google DeepMind's Formal Conjectures hold statements of open problems. When any prover, human or AI, proves one, the proof enters the library with its credit. | *an idea* |
+| **A *reviewed* tier** | The gap named most often about machine-checked mathematics is faithfulness: the kernel checks that a proof proves a statement, not that the statement says what its source says. A fourth tier, *reviewed*, would mean a person (or an independent reviewer, with the review recorded) confirmed the statement against its source. Most useful first for the theorems benchmarks and provers lean on. | *an idea* |
+| **Theorems readable by non-Lean people** | An informal sentence beside each Lean statement, labelled as generated, so a mathematician who has never used Lean can see what a result says and decide whether it is the one they want. | *an idea* |
 | **A flywheel** | Every proof an agent finds enters the library with the AI credited, so the next agent starts richer than the last. The pieces exist (the services, the gates, the credit line); the loop is not yet closed automatically. | *an idea* |
 
 ## What Tengoku is not trying to be
@@ -37,6 +39,10 @@ Three commitments, each already visible in the code:
 ## Who is building it
 
 Tengoku is built by one independent developer, with AI assistance named wherever it was used, and anyone can contribute. That is why the gates are automatic and public, why the project is conservative about what it claims, and why it says so when something is not done.
+
+## If the maintainer stops
+
+Tengoku is built so that it can outlive its author: the library, the data, the checks and the nightly builds are in the open repository under Apache-2.0 with per-record upstream licences; the services are open source and can be run by anyone ([leak-services](https://github.com/mikael-bashir/leak-services)); every release is archived with a DOI. A fork can keep running the same checks. What would be lost is the translation pipeline's day-to-day operation, which is where help is most needed.
 
 ## What would make this a success
 
