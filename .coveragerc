@@ -1,0 +1,22 @@
+# Coverage of the repository's own Python, as sonar.yml measures it (the unit tests of scripts/tests and
+# scripts/ci/tests, run under `coverage run`; the report goes to SonarQube Cloud, sonar-project.properties).
+[run]
+branch = True
+# every file the tests import AND every file under these directories they do not: an untested script counts as 0%
+source =
+    scripts
+    tools
+# the gate scripts are run as subprocesses by many tests: `patch` makes those processes write coverage data too
+# (coverage 7.10+), `parallel` gives each process its own data file, `coverage combine` merges them
+patch = subprocess
+parallel = True
+# paths relative to the repository root, so SonarQube Cloud can match them to its files
+relative_files = True
+# not measured: the tests themselves; the fuzz targets (they run under atheris in fuzz.yml); the campaign's fixtures
+omit =
+    scripts/tests/*
+    scripts/ci/tests/*
+    scripts/ci/fuzz/*
+    scripts/ci/campaign/*
+[xml]
+output = coverage.xml
