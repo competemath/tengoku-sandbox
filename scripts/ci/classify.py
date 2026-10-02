@@ -7,17 +7,34 @@ derived file (generated modules, stats, cache pointer) → fail."""
 from __future__ import annotations
 
 import os
+import re
 import sys
 
-from _git import changed_files, fail, gh_output, tier_of
+from _git import changed_files, fail, gh_output, pascal, tier_of
 
 base, head = sys.argv[1], sys.argv[2]
 files = changed_files(base, head)
 if not files:
     fail("empty diff")
+# An INTAKE PR is a factory bundle (competemath/emissary-archangel scripts/bump): the Lean modules of ONE library, cut down to what the
+# factory verified, with a manifest. The library is named by its manifest in the same diff, and its modules are then that PR's own
+# (a library that is not in the tree yet has no data/*.jsonl for `derived_prefixes` to learn it from).
+intake_libs = {m.group(1) for _, p in files if (m := re.fullmatch(r"data/intake/([^/]+)/manifest\.jsonl", p))}
+
+
+def tier(p: str) -> str:
+    for lib in intake_libs:
+        ns = pascal(lib)
+        if p == f"Tengoku/{ns}.lean" or p.startswith(f"Tengoku/{ns}/") or p.startswith(f"data/intake/{lib}/"):
+            return "intake"
+    if intake_libs and p == "Tengoku/All.lean":
+        return "intake"
+    return tier_of(p)
+
+
 by = {}
 for st, p in files:
-    by.setdefault(tier_of(p), []).append(p)
+    by.setdefault(tier(p), []).append(p)
 derived = by.get("derived")
 bot = os.environ.get("TENGOKU_BOT", "tengoku-bot")
 actor = os.environ.get("PR_ACTOR", "")
@@ -27,6 +44,16 @@ actor_ok = actor == bot or os.environ.get("TENGOKU_ACTOR_CHECKED") == "1"
 if set(by) <= {"derived", "content", "tombstone"} and (derived or by.get("tombstone")) and actor_ok:
     print(f"class=promotion ({len(files)} files, by {actor or 'the merge group'})")
     gh_output("class", "promotion")
+    gh_output("files", " ".join(p for _, p in files))
+    sys.exit(0)
+if "intake" in by:
+    others = [c for c in by if c not in ("intake", "docs")]
+    if others or len(intake_libs) != 1:
+        fail(f"an intake PR is one library's bundle and nothing else (libraries: {sorted(intake_libs)}; also touches: {others})")
+    if not actor_ok:
+        fail(f"an intake PR comes from the factory's account ({bot}), not from {actor or 'nobody'}")
+    print(f"class=intake ({len(files)} files, library {sorted(intake_libs)[0]})")
+    gh_output("class", "intake")
     gh_output("files", " ".join(p for _, p in files))
     sys.exit(0)
 if derived:

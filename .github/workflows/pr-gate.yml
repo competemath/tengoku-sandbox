@@ -55,7 +55,7 @@ jobs:
         env: { GH_TOKEN: "${{ github.token }}", CLASS: "${{ steps.c.outputs.class }}", PR: "${{ github.event.pull_request.number }}" }
         run: |
           # one class label at a time: a PR whose class changes (docs, then content) loses the old one
-          old=$(gh pr view "$PR" -R "$GITHUB_REPOSITORY" --json labels --jq '.labels[].name' | grep -xE 'content|tombstone|tooling|docs|promotion|derived' | grep -vxF "$CLASS" | paste -sd, - || true)
+          old=$(gh pr view "$PR" -R "$GITHUB_REPOSITORY" --json labels --jq '.labels[].name' | grep -xE 'content|tombstone|tooling|docs|promotion|derived|intake' | grep -vxF "$CLASS" | paste -sd, - || true)
           args=(--add-label "$CLASS"); [ -n "$old" ] && args+=(--remove-label "$old")
           gh pr edit "$PR" -R "$GITHUB_REPOSITORY" "${args[@]}" || echo "::warning::could not label the PR '$CLASS' (scripts/ci/labels.sh creates the class labels)"
 
@@ -124,6 +124,33 @@ jobs:
         run: git fetch -q --no-tags --filter=blob:none origin "+$PR_REF:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
       - name: dco
         run: python3 scripts/ci/dco.py "$BASE" "$HEAD"
+
+  # An intake PR (a factory bundle: one library's verified Lean modules) is judged by its shape, its manifest, the content lint on every
+  # module and the factory's build attestation over the very bytes of the PR. Nothing of the PR runs; the queue builds the library.
+  intake:
+    needs: classify
+    if: github.event_name == 'pull_request_target' && needs.classify.outputs.class == 'intake'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions: { contents: read, pull-requests: read }
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
+        with: { egress-policy: audit }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { ref: "${{ env.BASE }}", fetch-depth: 0, filter: "blob:none", persist-credentials: false }
+      - name: The PR's commits, as data (the checks are main's)
+        run: git fetch -q --no-tags --filter=blob:none origin "+$PR_REF:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
+      - name: intake checks
+        env: { LINT: "${{ vars.TENGOKU_INTAKE_LINT || 'strict' }}" }
+        run: python3 scripts/ci/intake_check.py "$BASE" "$HEAD" --lint "$LINT" --tar "$RUNNER_TEMP/bundle.tar"
+      - name: provenance (the factory built exactly these bytes)
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          for wf in bump-library bump-sharded; do
+            if gh attestation verify "$RUNNER_TEMP/bundle.tar" --repo competemath/emissary-archangel \
+                 --signer-workflow "competemath/emissary-archangel/.github/workflows/$wf.yml"; then ok=1; break; fi
+          done
+          [ "${ok:-0}" = 1 ] || { echo "::error::no build attestation of competemath/emissary-archangel matches the bundle in this PR"; exit 1; }
 
   secrets:
     needs: classify
@@ -275,7 +302,7 @@ jobs:
         run: printf '%s' "$BODY" > body.txt && python3 scripts/ci/depends.py body.txt
 
   pr-gate:
-    needs: [classify, data-rules, credits, dco, secrets, workflows, depends, vacuity, goals]
+    needs: [classify, data-rules, credits, dco, secrets, workflows, depends, vacuity, goals, intake]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 10
