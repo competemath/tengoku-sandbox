@@ -12,7 +12,7 @@ What has been measured about the services Tengoku runs on, what that does and do
 | **Ultra Fleeting** | decomposition into lemmas, and more tools | 28 of 98 (28.6%) |
 | **Control III** | no tools: told only whether each whole attempt compiled | **1 of 42** (stopped after 42 problems) |
 
-Date of the runs: summer 2026. Toolchain: Lean v4.29.1 with Mathlib, before Tengoku existed. [Full report: link when public.]
+Reported 14 August 2026. Toolchain: Lean v4.29.1 with Mathlib, before Tengoku existed. [Full report: link when public.]
 
 ## What it shows, and what it does not
 

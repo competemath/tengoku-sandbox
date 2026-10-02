@@ -1,65 +1,61 @@
 <p align="center"><img src="logo.png" alt="Tengoku" width="150"></p>
 <h1 align="center">Tengoku (天国)</h1>
-<p align="center"><b>Formal mathematics from many projects, unified on one Lean toolchain and checked by machine.</b><br>
-Built so AI provers, and the people who work with them, can find and trust what has already been proved.</p>
+<p align="center"><b>Mathlib and the projects around it, on one Lean version, checked by machine.</b><br>
+A library for AI provers and the people who work with them: search it, import it, or give it to an agent.<br>
+Every theorem keeps its source, licence and credit.</p>
 <p align="center">
 [Lean toolchain badge] [trusted theorems badge]
 </p>
 
+[Lean](https://lean-lang.org) is a language for writing mathematics that a computer can check, and [Mathlib](https://github.com/leanprover-community/mathlib4) is its main library. Beyond Mathlib, formal mathematics lives in many separate Lean projects, and each works only with its own version of Lean, which changes often. They cannot be used together, and a program that tries to prove theorems cannot even see what already exists. Tengoku translates those projects onto **one toolchain**, so they import together, and trusts a theorem only after it passes checks that anyone can read.
+
 ## Try it
 
-| | |
-|---|---|
-| **Search** | [competemath.com/tengoku](https://competemath.com/tengoku): try `sum of two squares`, or a Lean type |
-| **Give it to an agent** | `claude mcp add --transport sse leak-i https://barkingtree-leak-i.hf.space/sse` (no sign-up) |
-| **From code** | `curl 'https://competemath.com/api/tengoku/search?q=Nat.add_comm'` |
-| **Import it** | `git clone https://github.com/competemath/tengoku && cd tengoku && scripts/cache.sh get`, then `import Tengoku.All` |
+```bash
+# browse: competemath.com/tengoku (type "sum of two squares")
 
-## Why
+# search from code
+curl 'https://competemath.com/api/tengoku/search?q=Nat.add_comm'
 
-Formal mathematics now spans hundreds of Lean projects, but each one pins its own version of Lean, so they cannot be used together. An AI prover cannot see what exists beyond Mathlib, and even the benchmarks are not always sound: an [audit of five widely used Lean benchmarks](https://arxiv.org/abs/2606.29493) found vacuous theorems, counterexamples and unsound axioms among 4,833 findings.
+# give an AI agent the search tool (Claude Code; no sign-up)
+claude mcp add --transport sse tengoku-search https://barkingtree-leak-i.hf.space/sse
 
-Tengoku's answer is one library: libraries are **translated onto a single toolchain**, every theorem is **checked by machine**, and every theorem keeps its **source, licence and credit**.
+# the 198,172 trusted theorems, with source, licence and credit (18 MB, one file per line)
+curl -LO https://github.com/competemath/tengoku/releases/download/v1.0.0/tengoku-dataset.jsonl.gz
+
+# import it into Lean (about two minutes: a download, then Lean)
+git clone --filter=blob:none https://github.com/competemath/tengoku && cd tengoku && scripts/cache.sh get
+```
+
+One file, two projects that were never built together (Mathlib's `ℕ` and a theorem of the Equational Theories project):
+
+```lean
+import Tengoku.All
+open EquationalTheories
+
+instance : Magma ℕ := ⟨fun a b => a + b⟩
+example (h : Equation1723 ℕ) : Equation2 ℕ := Equation1723_implies_Equation2 ℕ h
+```
 
 ## What "trusted" means
 
-A theorem is **trusted** when the library builds with it, it uses no `sorry` and only the standard axioms (`propext`, `Classical.choice`, `Quot.sound`), and its assumptions are checked not to contradict each other (so it is not vacuous). A second kernel re-checks every declaration nightly.
+A theorem is **trusted** when the library builds with it, it uses no `sorry` (Lean's placeholder for an unproved step) and only the three standard axioms, and its hypotheses are checked for contradiction. Every declaration of the library is re-checked nightly by a second, independent type checker ([nanoda](https://github.com/ammkrn/nanoda_lib)). The stages are in [TRUST.md](trust-draft.md).
 
-```mermaid
-flowchart LR
-  A["theorem<br/>+ credit line"] --> B["gate<br/>shape, credit, safe Lean"] --> C["queue<br/>built with the library"] --> D["tentative / staging"] --> E["promotion<br/>fresh build, axioms,<br/>vacuity"] --> F(["trusted"])
-```
+It does **not** mean the Lean statement says what its source says, that a translation is equivalent to its original, or that a person reviewed it. [Benchmarks have the same gap](https://arxiv.org/abs/2606.29493). Mathlib's line-by-line review is the standard Tengoku builds on, not one it replaces; Tengoku does not fork Mathlib, and what belongs in Mathlib belongs upstream. Originals stay canonical: each theorem links to its source at a fixed commit, with its licence and its authors, copyleft sources are not accepted, and an author can ask for a correction or removal.
 
-Not claimed: that a statement says what its informal source says (faithfulness), or that a human reviewed it. Mathlib's line-by-line review is the standard Tengoku builds on, not one it replaces.
+## Where it stands
 
-## Evidence
+- **Trusted:** Mathlib and its dependencies, CompeteMath's problems and Equational Theories, the one research library promoted so far.
+- **Translated, awaiting promotion:** 60 more libraries, including Carleson, the IMO Shortlist and PrimeNumberTheoremAnd.
+- **Indexed, not yet translated:** about 100 libraries (searchable, each with a source link).
 
-The services above help an agent prove. On [FATE-X](https://github.com/frenzymath/FATE-X) (graduate algebra), the same model and budget proved **38 of 98** problems with Tengoku's compiler gate and library search, and **1 of 42** with no tools (that run was stopped early). Measured before Tengoku's growth; measured again after it. [Report: TODO link]
-
-## Where it fits
-
-| | |
-|---|---|
-| **Mathlib** | the base. Curated and human-reviewed; Tengoku adds what it does not hold, checked by machine. |
-| **Research projects** (Carleson, PFR, FLT, …) | translated onto one toolchain, each theorem linked to its original. |
-| **Lake / Reservoir** | finds and versions packages; does not unify their Lean versions. |
-| **Datasets** (LeanDojo, Lean Workbook, …) | fixed releases; Tengoku is a living library with provenance. |
-| **Search** (Loogle, Moogle, LeanSearch) | Tengoku's search builds on Loogle and Moogle, over the whole library, with trust shown. |
-| **Formal Conjectures** | one of Tengoku's sources. |
-
-## Status
-
-| | |
-|---|---|
-| **Today** | Mathlib and its dependencies; translated research libraries; search, verifier and proof-state services; nightly builds and independent check; monthly dataset releases with a DOI |
-| **Next** | translating the remaining registered libraries; a second measurement after growth |
-| **Later** | following every new Lean release; fresh, uncontaminated problems; a public record of what the library does for provers |
-
-More in [VISION.md](vision-draft.md).
+Counts per library: [COVERAGE.md](coverage-draft.md). What has been measured about the services, and what has not: [EVIDENCE.md](evidence-draft.md). How it relates to Mathlib, Reservoir, LeanDojo and others: [COMPARISON.md](comparison-draft.md). Where it is going: [VISION.md](vision-draft.md).
 
 ## Contribute · Cite
 
-Anyone can contribute, by hand or with AI: a theorem, a whole library, or a goal ([CONTRIBUTING.md](CONTRIBUTING.md), [GOALS.md](GOALS.md)). Credit is permanent. Cite: [DOI 10.5281/zenodo.23050400](https://doi.org/10.5281/zenodo.23050400).
+Anyone can contribute, by hand or with AI: a theorem, a whole library, or a goal ([CONTRIBUTING.md](CONTRIBUTING.md), [GOALS.md](GOALS.md); no Lean needed to suggest one). Credit is permanent. Cite: [DOI 10.5281/zenodo.23050400](https://doi.org/10.5281/zenodo.23050400). Apache-2.0, with each record under its upstream licence.
+
+Built by one independent developer, with AI assistance named where it was used; the checks, not the author, decide what is trusted.
 
 ## Dedication · Badges
 [as in tengoku #246]
