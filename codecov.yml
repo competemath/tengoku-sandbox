@@ -1,0 +1,12 @@
+# Codecov (https://app.codecov.io/gh/competemath/tengoku-sandbox): what its pull request comment and statuses say. Informational:
+# they report the change in coverage and never fail a check (sonar.yml uploads the report; nothing here is required).
+coverage:
+  status:
+    project:
+      default:
+        informational: true
+    patch:
+      default:
+        informational: true
+comment:
+  layout: "condensed_header, condensed_files"
