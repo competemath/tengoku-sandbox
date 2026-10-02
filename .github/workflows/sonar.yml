@@ -1,0 +1,58 @@
+# SonarQube Cloud analysis of the repository's own code (sonar-project.properties says which): bugs, security
+# hotspots, maintainability, duplication. ADVISORY: it is not one of the required checks (`pr-gate`, `queue-gate`),
+# the merge queue never waits for it, and a failing quality gate blocks nothing.
+#
+# It runs on every pull request, data-only ones included (there is then nothing new to analyse and it passes in
+# seconds), because the check SonarQube Cloud posts on a PR is what OpenSSF Scorecard's SAST check counts. On main it
+# runs when code changes, so the baseline "new code" is measured against stays current without a scan per data merge.
+#
+# The token is the repository secret SONAR_TOKEN, passed to the scan step only. A pull request from a fork, and one
+# Dependabot opens, gets no secrets: the job then skips the scan instead of failing. A pull_request run uses the PR's
+# own copy of this file, so the token's reach is what the token allows: SonarQube Cloud lets it upload an analysis to
+# this one project, and nothing else.
+name: sonar
+on:
+  push:
+    branches: [main]
+    paths: ["scripts/**", "tools/**", ".github/**", "sonar-project.properties"]
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+permissions: {}
+concurrency:
+  group: sonar-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+defaults:
+  run:
+    shell: bash
+jobs:
+  scan:
+    # a fork's pull request has no secrets to scan with
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions: { contents: read, pull-requests: read }
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
+        with: { egress-policy: audit }
+      # only what is analysed: the full history (the scanner blames lines to find new code) of a sparse tree
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          filter: blob:none
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /scripts/
+            /tools/
+            /.github/
+            /sonar-project.properties
+          persist-credentials: false
+      - name: Is there a token for this run?
+        id: t
+        env: { SONAR_TOKEN: "${{ secrets.SONAR_TOKEN }}" }
+        run: |
+          if [ -n "$SONAR_TOKEN" ]; then echo "have=true" >> "$GITHUB_OUTPUT"; else echo "::notice::no SONAR_TOKEN for this run (a fork's or Dependabot's pull request): the scan is skipped"; fi
+      - name: Analyse
+        if: steps.t.outputs.have == 'true'
+        uses: SonarSource/sonarqube-scan-action@d209202bc7d53ff1cc128f7f907dac145c9d6ae9 # v8.3.0
+        env: { SONAR_TOKEN: "${{ secrets.SONAR_TOKEN }}" }
