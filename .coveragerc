@@ -12,12 +12,12 @@ patch = subprocess
 parallel = True
 # absolute paths (no relative_files): a test that runs a script from a temporary directory would record it there under a
 # relative name, and `coverage combine` could not find that source
-# not measured: the tests themselves; the fuzz targets (they run under atheris in fuzz.yml); the campaign's fixtures
+# not measured: the tests themselves (the leading */ matters: coverage matches these against absolute paths); the fuzz targets (they run under atheris in fuzz.yml); the campaign's fixtures
 omit =
-    scripts/tests/*
-    scripts/ci/tests/*
-    scripts/ci/fuzz/*
-    scripts/ci/campaign/*
+    */scripts/tests/*
+    */scripts/ci/tests/*
+    */scripts/ci/fuzz/*
+    */scripts/ci/campaign/*
 [xml]
 output = coverage.xml
 [report]
