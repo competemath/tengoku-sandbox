@@ -20,6 +20,27 @@ Three commitments, each already visible in the code:
 2. **Nothing is lost.** Records are append-only; mistakes are retracted with a reason; credit is permanent, and AI help is named. *(today)*
 3. **Measured, including against ourselves.** Claims about what the library does for provers are measured and published, with the results that went the wrong way. *(today, once the report is public: the first report's headline result was that our own decomposition pipeline lost to a simpler agent)*
 
+## The loop it belongs to
+
+Tengoku is one part of a loop that one developer is building end to end, and the loop is what makes it more than a mirror:
+
+```mermaid
+flowchart LR
+  P["problems<br/>CompeteMath, benchmarks,<br/>open conjectures"] --> L["provers<br/>the Leak agents"]
+  L --> T["Tengoku<br/>checked theorems<br/>with credit"]
+  T --> S["services<br/>search, verifier,<br/>proof states"]
+  S --> L
+  T --> M["measurement<br/>does a bigger library<br/>help provers?"]
+```
+
+| Part | Status |
+|---|---|
+| Problems come in (CompeteMath publishes one every week; sources such as Formal Conjectures are registered) | *today* |
+| Provers use the services while they prove (measured once, before Tengoku) | *today* |
+| Services run over Tengoku and re-sync after every nightly build | *today* |
+| Checked proofs from provers enter Tengoku with credit | *partly*: contributions and translations enter; a prover's new proofs are not yet fed back automatically |
+| The same measurement repeated as the library grows | *planned* |
+
 ## Where it is going
 
 | | | |
