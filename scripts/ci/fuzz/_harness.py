@@ -70,7 +70,7 @@ def mutate(data: bytes, rng: random.Random) -> bytes:
         j = rng.randrange(len(b))
         b[i:i] = b[j : j + rng.randrange(1, 16)]
     else:
-        b[i:i] = rng.choice([b"::", b"\n", b"\r", b"%", b'"', b"'", b"/-", b"-/", b"--", b"${{", b"}}", b"\\", "�".encode()])
+        b[i:i] = rng.choice([b"::", b"\n", b"\r", b"%", b'"', b"'", b"/-", b"-/", b"--", b"${{", b"}}", b"\\", "\ufffd".encode()])
     return bytes(b)
 
 
