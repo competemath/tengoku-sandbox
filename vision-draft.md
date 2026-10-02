@@ -8,7 +8,7 @@ Formal mathematics is one of the few places where a result can be machine-checke
 
 ## Why now
 
-Funders of AI for mathematics name the same needs this project works on: open-source datasets of theorems and proofs, benchmarks, and infrastructure ([the AI for Math Fund's stated priorities](https://www.renaissancephilanthropy.org/ai-for-math-fund-2026-projects)). The Lean community describes the cost of churn directly: Mathlib users face renamed lemmas, changed imports and breaking changes, and tooling to test a Lean change against dependent projects does not yet exist ([Lean mathlib maintenance](https://arxiv.org/abs/2508.21593)). A library that absorbs that churn once, for everyone downstream, is the part nobody else is building.
+The largest funder of AI for mathematics describes its second round of awards as a balance of moonshots, field-building, "benchmarks and datasets to track progress, and infrastructure that empowers mathematicians" ([Renaissance Philanthropy's AI for Math Fund](https://www.renaissancephilanthropy.org/ai-for-math-fund-2026-projects)): the same needs this project works on. The Lean community describes the cost of churn directly: Mathlib users face renamed lemmas, changed imports and breaking changes, and tooling to test a Lean change against dependent projects does not yet exist ([Lean mathlib maintenance](https://arxiv.org/abs/2508.21593)). A library that absorbs that churn once, for everyone downstream, is the part nobody else is building.
 
 ## What Tengoku wants to be
 
