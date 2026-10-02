@@ -2,15 +2,15 @@
 <h1 align="center">Tengoku (天国)</h1>
 <p align="center"><b>Formal mathematics from many Lean projects, translated onto one Lean version and machine-checked.</b><br>
 Today: Mathlib and Equational Theories; more on the way. Search it, import it, or hand it to an agent.<br>
-Every theorem keeps its source, licence and authors' credit.</p>
+Every theorem keeps its source and licence; authors' credit stays in the file headers.</p>
 <p align="center">
 <a href="lean-toolchain"><img src="https://img.shields.io/badge/dynamic/regex?url=https%3A%2F%2Fraw.githubusercontent.com%2Fcompetemath%2Ftengoku%2Fmain%2Flean-toolchain&search=v%5B0-9.%5D%2B%28-rc%5B0-9%5D%2B%29%3F&label=Lean%204&color=blue" alt="Lean 4 toolchain"></a>
 <a href="https://competemath.com/tengoku"><img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fcompetemath%2Ftengoku%2Fmain%2Fdata%2Fstats.json&query=%24.totals.trusted&label=trusted%20theorems&color=2e7d32" alt="Trusted theorems"></a>
 </p>
 
-[Lean](https://lean-lang.org) writes mathematics a computer can check, and [Mathlib](https://github.com/leanprover-community/mathlib4) is its main library. Other formal mathematics lives in separate Lean projects, each tied to its own Lean version, so projects on different versions cannot be imported together and a prover cannot see them all. Tengoku ports (translates) them onto one **toolchain** (a single Lean version) so they import together. The rest is under way: translations of dozens of further projects await promotion ([coverage](coverage-draft.md)).
+[Lean](https://lean-lang.org) writes mathematics a computer can check, and [Mathlib](https://github.com/leanprover-community/mathlib4) is its main library. Other formal mathematics lives in separate Lean projects, each tied to its own Lean version, so projects on different versions cannot be imported together and a prover cannot see them all. Tengoku ports (translates) them onto one **toolchain** (a single Lean version) so they import together. The payoff: a theorem from one project can sit next to one from another in the same file. Translations of dozens of further projects await promotion ([coverage](coverage-draft.md)).
 
-Tengoku wants to be the shared, always-current memory of formal mathematics: a library that absorbs each Lean release's churn once, for everyone downstream, and in which every theorem says where it came from and how it was checked. It is built by one independent developer, alongside [CompeteMath](https://competemath.com) and the [Leak](https://competemath.com/about/leak) theorem-proving agents; the checks, not the author, decide what is trusted ([vision](vision-draft.md)).
+Tengoku aims to be the shared, always-current memory of formal mathematics: a library that absorbs each Lean release's churn once, for everyone downstream, and in which every theorem says where it came from and how it was checked. So far it holds one toolchain. It is built by one independent developer, alongside [CompeteMath](https://competemath.com) and the [Leak](https://competemath.com/about/leak) theorem-proving agents ([vision](vision-draft.md)).
 
 <p align="center"><img src="docs/img/try-it.svg" alt="Three commands: search Tengoku from a shell, give an AI agent the search tool, import the library into Lean." width="780"></p>
 
@@ -29,7 +29,7 @@ curl -s 'https://competemath.com/api/tengoku/search?q=IsCompact.image' | head -c
 claude mcp add --transport sse tengoku-search \
   https://barkingtree-leak-i.hf.space/sse
 
-# import it into Lean: a few minutes, mostly one download (needs git, zstd and elan, Lean's version manager)
+# import it into Lean: one large download (needs git, zstd and elan, Lean's version manager)
 git clone --filter=blob:none https://github.com/competemath/tengoku
 cd tengoku && scripts/cache.sh get
 ```
@@ -51,9 +51,9 @@ example : ¬ Equation1723 ℕ := fun h => by
 
 ## What "trusted" means
 
-**Trusted** means the library builds with the theorem, with no `sorry` (Lean's placeholder for an unproved step), only the standard axioms (`propext`, `Classical.choice`, `Quot.sound`), and its assumptions checked for inconsistency (a search that can miss some). A second, independent kernel ([nanoda](https://github.com/ammkrn/nanoda_lib)) re-checks the compiled library every night. It does **not** mean the statement says what its source says, that a translation equals its original, or that anyone reviewed it ([benchmarks share this gap](https://arxiv.org/abs/2606.29493)). Two exceptions are known and counted in [TRUST.md](trust-draft.md#known-gaps): 262 CompeteMath problems carry the label without a build, and the nightly check does not match about 25,000 trusted names, mostly Mathlib index entries.
+**Trusted** means the library builds with the theorem, with no `sorry` (Lean's placeholder for an unproved step), only the standard axioms (`propext`, `Classical.choice`, `Quot.sound`), and, at promotion, a check that its assumptions are not contradictory (a search that can miss some). A second, independent kernel ([nanoda](https://github.com/ammkrn/nanoda_lib)) re-checks the compiled library every night. It does **not** mean the statement says what its source says, that a translation equals its original, or that anyone reviewed it ([benchmarks share this gap](https://arxiv.org/abs/2606.29493)). Public checks, not the author, decide what is trusted; the known gaps, such as 262 CompeteMath problems labelled trusted without a build, are counted on the [trust page](trust-draft.md#known-gaps).
 
-**For the authors of the projects Tengoku draws on:** the originals stay canonical, so cite the project, not Tengoku. Each theorem links to its source at a fixed commit. Translations are labelled, seeded files keep their authors' headers, copyleft sources are refused, and corrections or removal start with an issue ([how](CONTRIBUTING.md)). Mathlib's content is an Apache-licensed copy pinned to a named commit, in `Tengoku.*` modules with Mathlib's own declaration names; it is independent of, and not endorsed by, Mathlib's maintainers, whose line-by-line review Tengoku does not claim to match.
+**For the authors of the projects Tengoku draws on:** the originals stay canonical, so cite the project, not Tengoku. Each theorem records its source; seeded files keep their authors' headers, and copyleft sources are refused. Corrections or removals go through a pull request ([how](CONTRIBUTING.md)). Mathlib's content is an Apache-licensed copy pinned to the commit named in [SEED.md](SEED.md), in `Tengoku.*` modules keeping Mathlib's declaration names; Tengoku is independent of Mathlib and not endorsed by its maintainers.
 
 ## More
 

@@ -14,10 +14,10 @@ The largest funder of AI for mathematics describes its second round of awards as
 
 **The shared, always-current memory of formal mathematics.** One library that a prover, an agent or a person can search, import and rely on, that keeps up with Lean instead of getting stuck on an old version, and in which every theorem says where it came from, who proved it, and how it was checked.
 
-Three commitments, each already visible in the code:
+Three commitments, two in force today:
 
 1. **Checked by machine, not by reputation.** Trust is a property a theorem earns by passing gates that anyone can read, never one that depends on who submitted it. *(today)*
-2. **Nothing is lost.** Records are append-only; mistakes are retracted with a reason; credit is permanent, and AI help is named. *(today)*
+2. **Nothing is lost.** Records are append-only; mistakes are retracted with a reason; credit changes only on documented evidence, and AI help is named. *(today)*
 3. **Measured, including against ourselves.** Claims about what the library does for provers are measured and published, with the results that went the wrong way. *(in progress: the first report's headline result was that our own decomposition pipeline lost to a simpler agent; it is not yet public)*
 
 ## The loop it belongs to
