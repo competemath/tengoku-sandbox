@@ -55,7 +55,7 @@ example : ¬ Equation1723 ℕ := fun h => by
 
 ## More
 
-[Data card](data-draft.md) (download, fields, problems) · [trust](trust-draft.md) (stages, gaps) · [coverage](coverage-draft.md) · [evidence](evidence-draft.md) · [comparison](comparison-draft.md) · [vision](vision-draft.md)
+[Data card](data-draft.md) (download, fields, problems) · [trust](trust-draft.md) (stages, gaps) · [coverage](coverage-draft.md) · [evidence](evidence-draft.md) · [comparison](comparison-draft.md) · [vision](vision-draft.md) · [FAQ](faq-draft.md)
 
 Anyone can contribute, by hand or with AI: a theorem, a project, or a goal ([CONTRIBUTING.md](CONTRIBUTING.md), [GOALS.md](GOALS.md)). Cite [DOI 10.5281/zenodo.23050400](https://doi.org/10.5281/zenodo.23050400). Apache-2.0; each theorem keeps its upstream licence.
 
