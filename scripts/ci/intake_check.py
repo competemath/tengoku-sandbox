@@ -73,11 +73,7 @@ def show(path: str) -> str:
 
 
 # Tengoku/All.lean: exactly one new import line, nothing removed
-all_diff = [
-    ln
-    for ln in run("diff", "-U0", f"{base}...{head}", "--", ALL).splitlines()
-    if ln[:1] in "+-" and ln[:3] not in ("+++", "---")
-]
+all_diff = [ln for ln in run("diff", "-U0", f"{base}...{head}", "--", ALL).splitlines() if ln[:1] in "+-" and ln[:3] not in ("+++", "---")]
 if all_diff != [f"+import Tengoku.{ns}"] and all_diff != [f"+public import Tengoku.{ns}"]:
     errors.append(f"{ALL} must gain exactly `import Tengoku.{ns}` and change nothing else (diff: {all_diff[:4]})")
 
