@@ -312,6 +312,7 @@ PY
     need gh
     cur="$(own_pointer_json | python3 -c 'import json,sys; print((json.load(sys.stdin).get("topup") or {}).get("commit",""))' 2>/dev/null || true)"
     gh api "repos/$REPO/releases/tags/$TOPUP_RELEASE" -q '.assets[] | "\(.name) \(.created_at)"' 2>/dev/null | while read -r name created; do
+      case "$name" in topup-*) ;; *) continue ;; esac   # the licence files (LICENSE, NOTICE, …) stay: build.yml puts them on this release
       sha="$(printf '%s' "$name" | sed -E 's/^topup-([0-9a-f]+)\..*$/\1/')"
       [ "$sha" = "$cur" ] && continue
       age=$(( $(date -u +%s) - $(python3 -c 'import sys,datetime; print(int(datetime.datetime.strptime(sys.argv[1], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=datetime.timezone.utc).timestamp()))' "$created") ))

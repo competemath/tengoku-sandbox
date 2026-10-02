@@ -43,6 +43,7 @@ jobs:
           date="$(python3 -c 'import json; print(json.load(open("snapshot/snapshot.json"))["date"])')"
           # the release's copy names the version to cite; the repository's copy stays generic
           { cat CITATION.cff; printf 'version: "%s"\ndate-released: "%s"\n' "$version" "$date"; } > snapshot/CITATION.cff
+          cp LICENSE LICENSE-THIRD-PARTY.md NOTICE snapshot/   # the licence texts and notices go with the data
           ls -la snapshot
           printf 'changed=true\nversion=%s\ndate=%s\n' "$version" "$date" >> "$GITHUB_OUTPUT"
       - name: Attest the files

@@ -197,6 +197,17 @@ jobs:
         run: |
           cp "$BUNDLE" tengoku-cache.intoto.jsonl
           gh release upload "$TAG" tengoku-cache.intoto.jsonl -R "$TENGOKU_REPO" --clobber
+      # The licence files travel with the compiled code (mirror of the library change): on the new cache release and
+      # on the standing top-up release, whose gc leaves anything that is not a top-up alone.
+      - name: The licence files, with the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.publish.outputs.tag }}
+        run: |
+          gh release upload "$TAG" LICENSE LICENSE-THIRD-PARTY.md NOTICE -R "$TENGOKU_REPO" --clobber
+          if gh release view cache-topups -R "$TENGOKU_REPO" >/dev/null 2>&1; then
+            gh release upload cache-topups LICENSE LICENSE-THIRD-PARTY.md NOTICE -R "$TENGOKU_REPO" --clobber
+          fi
 
   # Re-dispatches the build: after the time cap (resume), or on the tip when a workflow file landed meanwhile.
   relaunch:
