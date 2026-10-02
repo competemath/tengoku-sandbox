@@ -184,7 +184,8 @@ class Gates(unittest.TestCase):
         r.commit("paths that leave the corpus")
         rc, out = r.gate("validate_records.py")
         self.assertEqual(rc, 1)
-        self.assertEqual(out.count("is not a path inside the corpus"), len(paths), out)
+        for sp in paths:  # (on Actions every error is printed twice, as an annotation and as a line: no counting)
+            self.assertIn(f"source_path {sp!r} is not a path inside the corpus", out)
         ok = Repo()
         ok.append(
             "data/staging/lib.jsonl",
