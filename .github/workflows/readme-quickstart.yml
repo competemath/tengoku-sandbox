@@ -1,0 +1,43 @@
+# Does the README's "Try it" section work? Runs its commands exactly as written, on a clean runner, whenever the draft
+# or this file changes (and on demand): the HTTP API answers with the declaration, and the compiled library downloads,
+# imports and checks a lemma. A README line that fails here is wrong, so it is wrong before anyone copies it.
+name: readme-quickstart
+on:
+  pull_request:
+    paths: [readme-draft.md, .github/workflows/readme-quickstart.yml]
+  workflow_dispatch:
+permissions: {}
+defaults:
+  run:
+    shell: bash
+jobs:
+  quickstart:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions: {}
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
+        with: { egress-policy: audit }
+      - name: Free disk space (the compiled library is several GB)
+        run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup && df -h / | tail -1
+      - name: The HTTP search API
+        run: |
+          out="$(curl --proto '=https' --tlsv1.2 -fsS 'https://competemath.com/api/tengoku/search?q=Nat.add_comm')"
+          echo "$out" | head -c 400; echo
+          echo "$out" | python3 -c 'import json,sys; r = json.load(sys.stdin)["results"]; assert r and any(x["name"] == "Nat.add_comm" for x in r), r; print("ok:", len(r), "results")'
+      - name: elan (the Lean version manager), at a fixed version, checked against its sha256
+        run: |
+          elan_tgz=elan-x86_64-unknown-linux-gnu.tar.gz
+          curl -sSfL --proto '=https' --tlsv1.2 -o "$elan_tgz" "https://github.com/leanprover/elan/releases/download/v4.2.4/$elan_tgz"
+          echo "42b94d4244e8353142c456ec0e4ca6528fd898a6c604d4059f494e706e431f63  $elan_tgz" | sha256sum -c -
+          tar xzf "$elan_tgz"
+          ./elan-init -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: Get the compiled library and import it
+        run: |
+          sudo apt-get install -y -q zstd > /dev/null
+          git clone --filter=blob:none https://github.com/competemath/tengoku
+          cd tengoku
+          scripts/cache.sh get
+          printf 'import Tengoku.All\n#check Nat.add_comm\n#print axioms Nat.add_comm\n' > Try.lean
+          time lake env lean Try.lean
