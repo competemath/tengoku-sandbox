@@ -49,16 +49,16 @@ jobs:
             !/widget/
           persist-credentials: false
       # The scanner blames every line (to find new code) with JGit, which cannot fetch a missing blob from a partial clone:
-      # the first scan of main died on "Missing blob". Fetch the history of the scanned paths only: a few hundred
+      # the first scan of main died on "Missing blob". Fetch the history of the scanned paths only (all but the Lean tree, the data and the widget): a few hundred
       # commits and a couple of thousand objects, not the data's.
       - name: Fetch the history blobs the blame reads
         run: |
-          git rev-list --objects --all --missing=print -- scripts tools .github sonar-project.properties | sed -n 's/^?//p' > "$RUNNER_TEMP/missing.txt"
+          git rev-list --objects --all --missing=print -- . ':!Tengoku' ':!data' ':!widget' | sed -n 's/^?//p' > "$RUNNER_TEMP/missing.txt"
           echo "$(wc -l < "$RUNNER_TEMP/missing.txt") history blobs to fetch"
           if [ -s "$RUNNER_TEMP/missing.txt" ]; then
             xargs -n 300 git -c fetch.negotiationAlgorithm=noop fetch origin --no-tags --no-write-fetch-head --recurse-submodules=no --filter=blob:none < "$RUNNER_TEMP/missing.txt"
           fi
-          echo "still missing: $(git rev-list --objects --all --missing=print -- scripts tools .github sonar-project.properties | grep -c '^?' || true)"
+          echo "still missing: $(git rev-list --objects --all --missing=print -- . ':!Tengoku' ':!data' ':!widget' | grep -c '^?' || true)"
       # The unit tests under coverage.py (.coveragerc), for the coverage SonarQube Cloud shows. The same two commands
       # pr-tests.yml runs, so a test that fails here fails there first. No secret is in this job's environment until the
       # scan step: the tests (a pull request's own, same-repository ones only) run with the read-only token alone.

@@ -20,3 +20,6 @@ omit =
     scripts/ci/campaign/*
 [xml]
 output = coverage.xml
+[report]
+# find the files no test imports in directories without an __init__.py too (they count as 0%)
+include_namespace_packages = True
