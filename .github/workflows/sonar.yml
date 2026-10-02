@@ -66,7 +66,7 @@ jobs:
         with: { python-version: "3.12" }
       - name: Unit tests, measured
         run: |
-          pip install -q --require-hashes -r scripts/ci/requirements/yaml.txt -r scripts/ci/requirements/coverage.txt
+          pip install -q --require-hashes --only-binary :all: -r scripts/ci/requirements/yaml.txt -r scripts/ci/requirements/coverage.txt
           coverage run -m unittest discover -s scripts/tests
           coverage run -m unittest discover -s scripts/ci/tests -p 'test_*.py'
           coverage combine
