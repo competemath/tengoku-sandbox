@@ -46,7 +46,7 @@ jobs:
 
           instance : Magma ℕ := ⟨fun a b => a + b⟩
 
-          -- addition on ℕ does not satisfy law 1723: the law would make ℕ trivial
+          -- addition on ℕ does not satisfy law 1723: it would make ℕ trivial
           example : ¬ Equation1723 ℕ := fun h => by
             have h2 := Equation1723_implies_Equation2 ℕ h
             have := h2 0 1

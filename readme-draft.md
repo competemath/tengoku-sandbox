@@ -19,9 +19,9 @@ New to Lean? Start with the web search: it finds theorems from a plain-English d
 ```bash
 # browse: competemath.com/tengoku (try "continuous image of compact")
 
-# search from code
-curl -s 'https://competemath.com/api/tengoku/search?q=IsCompact.image' | jq -r '.results[0] | "\(.status) \(.library) \(.name): \(.statement)"'
-# trusted mathlib IsCompact.image: ∀ {X : Type u} {Y : Type v} [inst : TopologicalSpace X] [inst_1 : TopologicalSpace Y] {s : Set X} {f : X → Y}, IsCompact s → Continuous f → IsCompact (f '' s)
+# search from code (JSON: name, statement, status, library, source link)
+curl -s 'https://competemath.com/api/tengoku/search?q=IsCompact.image' | head -c 230
+# {"results":[{"id":3916779000,"name":"IsCompact.image","statement":"∀ {X : Type u} {Y : Type v} [inst : TopologicalSpace X] [inst_1 : TopologicalSpace Y] {s : Set X} {f : X → Y}, IsCompact s → Continuous f → IsCompact (f '' s)","pr
 
 # give an AI agent the search tool (Claude Code; no sign-up)
 claude mcp add --transport sse tengoku-search \
@@ -40,7 +40,7 @@ open EquationalTheories
 
 instance : Magma ℕ := ⟨fun a b => a + b⟩
 
--- addition on ℕ does not satisfy law 1723: the law would make ℕ trivial
+-- addition on ℕ does not satisfy law 1723: it would make ℕ trivial
 example : ¬ Equation1723 ℕ := fun h => by
   have h2 := Equation1723_implies_Equation2 ℕ h
   have := h2 0 1
