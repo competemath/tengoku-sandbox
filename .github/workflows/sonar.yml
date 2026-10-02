@@ -35,19 +35,18 @@ jobs:
     steps:
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
         with: { egress-policy: audit }
-      # only what is analysed: the full history (the scanner blames lines to find new code) of a sparse tree
+      # everything but the Lean tree, the data and the widget (the tests read schemas/, the docs and the root files): the
+      # full history (the scanner blames lines to find new code) of a sparse tree
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           filter: blob:none
           sparse-checkout-cone-mode: false
           sparse-checkout: |
-            /scripts/
-            /tools/
-            /.github/
-            /docs/
-            /.coveragerc
-            /sonar-project.properties
+            /*
+            !/Tengoku/
+            !/data/
+            !/widget/
           persist-credentials: false
       # The scanner blames every line (to find new code) with JGit, which cannot fetch a missing blob from a partial clone:
       # the first scan of main died on "Missing blob". Fetch the history of the scanned paths only: a few hundred
