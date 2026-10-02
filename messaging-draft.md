@@ -36,6 +36,10 @@ One source for what Tengoku is, why it exists and what it is not, so the README,
 | the pinned toolchain | `lean-toolchain` |
 | search endpoints | `docs/api.md` |
 
+## Claims with numbers
+
+A benchmark figure is quoted with what it measured: the model, the benchmark, the denominator of each arm, the toolchain, the date, and a link to the report. Two arms with different denominators say so in the same sentence. A service's benefit is claimed only where a completed run isolates it (the measured case covers the compiler gate and the library search, not the proof-state service).
+
 ## What Tengoku is not
 
 - Not a replacement for Mathlib: it builds on Mathlib and adds what Mathlib does not hold, checked by machine instead of by line-by-line review.
