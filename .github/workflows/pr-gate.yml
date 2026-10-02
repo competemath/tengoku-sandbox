@@ -141,7 +141,8 @@ jobs:
       - name: The PR's commits, as data (the checks are main's)
         run: git fetch -q --no-tags --filter=blob:none origin "+$PR_REF:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
       - name: intake checks
-        run: python3 scripts/ci/intake_check.py "$BASE" "$HEAD" --lint "${{ vars.TENGOKU_INTAKE_LINT || 'strict' }}" --tar "$RUNNER_TEMP/bundle.tar"
+        env: { LINT: "${{ vars.TENGOKU_INTAKE_LINT || 'strict' }}" }
+        run: python3 scripts/ci/intake_check.py "$BASE" "$HEAD" --lint "$LINT" --tar "$RUNNER_TEMP/bundle.tar"
       - name: provenance (the factory built exactly these bytes)
         env: { GH_TOKEN: "${{ github.token }}" }
         run: |

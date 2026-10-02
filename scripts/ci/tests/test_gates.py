@@ -611,7 +611,6 @@ class DeregisteredSource(unittest.TestCase):
         self.assertIn("provenance", out)
 
 
-
 class Intake(unittest.TestCase):
     """An intake PR: one library's verified Lean modules (a factory bundle), judged by shape, manifest, lint and provenance."""
 
@@ -628,8 +627,16 @@ class Intake(unittest.TestCase):
         return r
 
     def bundle(self, r, mod=None, **over):
-        manifest = {"name": "Fx.good", "statement": "theorem good : 1 + 1 = 2", "module": "Tengoku.FxLib.Fx.Basic", "source_path": "Fx/Basic.lean",
-                    "library": "fx-lib", "toolchain": "leanprover/lean4:v4.34.0-rc2", "via": "equal", **over}
+        manifest = {
+            "name": "Fx.good",
+            "statement": "theorem good : 1 + 1 = 2",
+            "module": "Tengoku.FxLib.Fx.Basic",
+            "source_path": "Fx/Basic.lean",
+            "library": "fx-lib",
+            "toolchain": "leanprover/lean4:v4.34.0-rc2",
+            "via": "equal",
+            **over,
+        }
         r.write("Tengoku/FxLib/Fx/Basic.lean", mod if mod is not None else self.MOD)
         r.write("Tengoku/FxLib.lean", "import Tengoku.FxLib.Fx.Basic\n")
         r.write("data/intake/fx-lib/manifest.jsonl", json.dumps(manifest) + "\n")
@@ -667,7 +674,7 @@ class Intake(unittest.TestCase):
 
     def test_code_that_runs_while_compiling_fails_the_lint(self):
         r = self.repo()
-        self.bundle(r, mod=self.MOD + "\n#eval IO.println \"x\"\n")
+        self.bundle(r, mod=self.MOD + '\n#eval IO.println "x"\n')
         rc, out = r.gate("intake_check.py")
         self.assertNotEqual(rc, 0)
         self.assertIn("no # commands", out)
@@ -739,7 +746,11 @@ class Intake(unittest.TestCase):
 
         out = Path(tempfile.mkdtemp()) / "g.tar"
         # the same vector, the same digest, in competemath/emissary-archangel's tests: the two copies of the function must not drift
-        self.assertEqual(bundle_tar.write_tar({"a.txt": b"hello\n", "dir/b.lean": b"theorem x : True := trivial\n"}, str(out)), "69860ced3534fa1c7d35bcaf779a68ea88028baf4f447748b381fab33d64e100")
+        self.assertEqual(
+            bundle_tar.write_tar({"a.txt": b"hello\n", "dir/b.lean": b"theorem x : True := trivial\n"}, str(out)),
+            "69860ced3534fa1c7d35bcaf779a68ea88028baf4f447748b381fab33d64e100",
+        )
+
 
 class QueuePlacement(unittest.TestCase):
     """queue_targets.py fails a group whose records land in no module the queue compiles."""

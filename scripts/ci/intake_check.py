@@ -24,7 +24,6 @@ from __future__ import annotations
 import json
 import re
 import sys
-from pathlib import Path
 
 from _git import ROOT, changed_files, fail, pascal, run
 from allowlist import violations
@@ -45,10 +44,14 @@ if len(libs) != 1:
     fail(f"an intake PR has exactly one data/intake/<library>/manifest.jsonl (found {sorted(libs)})")
 lib = next(iter(libs))
 ns = pascal(lib)
-allowed_paths = lambda p: (
-    p in (f"data/intake/{lib}/manifest.jsonl", f"data/intake/{lib}/report.json", f"Tengoku/{ns}.lean", "Tengoku/All.lean")
-    or (p.startswith(f"Tengoku/{ns}/") and p.endswith(".lean"))
-)
+
+
+def allowed_paths(p: str) -> bool:
+    return p in (f"data/intake/{lib}/manifest.jsonl", f"data/intake/{lib}/report.json", f"Tengoku/{ns}.lean", "Tengoku/All.lean") or (
+        p.startswith(f"Tengoku/{ns}/") and p.endswith(".lean")
+    )
+
+
 errors: list[str] = []
 for st, p in files:
     if not allowed_paths(p):
@@ -64,7 +67,11 @@ def show(path: str) -> str:
 
 
 # Tengoku/All.lean: exactly one new import line, nothing removed
-all_diff = [ln for ln in run("diff", "-U0", f"{base}...{head}", "--", "Tengoku/All.lean").splitlines() if ln[:1] in "+-" and ln[:3] not in ("+++", "---")]
+all_diff = [
+    ln
+    for ln in run("diff", "-U0", f"{base}...{head}", "--", "Tengoku/All.lean").splitlines()
+    if ln[:1] in "+-" and ln[:3] not in ("+++", "---")
+]
 if all_diff != [f"+import Tengoku.{ns}"] and all_diff != [f"+public import Tengoku.{ns}"]:
     errors.append(f"Tengoku/All.lean must gain exactly `import Tengoku.{ns}` and change nothing else (diff: {all_diff[:4]})")
 
@@ -103,7 +110,9 @@ for i, r in enumerate(manifest, 1):
         errors.append(f"{where}: {r.get('name')} twice")
     seen.add(r.get("name", ""))
     if r.get("name") in existing:
-        errors.append(f"{where}: {r.get('name')} is already a record of the tree (the generator renames clashes; a bundle must not carry one)")
+        errors.append(
+            f"{where}: {r.get('name')} is already a record of the tree (the generator renames clashes; a bundle must not carry one)"
+        )
 
 # lint
 allowed_options = set(json.loads((ROOT / "schemas" / "allowed-options.json").read_text())["allowed"])
