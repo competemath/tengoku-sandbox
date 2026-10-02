@@ -25,6 +25,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 import tempfile
 from array import array
@@ -220,6 +221,12 @@ def trusted_records(d: Path) -> dict[str, set[str]]:
     return {n: libs for n, libs in names.items() if n not in gone}
 
 
+def one_line(message: str) -> str:
+    """A failure message for a workflow annotation: names come from the export, so anything but printable ASCII
+    (a line break would start a new workflow command) is replaced."""
+    return re.sub(r"[^\x20-\x7e]", "?", message)
+
+
 def checked_path(arg: Path) -> Path:
     """A path given on the command line, resolved; it must lie in the working directory or the temporary directory
     (where CI keeps the export), so an argument cannot point the scan or its output anywhere else."""
@@ -341,7 +348,7 @@ def main() -> int:
         report["passed"] = not bad
         report_path.write_text(json.dumps(report, indent=2) + "\n")
     for b in bad:
-        print(f"::error::axiom-scan: {b}")
+        print(f"::error::axiom-scan: {one_line(b)}")
     return 1 if bad else 0
 
 
