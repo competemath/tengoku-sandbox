@@ -12,6 +12,8 @@ from __future__ import annotations
 import json
 import re
 import sys
+import tempfile
+from pathlib import Path
 
 from _git import added_lines, changed_files, fail, load_schema, match
 from allowlist import violations
@@ -94,11 +96,18 @@ def diff_errors(base: str, head: str, allowed: set[str]) -> list[str]:
     return errors
 
 
+def checked_path(arg: str) -> Path:
+    """A file given on the command line: it must lie in the working directory or the temporary directory."""
+    p = Path(arg).resolve()
+    if not any(p.is_relative_to(root.resolve()) for root in (Path.cwd(), Path(tempfile.gettempdir()))):
+        fail(f"{arg} is outside the working directory and the temporary directory")
+    return p
+
+
 def main() -> None:
     allowed = set(load_schema("allowed-options.json")["allowed"])
     if sys.argv[1] == "--text":
-        with open(sys.argv[2]) as f:
-            errors = check_text(sys.argv[2], f.read(), allowed)
+        errors = check_text(sys.argv[2], checked_path(sys.argv[2]).read_text(), allowed)
     else:
         errors = diff_errors(sys.argv[1], sys.argv[2], allowed)
     if errors:

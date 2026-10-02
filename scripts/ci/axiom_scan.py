@@ -154,34 +154,46 @@ class Scan:
         if not self.early:
             self.buffer.clear()
 
+    def add_term(self, i: int, o: dict) -> None:
+        if i != len(self.E):
+            raise SystemExit(f"axiom-scan: term {i} out of order at line {self.lines}")
+        self.E.append(self.term(o))
+        if self.early:
+            self.buffer.append((i, o))
+
+    def add_name(self, o: dict) -> None:
+        if o["in"] != len(self.name_part):
+            raise SystemExit(f"axiom-scan: name {o['in']} out of order at line {self.lines}")
+        v = o.get("str") or o["num"]
+        self.name_pre.append(v["pre"])
+        self.name_part.append(v["str"] if "str" in v else str(v["i"]))
+
+    def check_format(self, o: dict) -> None:
+        fmt = o["meta"]["format"]["version"]
+        if not fmt.startswith("3."):
+            raise SystemExit(f"axiom-scan: export format {fmt}, this reads 3.x")
+
+    def read(self, line: bytes) -> None:
+        o = loads(line)
+        i = o.get("ie")
+        if i is not None:
+            self.add_term(i, o)
+        elif "in" in o:
+            self.add_name(o)
+        elif "il" in o:
+            return  # a universe level: it carries no axiom
+        elif "meta" in o:
+            self.check_format(o)
+        elif any(k in o for k in DECLS):
+            self.declaration(o)
+        else:
+            raise SystemExit(f"axiom-scan: unknown line {self.lines}: {line[:120]!r}")
+
     def run(self, path: Path) -> None:
         with open(path, "rb") as f:
             for line in f:
                 self.lines += 1
-                o = loads(line)
-                i = o.get("ie")
-                if i is not None:
-                    if i != len(self.E):
-                        raise SystemExit(f"axiom-scan: term {i} out of order at line {self.lines}")
-                    self.E.append(self.term(o))
-                    if self.early:
-                        self.buffer.append((i, o))
-                elif "in" in o:
-                    if o["in"] != len(self.name_part):
-                        raise SystemExit(f"axiom-scan: name {o['in']} out of order at line {self.lines}")
-                    v = o.get("str") or o["num"]
-                    self.name_pre.append(v["pre"])
-                    self.name_part.append(v["str"] if "str" in v else str(v["i"]))
-                elif "il" in o:  # a universe level: it carries no axiom
-                    continue
-                elif "meta" in o:
-                    fmt = o["meta"]["format"]["version"]
-                    if not fmt.startswith("3."):
-                        raise SystemExit(f"axiom-scan: export format {fmt}, this reads 3.x")
-                elif any(k in o for k in DECLS):
-                    self.declaration(o)
-                else:
-                    raise SystemExit(f"axiom-scan: unknown line {self.lines}: {line[:120]!r}")
+                self.read(line)
 
     def rests_on(self, n: int) -> list[str]:
         return sorted(self.name(self.axioms[b]) for b in self.S.sets[self.decl[n]])
