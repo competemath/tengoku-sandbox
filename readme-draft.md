@@ -12,6 +12,8 @@ Every theorem keeps its source, licence and authors' credit.</p>
 
 Tengoku wants to be the shared, always-current memory of formal mathematics: a library that absorbs each Lean release's churn once, for everyone downstream, and in which every theorem says where it came from and how it was checked. It is built by one independent developer, alongside [CompeteMath](https://competemath.com) and the [Leak](https://competemath.com/about/leak) theorem-proving agents; the checks, not the author, decide what is trusted ([vision](vision-draft.md)).
 
+<p align="center"><img src="docs/img/try-it.svg" alt="Three commands: search Tengoku from a shell, give an AI agent the search tool, import the library into Lean." width="780"></p>
+
 ## Try it
 
 New to Lean? Start with the web search: it finds theorems from a plain-English description, and each result shows its statement, its source and its credit.
