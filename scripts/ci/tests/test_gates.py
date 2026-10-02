@@ -748,7 +748,7 @@ class Intake(unittest.TestCase):
         # the same vector, the same digest, in competemath/emissary-archangel's tests: the two copies of the function must not drift
         self.assertEqual(
             bundle_tar.write_tar({"a.txt": b"hello\n", "dir/b.lean": b"theorem x : True := trivial\n"}, str(out)),
-            "69860ced3534fa1c7d35bcaf779a68ea88028baf4f447748b381fab33d64e100",
+            "69860ced3534fa1c7d35bcaf779a68ea88028baf4f447748b381fab33d64e100",  # pragma: allowlist secret (a digest, not a secret)
         )
 
 
