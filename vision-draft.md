@@ -1,0 +1,45 @@
+# Vision (draft)
+
+What Tengoku is for, where it is going, and what is real today. Each item says which it is: **today**, **in progress**, **planned**, or **an idea**. Nothing is promised that is not labelled.
+
+## The problem, in one paragraph
+
+Formal mathematics is one of the few places where a result can be machine-checked end to end, and the amount of it is growing quickly. But it grows in separate Lean projects, each pinned to its own Lean version, each with its own conventions, and Lean itself changes between versions in ways that break old code. The consequence is waste: a theorem proved in one project cannot be used in another, a prover cannot know what already exists, and every benchmark or training set has to be assembled again by hand, with defects that are only found later (vacuous statements, missing hypotheses). Tengoku exists to remove that waste for the people and the machines that do formal mathematics.
+
+## What Tengoku wants to be
+
+**The shared, always-current memory of formal mathematics.** One library that a prover, an agent or a person can search, import and rely on, that keeps up with Lean instead of getting stuck on an old version, and in which every theorem says where it came from, who proved it, and how it was checked.
+
+Three commitments, each already visible in the code:
+
+1. **Checked by machine, not by reputation.** Trust is a property a theorem earns by passing gates that anyone can read, never one that depends on who submitted it. *(today)*
+2. **Nothing is lost.** Records are append-only; mistakes are retracted with a reason; credit is permanent, and AI help is named. *(today)*
+3. **Measured, including against ourselves.** Claims about what the library does for provers are measured and published, with the results that went the wrong way. *(today, once the report is public: the first report's headline result was that our own decomposition pipeline lost to a simpler agent)*
+
+## Where it is going
+
+| | | |
+|---|---|---|
+| **A library that follows Lean** | When a new Lean release lands, the translation pipeline moves everything onto it, so the library is never the thing that holds a project back. Today the library is on one pinned toolchain and a pipeline translates sources onto it. | *in progress* |
+| **All registered sources translated** | Of the sources registered, those with a corpus are being translated; the rest are data-only. The first goal in `GOALS.md`. | *in progress* |
+| **A public record of what the library does for provers** | The same benchmark, repeated as the library grows, published each time: does a bigger, better-checked library make provers better, and by how much? The first measurement exists; the second is planned for after growth. | *planned* |
+| **Fresh problems that nobody has trained on** | Competition-style problems formalised before their solutions are public (CompeteMath publishes a new problem every week), with a time stamp, so a prover's score cannot come from memorisation. | *an idea* |
+| **A bridge from open problems to proofs** | Sources such as Google DeepMind's Formal Conjectures hold statements of open problems. When any prover, human or AI, proves one, the proof enters the library with its credit. | *an idea* |
+| **A flywheel** | Every proof an agent finds enters the library with the AI credited, so the next agent starts richer than the last. The pieces exist (the services, the gates, the credit line); the loop is not yet closed automatically. | *an idea* |
+
+## What Tengoku is not trying to be
+
+- A replacement for Mathlib. Mathlib is the curated centre; Tengoku adds what it does not hold, checked by machine.
+- A new proof assistant, or a library for assistants other than Lean (for now).
+- A guarantee that a formal statement says what its informal source says. Faithfulness of a statement is a separate question that this library does not answer.
+- A product. It is an open library with no plan to charge for it.
+
+## Who is building it
+
+Tengoku is built by one independent developer, with AI assistance named wherever it was used, and anyone can contribute. That is why the gates are automatic and public, why the project is conservative about what it claims, and why it says so when something is not done.
+
+## What would make this a success
+
+- A prover or an agent that starts from Tengoku does measurably better than one that starts from Mathlib alone.
+- A Lean user needing a theorem from another project finds it, imports it, and trusts it in a minute.
+- New benchmarks are built on a library whose statements were checked for vacuity, rather than assembled again from scratch.
