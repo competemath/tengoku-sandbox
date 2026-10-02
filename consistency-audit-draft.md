@@ -28,18 +28,22 @@ Read on 2026-10-02: the `competemath/tengoku`, `competemath/tengoku-sandbox` and
 A visitor from the site's About page expects a problem-checking tool, one from GitHub expects an AI-training resource, one from Zenodo a dataset. All are true, none is the first sentence.
 **Fix:** the one answer in [messaging-draft.md](messaging-draft.md) ("what is it for"), with CompeteMath named as one user of Tengoku.
 
-## 3. The numbers disagree
+## 3. The numbers disagree, and one of them hides a real inconsistency
 
 | Claim | Where |
 |---|---|
 | "hundreds of different sources" | `tengoku` README, About |
-| 106 registered libraries | `docs/why-tengoku.md` |
-| 238 libraries | `data/stats.json` (`library_count`, generated 2026-09-21) |
-| 109 sources with a licence | `schemas/sources.json` |
+| 106 registered libraries | `docs/why-tengoku.md` (this is the count of sources that have a corpus the library can compile) |
+| 109 registered sources | `schemas/sources.json` (`licences`); 106 of them have a corpus |
 | 116 upstream libraries | `NOTICE` |
-| 198,172 trusted theorems typed into prose | `docs/why-tengoku.md` (stale the moment the pipeline promotes one) |
+| 238 libraries | `data/stats.json` (`library_count`: it also counts the Mathlib topic files of the seed) |
+| 5,404 theorems in staging from 45 libraries | `docs/why-tengoku.md` |
+| 79 in staging | `data/stats.json`, generated 2026-09-21 and not refreshed since |
+| 8,969 in staging from 60 libraries | counted from `data/staging/` on 2026-10-02 |
 
-**Fix:** define "registered source" once (an entry of `schemas/sources.json`), publish the count in `stats.json`, and never type a count into prose.
+Most of these are different things with the same name, so one definition each is the fix ("registered source"; "library with a corpus"; "seed topic file"), published from one generated file. The stale `stats.json` also feeds the README badge and the site's counters.
+
+**A real inconsistency:** the 262 CompeteMath records in `data/trusted/competemath.jsonl` are marked *trusted* and are in the v1.0.0 dataset, but the library has no module for them, so they are not built into it; they were verified by the Leak IV verifier on Lean v4.29.1 and v4.32.0, not on the library's v4.34.0-rc2; and 103 of the 262 use `native_decide`, which trusts the compiler. That contradicts "a trusted theorem is machine-checked against the whole library" and "only the standard axioms" for 0.13% of the trusted records. Two ways out: move them to *tentative* until they are translated and built (a data change, and a corrected dataset release), or translate them. Until then the README should not say that every trusted theorem is built into the library.
 
 ## 4. No immediate way to use it on the README's first screen
 
