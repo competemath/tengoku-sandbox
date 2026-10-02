@@ -1,6 +1,8 @@
 <p align="center"><img src="logo.png" alt="Tengoku" width="200"></p>
 
 # Tengoku (天国)
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fcompetemath%2Ftengoku-sandbox.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2Fcompetemath%2Ftengoku-sandbox?ref=badge_shield)
+
 
 Tengoku is an AI-first, open-source, universally accessible formal mathematics library for Lean 4.
 
@@ -433,3 +435,7 @@ These records are indexed and searchable at
 every result.
 
 selftest docs line
+
+
+## License
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fcompetemath%2Ftengoku-sandbox.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2Fcompetemath%2Ftengoku-sandbox?ref=badge_large)
