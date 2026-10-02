@@ -1,0 +1,12 @@
+{
+ "library": "add-combi",
+ "lint_mode": "proposed",
+ "modules_in_bundle": 12,
+ "modules_dropped": 0,
+ "dropped": {},
+ "theorems": 152,
+ "passed_total": 152,
+ "left_out": {},
+ "kept_constants": 253,
+ "lint_cost": {}
+}
