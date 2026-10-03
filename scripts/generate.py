@@ -512,7 +512,7 @@ def main():
             # module is testable against a partial build.
             orig = corpus / source_path
             orig_imports = []
-            if orig.exists():
+            if orig.is_file():  # a directory would raise on read_text()
                 mapped = map_imports(orig.read_text(encoding="utf-8"), corpus_prefix, lib_ns, deps_available, corpus)
                 orig_imports = [l.strip() for l in mapped.splitlines() if re.match(r"\s*(public |private |meta )*import ", l)]
                 orig_imports = [re.sub(r"^(public |private |meta )+", "", l) for l in orig_imports]
