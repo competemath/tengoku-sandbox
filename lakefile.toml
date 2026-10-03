@@ -25,3 +25,9 @@ supportInterpreter = true
 name = "tengoku-axioms"
 root = "TengokuAxioms"
 supportInterpreter = true
+
+# The merge queue's leak report: global instances / simp lemmas a library registers that touch none of its own types.
+[[lean_exe]]
+name = "tengoku-leakscan"
+root = "TengokuLeak"
+supportInterpreter = true
