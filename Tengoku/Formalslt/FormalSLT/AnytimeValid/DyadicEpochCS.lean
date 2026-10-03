@@ -1,0 +1,436 @@
+/-
+Copyright (c) 2026 Robby Sneiderman. All rights reserved.
+Released under MIT license as described in the file LICENSE.
+Authors: Robby Sneiderman
+-/
+import Tengoku
+import Tengoku.Std
+import Tengoku.Tactic.Aesop
+import Tengoku.Meta.Qq
+import Tengoku.Formalslt.FormalSLT.AnytimeValid.OptimizedLambdaCS
+
+/-!
+# Dyadic-epoch p-series stitch for the optimized-lambda CS
+
+This module records why the all-`n` literal `subGammaLogLogWidth` theorem is not
+discharged by a countable dyadic mixture.
+
+The finite-grid theorem in `OptimizedLambdaCS` pays a budget
+`Real.log ((Lam.card : Real) / delta)`. A countable mixture with epoch weights
+`w_j` would pay the corresponding term `Real.log (1 / (delta * w_j))`
+(up to the existing two-sided factor). On the dyadic epoch where
+`Real.log (Real.log n)` is comparable to `Real.log j`, matching the current
+literal budget `logLogBudget n delta` with no extra stitching charge forces
+`w_j` to be comparable to `1 / j`.
+
+The checked theorem below records the obstruction: shifted harmonic weights are
+not summable, so they cannot be the weights of a probability mixture. A dyadic
+stitch with summable weights, for example p-series weights, pays an extra epoch
+term in the boundary. That proves a different theorem from the literal
+`subGammaLogLogWidth` statement requested here.
+
+The weakened route is formalized below. The new prerequisite
+`countableWeightedSupermartingale_tsum` proves that a countable weighted series
+of real supermartingales is again a supermartingale under the Bochner
+summability, adaptedness, and integrability hypotheses needed to exchange
+`tsum` and set integrals. The dyadic-epoch CS then applies this brick to
+epoch-indexed finite stitched grids and pays the explicit penalty
+`log(epochWeightTotal w / w_j)` through `dyadicEpochGridBudget`.
+-/
+
+open MeasureTheory ProbabilityTheory
+open scoped BigOperators
+
+namespace FormalSLT.AnytimeValid
+
+noncomputable section
+
+/--
+The epoch weights forced by matching the current literal `logLogBudget` with no
+extra countable-stitching charge. The shift avoids the zero denominator.
+-/
+def literalDyadicEpochWeight (j : ℕ) : ℝ :=
+  1 / ((j + 1 : ℕ) : ℝ)
+
+/--
+Shifted harmonic epoch weights are not summable. Hence they cannot normalize a
+countable probability mixture, which is the obstruction to proving the existing
+literal `subGammaLogLogWidth` as an unconditional all-`n` stitched CS by the
+dyadic-epoch route.
+-/
+theorem literalDyadicEpochWeight_not_summable :
+    ¬ Summable literalDyadicEpochWeight := by
+  unfold literalDyadicEpochWeight
+  simpa [Nat.cast_add, Nat.cast_one] using
+    (mt (summable_nat_add_iff (f := fun n : ℕ => (1 : ℝ) / (n : ℝ)) 1).mp
+      Real.not_summable_one_div_natCast)
+
+/-! ## Summable p-series epoch weights -/
+
+/--
+A concrete summable dyadic-epoch weight. The factor `1/2` is deliberately
+conservative: the exact normalizing constant is irrelevant for the countable
+mixture brick, while the p-series exponent `2` is the essential summability
+choice.
+-/
+def pSeriesDyadicEpochWeight (j : ℕ) : ℝ :=
+  (1 / 2 : ℝ) / ((j + 1 : ℕ) : ℝ) ^ 2
+
+/-- The p-series dyadic-epoch weights are summable. -/
+theorem pSeriesDyadicEpochWeight_summable :
+    Summable pSeriesDyadicEpochWeight := by
+  have hbase : Summable fun n : ℕ => (1 : ℝ) / (n : ℝ) ^ 2 := by
+    exact Real.summable_one_div_nat_pow.mpr (by norm_num)
+  have hshift : Summable fun j : ℕ => (1 : ℝ) / (((j + 1 : ℕ) : ℝ) ^ 2) := by
+    simpa [Nat.cast_add, Nat.cast_one, add_comm] using
+      (summable_nat_add_iff (f := fun n : ℕ => (1 : ℝ) / (n : ℝ) ^ 2) 1).mpr hbase
+  unfold pSeriesDyadicEpochWeight
+  simpa [div_eq_mul_inv, mul_comm, mul_left_comm, mul_assoc] using hshift.mul_left (1 / 2 : ℝ)
+
+/-- The p-series dyadic-epoch weights are pointwise nonnegative. -/
+theorem pSeriesDyadicEpochWeight_nonneg (j : ℕ) :
+    0 ≤ pSeriesDyadicEpochWeight j := by
+  unfold pSeriesDyadicEpochWeight
+  positivity
+
+/-- The p-series dyadic-epoch weights are strictly positive. -/
+theorem pSeriesDyadicEpochWeight_pos (j : ℕ) :
+    0 < pSeriesDyadicEpochWeight j := by
+  unfold pSeriesDyadicEpochWeight
+  positivity
+
+/-- The first p-series epoch has weight `1/2`. -/
+theorem pSeriesDyadicEpochWeight_zero :
+    pSeriesDyadicEpochWeight 0 = 1 / 2 := by
+  norm_num [pSeriesDyadicEpochWeight]
+
+/-- The concrete unit-capital stitching penalty for epoch `0` is `log 2`. -/
+theorem pSeriesDyadicEpochWeight_zero_unitPenalty :
+    Real.log (1 / pSeriesDyadicEpochWeight 0) = Real.log 2 := by
+  rw [pSeriesDyadicEpochWeight_zero]
+  norm_num
+
+/-! ## Countable weighted supermartingale sums -/
+
+/--
+Weighted countable sums of real supermartingales are supermartingales, provided
+the weighted series is adapted and integrable and the Bochner integral may be
+interchanged with the countable sum on every filtration test set.
+
+This is the countable analogue of `supermartingale_finset_sum`. The explicit
+`hsummable_integral_norm` hypothesis is exactly the domination needed by
+`integral_tsum_of_summable_integral_norm`; it is the missing mathlib brick this
+dyadic-epoch route needs before specializing to p-series epoch mixtures.
+-/
+theorem countableWeightedSupermartingale_tsum
+    {Ω : Type*} {mΩ : MeasurableSpace Ω}
+    {μ : Measure Ω} [IsFiniteMeasure μ]
+    {ℱ : Filtration ℕ mΩ}
+    {M : ℕ → ℕ → Ω → ℝ} {w : ℕ → ℝ}
+    (hw_nonneg : ∀ k, 0 ≤ w k)
+    (hM : ∀ k, Supermartingale (M k) ℱ μ)
+    (hadapted : StronglyAdapted ℱ (fun n ω => ∑' k, w k * M k n ω))
+    (hintegrable : ∀ n, Integrable (fun ω => ∑' k, w k * M k n ω) μ)
+    (hsummable_integral_norm :
+      ∀ n, ∀ s : Set Ω, MeasurableSet s →
+        Summable fun k => ∫ ω in s, ‖w k * M k n ω‖ ∂μ) :
+    Supermartingale (fun n ω => ∑' k, w k * M k n ω) ℱ μ := by
+  refine supermartingale_of_setIntegral_succ_le hadapted hintegrable ?_
+  intro i s hs
+  have hs_meas : MeasurableSet s := ℱ.le i s hs
+  have hnext_int :
+      ∀ k, Integrable (fun ω => w k * M k (i + 1) ω) (μ.restrict s) := by
+    intro k
+    exact (((hM k).integrable (i + 1)).const_mul (w k)).restrict
+  have hcur_int :
+      ∀ k, Integrable (fun ω => w k * M k i ω) (μ.restrict s) := by
+    intro k
+    exact (((hM k).integrable i).const_mul (w k)).restrict
+  have hnext_swap :
+      (∑' k, ∫ ω in s, w k * M k (i + 1) ω ∂μ)
+        = ∫ ω in s, (∑' k, w k * M k (i + 1) ω) ∂μ := by
+    have hsum :
+        Summable fun k => ∫ ω, ‖w k * M k (i + 1) ω‖ ∂(μ.restrict s) := by
+      simpa using hsummable_integral_norm (i + 1) s hs_meas
+    simpa using
+      (integral_tsum_of_summable_integral_norm
+        (μ := μ.restrict s)
+        (F := fun k ω => w k * M k (i + 1) ω)
+        hnext_int hsum)
+  have hcur_swap :
+      (∑' k, ∫ ω in s, w k * M k i ω ∂μ)
+        = ∫ ω in s, (∑' k, w k * M k i ω) ∂μ := by
+    have hsum :
+        Summable fun k => ∫ ω, ‖w k * M k i ω‖ ∂(μ.restrict s) := by
+      simpa using hsummable_integral_norm i s hs_meas
+    simpa using
+      (integral_tsum_of_summable_integral_norm
+        (μ := μ.restrict s)
+        (F := fun k ω => w k * M k i ω)
+        hcur_int hsum)
+  have hterm :
+      ∀ k,
+        ∫ ω in s, w k * M k (i + 1) ω ∂μ
+          ≤ ∫ ω in s, w k * M k i ω ∂μ := by
+    intro k
+    have hraw :
+        ∫ ω in s, M k (i + 1) ω ∂μ
+          ≤ ∫ ω in s, M k i ω ∂μ := by
+      have hcond := (hM k).condExp_ae_le (Nat.le_succ i)
+      calc
+        ∫ ω in s, M k (i + 1) ω ∂μ
+            = ∫ ω in s, (condExp (ℱ i) μ (M k (i + 1))) ω ∂μ := by
+                exact (setIntegral_condExp (ℱ.le i) ((hM k).integrable (i + 1)) hs).symm
+        _ ≤ ∫ ω in s, M k i ω ∂μ := by
+                exact setIntegral_mono_ae integrable_condExp.integrableOn
+                  ((hM k).integrable i).integrableOn hcond
+    have hweighted := mul_le_mul_of_nonneg_left hraw (hw_nonneg k)
+    calc
+      ∫ ω in s, w k * M k (i + 1) ω ∂μ
+          = w k * ∫ ω in s, M k (i + 1) ω ∂μ := by
+              exact integral_const_mul (μ := μ.restrict s) (w k) (fun ω => M k (i + 1) ω)
+      _ ≤ w k * ∫ ω in s, M k i ω ∂μ := hweighted
+      _ = ∫ ω in s, w k * M k i ω ∂μ := by
+              exact (integral_const_mul (μ := μ.restrict s) (w k) (fun ω => M k i ω)).symm
+  have hnext_num_summable :
+      Summable fun k => ∫ ω in s, w k * M k (i + 1) ω ∂μ := by
+    refine Summable.of_norm_bounded (hsummable_integral_norm (i + 1) s hs_meas) ?_
+    intro k
+    exact norm_integral_le_integral_norm (μ := μ.restrict s)
+      (fun ω => w k * M k (i + 1) ω)
+  have hcur_num_summable :
+      Summable fun k => ∫ ω in s, w k * M k i ω ∂μ := by
+    refine Summable.of_norm_bounded (hsummable_integral_norm i s hs_meas) ?_
+    intro k
+    exact norm_integral_le_integral_norm (μ := μ.restrict s)
+      (fun ω => w k * M k i ω)
+  have htsum :
+      (∑' k, ∫ ω in s, w k * M k (i + 1) ω ∂μ)
+        ≤ (∑' k, ∫ ω in s, w k * M k i ω ∂μ) :=
+    hnext_num_summable.tsum_le_tsum hterm hcur_num_summable
+  calc
+    ∫ ω in s, (∑' k, w k * M k (i + 1) ω) ∂μ
+        = (∑' k, ∫ ω in s, w k * M k (i + 1) ω ∂μ) := hnext_swap.symm
+    _ ≤ (∑' k, ∫ ω in s, w k * M k i ω ∂μ) := htsum
+    _ = ∫ ω in s, (∑' k, w k * M k i ω) ∂μ := hcur_swap
+
+/-! ## Dyadic-epoch stitched-grid mixture -/
+
+/-- Total capital of a countable epoch-weight sequence. -/
+def epochWeightTotal (w : ℕ → ℝ) : ℝ :=
+  ∑' j, w j
+
+/--
+Countable dyadic-epoch mixture over epoch-indexed finite tilt grids. Each epoch
+`j` contributes the finite stitched-grid process from `OptimizedLambdaCS`,
+weighted by `w j`.
+-/
+def dyadicEpochMixtureProcess {Ω : Type*}
+    (X : ℕ → Ω → ℝ) (sigma2 b : ℝ) (Lam : ℕ → Finset ℝ) (w : ℕ → ℝ)
+    (n : ℕ) (ω : Ω) : ℝ :=
+  ∑' j, w j * stitchedExponentialProcess X sigma2 b (Lam j) n ω
+
+/--
+The epoch-grid budget paid by epoch `j`. Compared with the finite-grid budget
+`log(card / delta)`, this carries the explicit countable-stitching penalty
+`log(epochWeightTotal w / w j)`.
+-/
+def dyadicEpochGridBudget (w : ℕ → ℝ) (Lam : ℕ → Finset ℝ) (j : ℕ) (delta : ℝ) : ℝ :=
+  Real.log (((Lam j).card : ℝ) / (delta * w j / epochWeightTotal w))
+
+/-- The explicit extra p-series or general epoch-stitching penalty. -/
+def dyadicEpochExtraStitchingPenalty (w : ℕ → ℝ) (j : ℕ) : ℝ :=
+  Real.log (epochWeightTotal w / w j)
+
+/-- Generic sub-Gamma closed-form width at an arbitrary confidence budget. -/
+def subGammaWidthAtBudget (sigma2 b : ℝ) (n : ℕ) (budget : ℝ) : ℝ :=
+  Real.sqrt (2 * sigma2 * budget / (n : ℝ))
+    + b * budget / (3 * (n : ℝ))
+
+/-! ## Generic-budget sub-Gamma optimizer -/
+
+/-- The tilt minimizing the sub-Gamma line boundary at a positive generic
+budget.  This is the budget-parametric form of `optTilt`, whose public
+definition is specialized to `logLogBudget`. -/
+def optTiltAtBudget (sigma2 b : ℝ) (n : ℕ) (budget : ℝ) : ℝ :=
+  Real.sqrt (2 * budget / (sigma2 * (n : ℝ))) /
+    (1 + (b / 3) * Real.sqrt (2 * budget / (sigma2 * (n : ℝ))))
+
+/-- A positive budget can be represented as a `logLogBudget`.  This lets the
+generic optimizer reuse the checked exact optimization in
+`OptimizedLambdaCS` rather than duplicating its algebra. -/
+private theorem logLogBudget_exp_sub (n : ℕ) (budget : ℝ) :
+    logLogBudget n
+        (Real.exp (Real.log (Real.log (n : ℝ)) - budget)) = budget := by
+  unfold logLogBudget
+  rw [one_div, ← Real.exp_neg, Real.log_exp]
+  ring
+
+/-- The generic-budget tilt is the existing `optTilt` after representing the
+budget as a `logLogBudget`. -/
+theorem optTiltAtBudget_eq_optTilt_exp (sigma2 b : ℝ) (n : ℕ) (budget : ℝ) :
+    optTiltAtBudget sigma2 b n budget =
+      optTilt sigma2 b n
+        (Real.exp (Real.log (Real.log (n : ℝ)) - budget)) := by
+  unfold optTiltAtBudget optTilt
+  rw [logLogBudget_exp_sub]
+
+/-- The generic-budget optimal tilt is positive. -/
+theorem optTiltAtBudget_pos {sigma2 b budget : ℝ} {n : ℕ}
+    (hσ : 0 < sigma2) (_hb : 0 < b) (hn : 0 < n) (hbudget : 0 < budget) :
+    0 < optTiltAtBudget sigma2 b n budget := by
+  unfold optTiltAtBudget
+  have hn' : (0 : ℝ) < (n : ℝ) := Nat.cast_pos.mpr hn
+  have hsqrt : 0 < Real.sqrt (2 * budget / (sigma2 * (n : ℝ))) := by
+    apply Real.sqrt_pos.mpr
+    positivity
+  apply div_pos hsqrt
+  positivity
+
+/-- The generic-budget optimal tilt lies in the sub-Gamma admissible range. -/
+theorem optTiltAtBudget_admissible {sigma2 b budget : ℝ} {n : ℕ}
+    (hσ : 0 < sigma2) (hb : 0 < b) (hn : 0 < n) (hbudget : 0 < budget) :
+    b * optTiltAtBudget sigma2 b n budget < 3 := by
+  let delta := Real.exp (Real.log (Real.log (n : ℝ)) - budget)
+  have hlog : logLogBudget n delta = budget := by
+    simpa [delta] using logLogBudget_exp_sub n budget
+  have htilt : optTiltAtBudget sigma2 b n budget = optTilt sigma2 b n delta := by
+    simpa [delta] using optTiltAtBudget_eq_optTilt_exp sigma2 b n budget
+  rw [htilt]
+  exact optTilt_admissible hσ hb hn (by simpa [hlog] using hbudget)
+
+/-- Exact optimization of the sub-Gamma boundary at an arbitrary positive
+budget. -/
+theorem subGammaBoundary_eq_widthAtBudget_optTilt
+    {sigma2 b budget : ℝ} {n : ℕ}
+    (hσ : 0 < sigma2) (hb : 0 < b) (hn : 0 < n) (hbudget : 0 < budget) :
+    subGammaBoundary sigma2 b budget n
+        (optTiltAtBudget sigma2 b n budget) =
+      subGammaWidthAtBudget sigma2 b n budget := by
+  let delta := Real.exp (Real.log (Real.log (n : ℝ)) - budget)
+  have hlog : logLogBudget n delta = budget := by
+    simpa [delta] using logLogBudget_exp_sub n budget
+  have htilt : optTiltAtBudget sigma2 b n budget = optTilt sigma2 b n delta := by
+    simpa [delta] using optTiltAtBudget_eq_optTilt_exp sigma2 b n budget
+  rw [htilt, ← hlog]
+  change
+    subGammaBoundary sigma2 b (logLogBudget n delta) n
+        (optTilt sigma2 b n delta) =
+      subGammaLogLogWidth sigma2 b n delta
+  exact subGammaLogLogWidth_eq_boundary_optTilt hσ hb hn (by simpa [hlog] using hbudget)
+
+/--
+Width-level penalty induced by adding `extraBudget` to the iterated-log budget.
+This is the deterministic "closed-form width plus stitching penalty" wrapper:
+adding it to `subGammaLogLogWidth` gives the closed-form width evaluated at the
+inflated budget.
+-/
+def subGammaLogLogWidthStitchingPenalty
+    (sigma2 b : ℝ) (n : ℕ) (delta extraBudget : ℝ) : ℝ :=
+  subGammaWidthAtBudget sigma2 b n (logLogBudget n delta + extraBudget)
+    - subGammaLogLogWidth sigma2 b n delta
+
+/-- The inflated-budget width is literally `subGammaLogLogWidth` plus the penalty above. -/
+theorem subGammaLogLogWidth_add_stitchingPenalty
+    (sigma2 b : ℝ) (n : ℕ) (delta extraBudget : ℝ) :
+    subGammaLogLogWidth sigma2 b n delta
+      + subGammaLogLogWidthStitchingPenalty sigma2 b n delta extraBudget
+        = subGammaWidthAtBudget sigma2 b n (logLogBudget n delta + extraBudget) := by
+  unfold subGammaLogLogWidthStitchingPenalty
+  abel
+
+/-- Nonnegativity of the countable epoch mixture. -/
+theorem dyadicEpochMixtureProcess_nonneg {Ω : Type*}
+    (X : ℕ → Ω → ℝ) (sigma2 b : ℝ) (Lam : ℕ → Finset ℝ) {w : ℕ → ℝ}
+    (hw_nonneg : ∀ j, 0 ≤ w j) (n : ℕ) (ω : Ω) :
+    0 ≤ dyadicEpochMixtureProcess X sigma2 b Lam w n ω := by
+  unfold dyadicEpochMixtureProcess
+  exact tsum_nonneg fun j =>
+    mul_nonneg (hw_nonneg j) (stitchedExponentialProcess_nonneg X sigma2 b (Lam j) n ω)
+
+/--
+The countable dyadic-epoch mixture is a supermartingale once each finite epoch
+grid is an admissible stitched-grid supermartingale and the countable sum has the
+integrability package required by `countableWeightedSupermartingale_tsum`.
+-/
+theorem dyadicEpochMixture_supermartingale
+    {Ω : Type*} {mΩ : MeasurableSpace Ω}
+    {μ : Measure Ω} [IsProbabilityMeasure μ]
+    {ℱ : Filtration ℕ mΩ}
+    {X : ℕ → Ω → ℝ} {sigma2 b : ℝ} {Lam : ℕ → Finset ℝ} {w : ℕ → ℝ}
+    (hw_nonneg : ∀ j, 0 ≤ w j)
+    (hb : 0 < b) (hσ : 0 ≤ sigma2)
+    (hLam_mem : ∀ j, ∀ lam ∈ Lam j, lam ∈ Set.Ioo 0 (3 / b))
+    (hX_meas : ∀ k, Measurable (X k)) (hX_int : ∀ k, Integrable (X k) μ)
+    (hX_adapted : IncrementAdapted ℱ X)
+    (h_integrable_grid :
+      ∀ j, ∀ lam ∈ Lam j, ∀ n, Integrable (subGammaExponentialProcess X sigma2 b lam n) μ)
+    (hbound : ∀ k, ∀ᵐ ω ∂μ, |X k ω| ≤ b)
+    (hcenter : ∀ k, μ[X k | ℱ k] =ᵐ[μ] 0)
+    (hvar : ∀ k, μ[fun ω => (X k ω) ^ 2 | ℱ k] ≤ᵐ[μ] fun _ => sigma2)
+    (hadapted_mix :
+      StronglyAdapted ℱ (dyadicEpochMixtureProcess X sigma2 b Lam w))
+    (hintegrable_mix :
+      ∀ n, Integrable (dyadicEpochMixtureProcess X sigma2 b Lam w n) μ)
+    (hsummable_integral_norm :
+      ∀ n, ∀ s : Set Ω, MeasurableSet s →
+        Summable fun j => ∫ ω in s,
+          ‖w j * stitchedExponentialProcess X sigma2 b (Lam j) n ω‖ ∂μ) :
+    Supermartingale (dyadicEpochMixtureProcess X sigma2 b Lam w) ℱ μ := by
+  unfold dyadicEpochMixtureProcess at hadapted_mix hintegrable_mix ⊢
+  refine countableWeightedSupermartingale_tsum hw_nonneg ?_ hadapted_mix hintegrable_mix
+    hsummable_integral_norm
+  intro j
+  exact (subGamma_stitched_boundary_supermartingale
+    (μ := μ) (ℱ := ℱ) (X := X) (sigma2 := sigma2) (b := b) (Lam := Lam j)
+    hb hσ (hLam_mem j) hX_meas hX_int hX_adapted (h_integrable_grid j)
+    hbound hcenter hvar).1
+
+/--
+If one epoch-grid boundary is crossed at time `n`, then the countable epoch
+mixture crosses its Ville threshold. The threshold uses
+`delta * w j / epochWeightTotal w` inside the finite-grid crossing, so the
+extra term over the finite grid is `log(epochWeightTotal w / w j)`.
+-/
+theorem runningMean_dyadicEpochBoundary_subset_mixture_crossing
+    {Ω : Type*} {X : ℕ → Ω → ℝ} {sigma2 b delta : ℝ}
+    {Lam : ℕ → Finset ℝ} {w : ℕ → ℝ} {n j : ℕ} {ω : Ω}
+    (hδ : 0 < delta) (hcapital_pos : 0 < epochWeightTotal w)
+    (hw_pos : ∀ j, 0 < w j)
+    (hsummable_terms :
+      Summable fun k => w k * stitchedExponentialProcess X sigma2 b (Lam k) n ω)
+    (hn_pos : 0 < n)
+    (lam : ℝ) (hlam_mem : lam ∈ Lam j) (hlam_pos : 0 < lam)
+    (hboundary :
+      subGammaCgf sigma2 b lam / lam
+        + dyadicEpochGridBudget w Lam j delta / ((n : ℝ) * lam)
+          ≤ runningMean X n ω) :
+    epochWeightTotal w / delta ≤ dyadicEpochMixtureProcess X sigma2 b Lam w n ω := by
+  have hδj : 0 < delta * w j / epochWeightTotal w :=
+    div_pos (mul_pos hδ (hw_pos j)) hcapital_pos
+  have hcross_stitched :
+      (1 / (delta * w j / epochWeightTotal w))
+        ≤ stitchedExponentialProcess X sigma2 b (Lam j) n ω := by
+    exact runningMean_boundary_subset_stitched_crossing
+      (X := X) (sigma2 := sigma2) (b := b)
+      (delta := delta * w j / epochWeightTotal w) (Lam := Lam j)
+      (n := n) (ω := ω) hδj hn_pos lam hlam_mem hlam_pos hboundary
+  have hweighted :
+      epochWeightTotal w / delta
+        ≤ w j * stitchedExponentialProcess X sigma2 b (Lam j) n ω := by
+    have hmul := mul_le_mul_of_nonneg_left hcross_stitched (hw_pos j).le
+    calc
+      epochWeightTotal w / delta
+          = w j * (1 / (delta * w j / epochWeightTotal w)) := by
+              field_simp [hδ.ne', (hw_pos j).ne', hcapital_pos.ne']
+      _ ≤ w j * stitchedExponentialProcess X sigma2 b (Lam j) n ω := hmul
+  have hterm_le :
+      w j * stitchedExponentialProcess X sigma2 b (Lam j) n ω
+        ≤ ∑' k, w k * stitchedExponentialProcess X sigma2 b (Lam k) n ω := by
+    exact hsummable_terms.le_tsum j fun k _hk =>
+      mul_nonneg (hw_pos k).le (stitchedExponentialProcess_nonneg X sigma2 b (Lam k) n ω)
+  exact hweighted.trans hterm_le
+
+end
+
+end FormalSLT.AnytimeValid
