@@ -1,0 +1,25 @@
+module
+
+public import Tengoku
+public import Tengoku.Std
+public import Tengoku.Tactic.Aesop
+public import Tengoku.Meta.Qq
+public import Tengoku.Pfr.PFR.Mathlib.Data.Set.Basic
+public import Tengoku.Pfr.PFR.Mathlib.Data.Set.Insert
+
+public section
+
+namespace Set
+variable {α : Type*}
+
+-- TODO: Rename `ncard_singleton_inter` to `ncard_singleton_inter_le_one`
+
+lemma ncard_singleton_inter' (a : α) (s : Set α) [Decidable (a ∈ s)] :
+    ({a} ∩ s).ncard = if a ∈ s then 1 else 0 := by
+  split_ifs <;> simp [*]
+
+lemma ncard_inter_singleton (a : α) (s : Set α) [Decidable (a ∈ s)] :
+    (s ∩ {a}).ncard = if a ∈ s then 1 else 0 := by
+  split_ifs <;> simp [*]
+
+end Set
