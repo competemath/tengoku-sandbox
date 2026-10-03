@@ -3,6 +3,7 @@ import Tengoku.Carleson
 import Tengoku.Formalslt
 import Tengoku.Physlib
 import Tengoku.Leanslt
+import Tengoku.Certifyinginvariantsnf
 import Tengoku.FormalMathfin
 import Tengoku.Leanmodularforms
 import Tengoku
