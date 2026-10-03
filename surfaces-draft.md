@@ -1,6 +1,6 @@
 # Proposed wording for every surface (draft)
 
-One idea in the same words everywhere. The README ([readme-draft.md](readme-draft.md)) is the reference; each surface below is it, shortened. Nothing here is applied yet.
+The README ([readme-draft.md](readme-draft.md)) is the reference; each surface below is it, shortened. Nothing here is applied yet.
 
 **The sentence:** *Formal mathematics from many Lean projects, translated onto one Lean version and machine-checked.*
 
@@ -16,11 +16,11 @@ One idea in the same words everywhere. The README ([readme-draft.md](readme-draf
 | competemath.com `/tengoku`, page description (metadata) | "…an open-source Lean 4 formal knowledge tree: many libraries unified on one toolchain, open to contributions, growing autonomously with Leak." | "Search an open Lean 4 library of formal mathematics: many projects on one Lean version, every theorem with its tier, source and licence; trusted ones are built and machine-checked." |
 | competemath.com `/about/tengoku`, opening | "one self-contained Lean 4 library… Its purpose is continuously improving, reliable context for automated theorem provers" | the README's opening paragraph, then the existing breakdown |
 | competemath.com `/about/tengoku`, metadata | "How Tengoku, CompeteMath's AI-first Lean 4 library, is built, verified, grown and served." | "How Tengoku, an open Lean 4 library of formal mathematics, is built, checked, grown and served." |
-| competemath.com `/about`, "Verified by Lean 4" | "…against Tengoku, our own Lean 4 library, seeded from Mathlib and other open libraries." | "…against [Tengoku](/about/tengoku), the open Lean 4 library CompeteMath's developer maintains. It is a separate project that CompeteMath is one user of." |
+| competemath.com `/about`, "Verified by Lean 4" | "…against Tengoku, our own Lean 4 library, seeded from Mathlib and other open libraries." | "…against [Tengoku](/about/tengoku), the open, community-maintained Lean 4 library that CompeteMath is one user of." |
 | competemath.com `/faq` | "…against Tengoku, our own Lean 4 library, guaranteeing the mathematics is airtight." | "…against Tengoku, an open Lean 4 library. The kernel checks the proof; whether the statement says what the problem says is checked separately." |
 | competemath.com `/about/leak`, first mention | "Lemma search over Tengoku." | "Lemma search over [Tengoku](/about/tengoku), the open Lean 4 library the services run on." |
 
 Two edits that go beyond wording, because the wording depends on them:
 
-1. The FAQ's "guaranteeing the mathematics is airtight" cannot stand next to a README that says trusted does not mean faithful. The proposed sentence is the honest one.
+1. The FAQ's "guaranteeing the mathematics is airtight" cannot stand next to a README that says trusted does not mean faithful. The proposed sentence says what trusted means.
 2. `/tengoku` shows a total of theorems that includes tentative records. A reader will take it as "checked". Show trusted first, or label the total.

@@ -1,6 +1,6 @@
 # Data card: the trusted dataset, v1.0.0 (draft)
 
-What the downloadable dataset is, field by field, what is in it, and what is wrong with it. Counted from the release file on 2026-10-02 by [`scripts/dataset_audit.py`](scripts/dataset_audit.py), which anyone can rerun on the file (`python3 scripts/dataset_audit.py tengoku-dataset.jsonl.gz`).
+The downloadable dataset: its fields, its contents and its known problems. Counted from the release file on 2026-10-02 by [`scripts/dataset_audit.py`](scripts/dataset_audit.py), which anyone can rerun on the file (`python3 scripts/dataset_audit.py tengoku-dataset.jsonl.gz`).
 
 ## Get it, check it
 
@@ -48,6 +48,10 @@ There is no tier field (every record in the file carries the trusted label, the 
 - **Toolchain:** 197,910 records say `v4.34.0-rc2`, a release candidate; the next version will change some statements' meaning or compile status.
 - **Overlap with benchmarks is not excluded.** The file contains no miniF2F, PutnamBench or FATE-X files, but it does contain Mathlib's `Archive` (906 records, including 508 from the IMO problems and 164 from Wiedijk's list of 100 theorems with proofs), `MathlibTest` (477) and `Counterexamples` (415). Names and paths were compared; statement text was not. Run your own overlap check before using it to evaluate a prover.
 - **Not a training set as it stands:** 95% is Mathlib at one commit, which most models have seen; the part that is new is 9,183 records.
+
+## Licences
+
+The dataset is Apache-2.0, and each record keeps its upstream licence in the `licence` field. The 106 registered source projects (emissary-archangel `sources.json`, checked against each repository's licence on 2026-10-03) are all permissive: 94 Apache-2.0, 10 MIT, 2 BSD-3-Clause. Copyleft sources (GPL, AGPL, LGPL) are refused; two were removed early on ([LICENSE-THIRD-PARTY.md](LICENSE-THIRD-PARTY.md)). The registry itself records a licence for 92 of the 106; the other 14, among them Carleson, PFR, FLT and Equational Theories, are all Apache-2.0 and need their licence added to the registry.
 
 ## What is planned
 

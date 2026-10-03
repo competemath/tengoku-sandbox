@@ -1,6 +1,6 @@
 # Where the registered libraries stand (draft)
 
-Counted from `data/trusted/` and `data/staging/` of `competemath/tengoku` on 2026-10-02 (tentative counts from `data/stats.json`, generated 2026-09-21). `scripts/coverage_table.py` generates this page, so numbers are refreshed by the script, not typed; it is the table a prover builder or a funder asks for first.
+Counted from `data/trusted/` and `data/staging/` of `competemath/tengoku` on 2026-10-02 (tentative counts from `data/stats.json`, generated 2026-09-21). `scripts/coverage_table.py` generates this page, so numbers are refreshed by the script, not typed.
 
 | Tier | What it means | Records |
 |---|---|---|

@@ -1,6 +1,6 @@
 # Evidence (draft)
 
-What has been measured about the services Tengoku runs on, what that does and does not show, and what is planned.
+What has been measured about the services Tengoku runs on, what it shows and does not show, and what comes next.
 
 ## The measurement
 

@@ -1,6 +1,6 @@
 # How a theorem becomes trusted, and what that does and does not mean (draft)
 
-This page defines the words the README uses, step by step, and says plainly what each check cannot do.
+The words the README uses, step by step, and what each check cannot do.
 
 ## The words
 

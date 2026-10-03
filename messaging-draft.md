@@ -1,6 +1,6 @@
 # Tengoku: the wording every page should share (draft)
 
-One source for what Tengoku is, why it exists and what it is not, so the README, the site, the repositories and the citation say the same thing. Anything that describes Tengoku should be this, shortened, never reworded.
+The wording every page uses for what Tengoku is, why it exists and what it is not. Anything that describes Tengoku is this, shortened, never reworded.
 
 ## The three questions
 
@@ -44,7 +44,7 @@ A benchmark figure is quoted with what it measured: the model, the benchmark, th
 
 - Not a replacement for Mathlib: it builds on Mathlib and adds what Mathlib does not hold, checked by machine instead of by line-by-line review.
 - Not a proof assistant: it is a library for one.
-- Not CompeteMath: CompeteMath is the competition site, a separate project by the same developer; it uses the Leak verifier, and so Tengoku, to check problems and answers. Tengoku does not need CompeteMath to be used.
+- Not CompeteMath: CompeteMath is the competition site, a separate project founded by the same developer; it uses the Leak verifier, and so Tengoku, to check problems and answers. Tengoku does not need CompeteMath to be used.
 
 ## Where each surface says it
 
