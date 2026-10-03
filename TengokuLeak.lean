@@ -105,7 +105,9 @@ unsafe def main (argv : List String) : IO UInt32 := do
   let treePrefix := (flag "--tree-prefix").headD .anonymous
   let mods := flag "--module"
   let pfxs := if (flag "--prefix").isEmpty then mods else flag "--prefix"
-  if mods.isEmpty then IO.eprintln "usage: tengoku-leakscan --module <M> [--module <M>…] [--prefix <P>…] [--tree-prefix <P>] [--strict]"; return 2
+  if mods.isEmpty then
+    IO.eprintln "usage: tengoku-leakscan --module <M> [--module <M>…] [--prefix <P>…] [--tree-prefix <P>] [--strict]"
+    return 2
   initSearchPath (← findSysroot)
   let env ← importModules (mods.toArray.map fun m => { module := m }) {} (trustLevel := 0) (loadExts := true)
   let ctx : Core.Context := { fileName := "<tengoku-leakscan>", fileMap := default, maxHeartbeats := 0 }
