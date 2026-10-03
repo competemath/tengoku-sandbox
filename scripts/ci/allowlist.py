@@ -113,6 +113,7 @@ ATTRIBUTES = {
     "reducible",
     "irreducible",
     "semireducible",
+    "implicit_reducible",
     "inline",
     "specialize",
     "match_pattern",
