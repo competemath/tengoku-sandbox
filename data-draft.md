@@ -1,6 +1,6 @@
 # Data card: the trusted dataset, v1.0.0 (draft)
 
-The downloadable dataset: its fields, its contents and its known problems. Counted from the release file on 2026-10-02 by [`scripts/dataset_audit.py`](scripts/dataset_audit.py), which anyone can rerun on the file (`python3 scripts/dataset_audit.py tengoku-dataset.jsonl.gz`).
+Counted from the release file on 2026-10-02 by [`scripts/dataset_audit.py`](scripts/dataset_audit.py), which anyone can rerun on the file (`python3 scripts/dataset_audit.py tengoku-dataset.jsonl.gz`).
 
 ## Get it, check it
 
@@ -51,7 +51,7 @@ There is no tier field (every record in the file carries the trusted label, the 
 
 ## Licences
 
-The dataset is Apache-2.0, and each record keeps its upstream licence in the `licence` field. The 106 registered source projects (emissary-archangel `sources.json`, checked against each repository's licence on 2026-10-03) are all permissive: 94 Apache-2.0, 10 MIT, 2 BSD-3-Clause. Copyleft sources (GPL, AGPL, LGPL) are refused; two were removed early on ([LICENSE-THIRD-PARTY.md](LICENSE-THIRD-PARTY.md)). The registry itself records a licence for 92 of the 106; the other 14, among them Carleson, PFR, FLT and Equational Theories, are all Apache-2.0 and need their licence added to the registry.
+The dataset is Apache-2.0, and each record keeps its upstream licence in the `licence` field. The 109 registered sources (`schemas/sources.json`; 106 of them have a corpus) are all permissive: 97 Apache-2.0, 10 MIT, 2 BSD-3-Clause. Copyleft sources (GPL, AGPL, LGPL) are refused; two were removed early on ([LICENSE-THIRD-PARTY.md](LICENSE-THIRD-PARTY.md)).
 
 ## What is planned
 

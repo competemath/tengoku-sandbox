@@ -2,7 +2,7 @@
 
 Read on 2026-10-02: the `competemath/tengoku`, `competemath/tengoku-sandbox` and `competemath/emissary-archangel` repositories (descriptions, READMEs, docs, citation files) and competemath.com (`/about`, `/about/tengoku`, `/tengoku`, `/faq`, `/about/leak`). The two private repositories were not read. The wording to converge on is in [messaging-draft.md](messaging-draft.md).
 
-## 1. It is called five different things
+## 1. It is called several different things
 
 | Where | Calls it |
 |---|---|
@@ -53,7 +53,7 @@ Most of these are different things with the same name, so one definition each is
 ## 4. No immediate way to use it on the README's first screen
 
 Today the README opens with a tagline and two badges, then "About" and "Developers". The ways to try Tengoku (the browser search, the MCP endpoint, the HTTP API, `scripts/cache.sh get`) are scattered over README, `docs/api.md`, `docs/why-tengoku.md` and the site. There is no table of the problems it solves, no picture of how a theorem becomes trusted, and no demo.
-**Fix:** [readme-draft.md](readme-draft.md): a four-row "Try it now" table, the problem table, one diagram, a video slot with its storyboard.
+[readme-draft.md](readme-draft.md) opens with the problem, an animated terminal of three commands, and the Lean example.
 
 ## 5. Smaller items
 

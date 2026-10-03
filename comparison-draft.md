@@ -1,6 +1,6 @@
 # Where Tengoku fits (draft)
 
-What already exists, and how Tengoku relates to it. Figures are the neighbours' own, at the time of writing, with their source. Most of these are what Tengoku stands on.
+Figures are the projects' own, at the time of writing, with their source.
 
 | Project | What it is | How Tengoku relates |
 |---|---|---|
@@ -14,12 +14,12 @@ What already exists, and how Tengoku relates to it. Figures are the neighbours' 
 | **[Pantograph](https://arxiv.org/abs/2410.16429), [Kimina Lean Server](https://neurips.cc/virtual/2025/131063), the Lean REPL, [AXLE](https://arxiv.org/abs/2606.26442)** | Ways to run Lean programmatically: proof states for tree search (Pantograph), large-scale batch verification (Kimina, AXLE). | The same kind of service. Tengoku's proof-state service (Leak II) builds on Pantograph, and its verifier (Leak IV) compiles scripts like these servers do; what differs is that they run against Tengoku, so a script can use every project in it. |
 | **[Archive of Formal Proofs](https://www.isa-afp.org)** (Isabelle, 993 entries at last count) | The curated archive of Isabelle proof developments. | A different proof assistant; the closest model of a community archive. Tengoku is Lean only, for now. |
 
-## What is unusual about Tengoku
+## What Tengoku combines
 
-Not any one piece, which exist elsewhere, but the combination, all in the open: translation of whole libraries onto one toolchain; a machine-checked definition of trust that includes a check for vacuous theorems; provenance, licence and credit on every record; services an agent can call while it proves; and a measurement of what those services do for provers, to be repeated as the library grows.
+Each piece exists elsewhere; Tengoku puts them together, in the open: translation of whole libraries onto one toolchain; a machine-checked definition of trust that includes a check for vacuous theorems; provenance, licence and credit on every record; services an agent can call while it proves; and a measurement of what those services do for provers, to be repeated as the library grows.
 
 ## What Tengoku does not claim
 
-- To be a better library than Mathlib. It is a different thing.
+- To replace Mathlib (see above).
 - That translation is lossless. It is checked, not guaranteed equivalent ([how](trust-draft.md)).
 - That a larger library makes provers better. That is a hypothesis being measured ([evidence](evidence-draft.md)).

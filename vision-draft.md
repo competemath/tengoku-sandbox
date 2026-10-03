@@ -1,6 +1,6 @@
 # Vision (draft)
 
-Tengoku wants to be the shared, always-current memory of formal mathematics. This page says what that means, why it is hard, and how far along each part is: *today*, *in progress*, *planned* or *an idea*.
+Tengoku wants to be the shared, always-current memory of formal mathematics. Parts are labelled *today*, *in progress*, *planned* or *an idea*.
 
 ## The problem
 
@@ -10,7 +10,7 @@ Formal mathematics grows in separate Lean projects, each pinned to its own Lean 
 
 Moving a project onto one Lean version is the core of Tengoku, and two things make it hard.
 
-**Entailment.** A translated theorem must still say what the original said. Compiling is not enough: a translation can compile and quietly prove something weaker, because a definition changed or a hypothesis was dropped. Tengoku asks the kernel to accept `fun h => h : translated → original`, so the translated statement must imply the original. That check is strict, and it fails whenever the two statements differ by definitions the kernel cannot see through. It shows that a translation proves at least what the original proved; it does not show the two mean the same.
+**Entailment.** A translated theorem must still imply the original. Compiling is not enough: a translation can compile and quietly prove something weaker, because a definition changed or a hypothesis was dropped. Tengoku asks the kernel to accept `fun h => h : translated → original`, so the translated statement must imply the original. That check is strict, and it fails whenever the two statements differ by definitions the kernel cannot see through. It shows that a translation proves at least what the original proved; it does not show the two mean the same.
 
 **Self-containment.** A project is not a list of theorems. Its theorems lean on its own definitions, tactics, options, generated files and pinned dependencies, all fixed to one toolchain. To compile one theorem on another toolchain, everything it depends on has to come along, names have to be reconciled with Mathlib and with the other libraries in the tree (identical declarations are kept once, differing ones renamed), and the result has to build as a whole. Translating a whole library at a time works far better than translating theorems one by one, which is why the pipeline works that way.
 
@@ -20,19 +20,19 @@ The pipeline is partly driven by an AI agent. Whether anything is trusted is dec
 
 One library that a prover, an agent or a person can search, import and rely on; that keeps up with Lean instead of getting stuck on an old version; and in which every theorem says where it came from, how it was checked and who proved it.
 
-Three commitments, two in force today:
+Three principles, two in place today:
 
-1. **Checked by machine, not by reputation.** A theorem earns trust by passing gates anyone can read, whoever submitted it. *(today)*
-2. **Nothing is lost.** Records are append-only; a mistake is retracted with a reason; credit changes only on documented evidence; AI help is named. *(today)*
-3. **Measured, including against ourselves.** Claims about what the library does for provers are measured and published, including the results that went the wrong way. *(in progress: the first report's headline result was that our own decomposition pipeline lost to a simpler agent; the report is not yet public)*
+1. **Public checks decide.** A theorem becomes trusted by passing gates anyone can read, whoever submitted it. *(today)*
+2. **Records are kept.** Data files are append-only; a mistake is retracted with a reason and a note; credit changes only on documented evidence; AI help is named. *(today)*
+3. **Measured.** Claims about what the library does for provers are measured and published. *(in progress: the first report, not yet public, found that a simpler tool-equipped agent beat our decomposition pipeline)*
 
 ## Mathlib and Tengoku
 
 Mathlib is the curated centre of Lean mathematics, and it is shaped for people writing proofs: when the community finds a better statement, a better name or a cleaner interface, the old one is refactored and deprecated. That is right for human proofs and fragile for provers. A theorem prover, or a training set, that learned a lemma by its name and shape finds it gone after the next update.
 
-Tengoku keeps what was proved. Theorems keep their names, and a retracted theorem stays behind as a tombstone whose note says how to prove the same idea: the theorem that is equivalent, or the steps to take (use Y, then Z). A prover that reaches for a statement that has gone is redirected rather than broken. Tombstone notes with a `see` list of replacements are in the data model today *(today)*; carrying the same text into the docstring of the generated Lean declaration is *planned*.
+Tengoku keeps what was proved. A retracted theorem stays behind as a tombstone whose note says how to prove the same idea: the equivalent theorem, or the steps to take. A prover that reaches for a statement that has gone finds where to go instead of an error. Tombstone notes with a `see` list of replacements are in the data model *(today)*; carrying the same text into the docstring of the generated Lean declaration is *planned*.
 
-Tengoku carries a pinned copy of Mathlib, so the two do not compete: what belongs in Mathlib belongs upstream, and Tengoku adds the projects around it. Both together are the memory: Mathlib for what the community curates, Tengoku for everything that was proved and must not stop working.
+Tengoku carries a pinned copy of Mathlib, so the two do not compete: what belongs in Mathlib belongs upstream, and Tengoku adds the projects around it. Together they are the memory: Mathlib for what the community curates, Tengoku for what was proved, kept with its source.
 
 ## The loop it belongs to
 
@@ -59,14 +59,13 @@ flowchart LR
 
 | | | |
 |---|---|---|
-| **A library that follows Lean** | When a new Lean release lands, the translation pipeline moves everything onto it, so the library is never what holds a project back. Today it sits on one pinned toolchain, and a pipeline translates sources onto it. | *in progress* |
-| **All registered sources translated** | Sources with a corpus are being translated; the rest are data-only. The first goal in `GOALS.md`. | *in progress* |
+| **A library that follows Lean** | When a new Lean release lands, the translation pipeline moves everything onto it, so the library does not hold a project back. Today it sits on one pinned toolchain, and a pipeline translates sources onto it. | *in progress* |
+| **All registered sources translated** | Sources with a corpus are being translated; the others have tentative records only, or none yet. The first goal in `GOALS.md`. | *in progress* |
 | **A public record of what the library does for provers** | The same benchmark, repeated as the library grows and published each time: does a bigger, better-checked library make provers better, and by how much? The first measurement exists; the second comes after growth. | *planned* |
 | **Fresh problems nobody has trained on** | Competition-style problems formalised before their solutions are public, with a time stamp, so a prover's score cannot come from memorisation. | *an idea* |
-| **A bridge from open problems to proofs** | Sources such as Google DeepMind's Formal Conjectures hold statements of open problems. When any prover, human or AI, proves one, the proof enters the library with its credit. | *an idea* |
-| **A *reviewed* tier** | The kernel checks that a proof proves a statement, not that the statement says what its source says. A fourth tier would mean a person, or an independent reviewer, confirmed the statement against its source, with the review recorded. Most useful first for the theorems that benchmarks and provers lean on. | *an idea* |
+| **A bridge from open problems to proofs** | Sources such as Google DeepMind's Formal Conjectures hold statements of open problems. When any prover, human or AI, proves one, the proof enters the library with its credit, so the next agent starts richer than the last. | *an idea* |
+| **A *reviewed* tier** | The kernel checks that a proof proves a statement, not that the statement says what its source says. A fourth tier would mean a person, or an independent reviewer, confirmed the statement against its source, with the review recorded. | *an idea* |
 | **Theorems readable without Lean** | A sentence in plain language beside each Lean statement, labelled as generated, so a mathematician who has never used Lean can see what a result says. | *an idea* |
-| **A flywheel** | Every proof an agent finds enters the library with the AI credited, so the next agent starts richer than the last. The pieces exist (the services, the gates, the credit line); the loop is not yet closed automatically. | *an idea* |
 
 ## Next steps
 
@@ -78,7 +77,7 @@ flowchart LR
 
 ## Why now
 
-The largest funder of AI for mathematics describes its second round of awards as a balance of moonshots, field-building, "benchmarks and datasets to track progress, and infrastructure that empowers mathematicians" ([Renaissance Philanthropy's AI for Math Fund](https://www.renaissancephilanthropy.org/ai-for-math-fund-2026-projects)). The Lean community describes the cost of churn directly: Mathlib users face renamed lemmas, changed imports and breaking changes, and tooling to test a Lean change against dependent projects does not yet exist ([Lean mathlib maintenance](https://arxiv.org/abs/2508.21593)). A library that absorbs that churn once, for everyone downstream, is the part nobody else is building.
+The Lean community describes the cost of churn directly: Mathlib users face renamed lemmas, changed imports and breaking changes, and tooling to test a Lean change against dependent projects does not yet exist ([Lean mathlib maintenance](https://arxiv.org/abs/2508.21593)). Funders of AI for mathematics name "benchmarks and datasets to track progress, and infrastructure that empowers mathematicians" among their aims ([AI for Math Fund](https://www.renaissancephilanthropy.org/ai-for-math-fund-2026-projects)). A library that absorbs the churn once, for everyone downstream, serves both.
 
 ## What it is not
 
@@ -92,14 +91,14 @@ Tengoku is a community-maintained project, founded by an independent developer. 
 
 ## What stays fixed
 
-Whoever runs the project, these stay as they are:
+Whoever runs the project:
 
 - The library, its data and its checks are open under Apache-2.0, and every record keeps its upstream licence.
 - Releases already published stay open and stay archived, each with its own DOI.
 - Data files are append-only, and credit changes only on documented evidence.
-- The services' code is public ([leak-services](https://github.com/mikael-bashir/leak-services)), and the nightly checks can be re-run by anyone.
+- The nightly checks can be re-run by anyone.
 
-A fork can keep running the same checks. What the library needs most is people to run the translation pipeline, which takes compute and model usage.
+A fork can keep running the same checks. Running the translation pipeline takes compute and model usage; help with either is welcome.
 
 ## What would make this a success
 

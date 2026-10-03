@@ -1,14 +1,14 @@
 # Tengoku: the wording every page should share (draft)
 
-The wording every page uses for what Tengoku is, why it exists and what it is not. Anything that describes Tengoku is this, shortened, never reworded.
+The wording every page uses for what Tengoku is, why it exists and what it is not. Anything that describes Tengoku is this or a shortening of it.
 
 ## The three questions
 
 | | Canonical answer |
 |---|---|
 | **What is it?** | One machine-checked Lean 4 library of formal mathematics, assembled from many projects on a single toolchain, with every theorem's source and licence attached; authors' credit stays in the file headers. |
-| **Why does it exist?** | Formal mathematics is fragmented: hundreds of projects, each on its own Lean version, so nobody (and no AI prover) can use them together or even find what exists. |
-| **What is it for?** | Giving automated theorem provers, and the people working with them, continuously improving, reliable context: one library to search, one toolchain, one definition of "trusted". |
+| **Why does it exist?** | Formal mathematics is fragmented: hundreds of projects, each on its own Lean version, so projects on different versions cannot be imported together and a prover cannot see them all. |
+| **What is it for?** | One library to search and import, on one toolchain, with a tier on every result and one definition of "trusted". |
 
 ## The pitch at three lengths
 
@@ -22,9 +22,9 @@ The wording every page uses for what Tengoku is, why it exists and what it is no
 |---|---|---|
 | **library** | "tree", "knowledge tree", "dataset" in prose | One noun for the thing you import. "Tree" is fine for the directory in technical docs. |
 | **dataset** | | Only for the versioned release file with its DOI. |
-| **trusted** / **tentative** / **staging** | "verified" alone | "Verified" is the library's job description; a record has a tier. Tentative: a real proof at its source, not yet checked here. Staging: translated, awaiting promotion. Trusted: built into the library and checked. |
+| **trusted** / **tentative** / **staging** | "verified" alone | "Verified" alone does not say which tier. Tentative: a real proof at its source, not yet checked here. Staging: translated, awaiting promotion. Trusted: built into the library and checked. |
 | **registered sources** | "libraries" for both the sources and the library | Tengoku is *the* library; what it draws from are *sources*. |
-| **Leak** | | The verification and search services (Leak I search over MCP, Leak IV verifier). One sentence on first use. |
+| **Leak** | | The search, proof-state and verification services and the theorem-proving agents (Leak I search over MCP, Leak IV verifier). One sentence on first use. |
 | **Emissary-Archangel** | | The pipeline that translates sources onto Tengoku's toolchain. A separate repository. |
 
 ## Facts that must come from one place
@@ -42,7 +42,7 @@ A benchmark figure is quoted with what it measured: the model, the benchmark, th
 
 ## What Tengoku is not
 
-- Not a replacement for Mathlib: it builds on Mathlib and adds what Mathlib does not hold, checked by machine instead of by line-by-line review.
+- Not a replacement for Mathlib: it builds on Mathlib and adds what Mathlib does not hold, with its own checks, not Mathlib's line-by-line review.
 - Not a proof assistant: it is a library for one.
 - Not CompeteMath: CompeteMath is the competition site, a separate project founded by the same developer; it uses the Leak verifier, and so Tengoku, to check problems and answers. Tengoku does not need CompeteMath to be used.
 
