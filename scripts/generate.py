@@ -344,6 +344,8 @@ def safe_source_path(source_path: str) -> bool:
         and not sp.is_absolute()
         and ".." not in sp.parts
         and "\\" not in source_path
+        and not any(ord(c) < 32 or ord(c) == 127 for c in source_path)
+        and source_path.split("/")[-1] not in ("", ".")  # a directory: read_text() on it raises
         and not source_path.startswith(("-", "~"))
     )
 

@@ -33,8 +33,11 @@ def bad_source_path(sp: object) -> str:
         return "a backslash or control character"
     if sp.startswith(("/", "-", "~")):
         return "it starts with /, - or ~"
-    if ".." in sp.split("/"):
+    parts = sp.split("/")
+    if ".." in parts:
         return "a .. segment"
+    if parts[-1] in ("", "."):
+        return "it names a directory, not a file"
     return ""
 
 

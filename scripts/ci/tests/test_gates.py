@@ -176,7 +176,7 @@ class Gates(unittest.TestCase):
 
     def test_source_path_stays_in_the_corpus(self):
         r = Repo()
-        paths = ["../../.github/workflows/x.lean", "/etc/passwd", "-rf/x.lean", "A/../../B.lean", "A\\B.lean", "~/x.lean"]
+        paths = ["../../.github/workflows/x.lean", "/etc/passwd", "-rf/x.lean", "A/../../B.lean", "A\\B.lean", "~/x.lean", ".", "A/.", "A/"]
         for i, sp in enumerate(paths):
             r.append(
                 "data/staging/lib.jsonl",
