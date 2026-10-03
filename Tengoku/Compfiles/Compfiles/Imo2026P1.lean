@@ -1,0 +1,339 @@
+/-
+Copyright (c) 2026 The Compfiles Contributors. All rights reserved.
+Released under Apache 2.0 license as described in the file LICENSE.
+Authors: Kimi K3
+-/
+
+module
+
+public import Tengoku
+public import Tengoku.Std
+public import Tengoku.Tactic.Aesop
+public import Tengoku.Meta.Qq
+
+@[expose] public section
+
+/-!
+# International Mathematical Olympiad 2026, Problem 1
+
+There are 2026 integers greater than 1 written on a blackboard, not necessarily
+different. In a move, Confucius chooses two integers m > 1 and n > 1 from
+different places on the blackboard and replaces these two integers with
+gcd(m, n) and lcm(m, n) / gcd(m, n). He continues to make moves while it is
+possible to do so.
+
+(a) Prove that, regardless of the choices of Confucius, after finitely many
+moves, exactly one integer M on the blackboard is greater than 1.
+
+(b) Prove that the value of M does not depend on the choices of Confucius.
+
+(Note that gcd(x, y) denotes the greatest common divisor of positive integers
+x and y, and lcm(x, y) denotes the least common multiple of x and y.)
+
+Statement formalization adapted from AxiomMath/IMO2026; proof adapted from
+Humanfia's Kimi-K3 solutions (https://github.com/humanfia/imo2026).
+-/
+
+namespace Imo2026P1
+
+/-- A *board* is a finite multiset of natural numbers.  The full board discipline
+(entries `≥ 1`, cardinality `2026`) is captured by the predicate `IsInitial`. -/
+abbrev Board := Multiset ℕ
+
+/-- An *initial board*: exactly `2026` entries, each strictly greater than `1`. -/
+def IsInitial (B : Board) : Prop :=
+  Multiset.card B = 2026 ∧ ∀ a ∈ B, 1 < a
+
+/-- A single *move*: pick two entries `m, n` (from two distinct positions,
+modelled as two separate elements of the multiset) both `> 1`, remove them and
+insert `gcd(m, n)` and `lcm(m, n) / gcd(m, n)`.  Using `m ::ₘ n ::ₘ s` for the
+source board automatically encodes that the two chosen positions are distinct
+(they are two separate multiset elements, whose *values* may coincide). -/
+def Move (B B' : Board) : Prop :=
+  ∃ (m n : ℕ) (s : Board), 1 < m ∧ 1 < n ∧
+    B = m ::ₘ n ::ₘ s ∧
+    B' = Nat.gcd m n ::ₘ (Nat.lcm m n / Nat.gcd m n) ::ₘ s
+
+/-- A board is *terminal* when at most one entry is `> 1`, so no move is possible. -/
+def IsTerminal (B : Board) : Prop :=
+  Multiset.card (B.filter (fun a => 1 < a)) ≤ 1
+
+/-- A board has a *unique large entry* when exactly one entry is `> 1`. -/
+def HasUniqueLarge (B : Board) : Prop :=
+  Multiset.card (B.filter (fun a => 1 < a)) = 1
+
+/-- `Reachable B B'` : `B'` can be obtained from `B` by a finite sequence of moves
+(the reflexive–transitive closure of `Move`).  A finite play from `B` to a
+terminal board `B'` is precisely a witness of `Reachable B B'` with `IsTerminal B'`. -/
+def Reachable (B B' : Board) : Prop := Relation.ReflTransGen Move B B'
+
+/-- The exponent `g_p` for a prime `p` and board `B`: the `gcd` of the `p`-adic
+valuations of the entries of `B`.  Since `gcd(a, 0) = a`, valuations equal to `0`
+(entries not divisible by `p`) do not affect this gcd, so `gExp p B` is the gcd of
+the *positive* `p`-adic valuations occurring in `B`. -/
+noncomputable def gExp (p : ℕ) (B : Board) : ℕ :=
+  (B.map (fun a => padicValNat p a)).gcd
+
+/-- The claimed invariant terminal value
+`M = ∏_{p ∣ ∏ B} p ^ gExp p B`, the product over all primes dividing some entry
+of `B` of `p` raised to the gcd of the `p`-adic valuations. -/
+noncomputable def Mval (B : Board) : ℕ :=
+  ∏ p ∈ B.prod.primeFactors, p ^ gExp p B
+
+/-!
+### Proof sketch
+
+Termination (part (a), first half) follows from a lexicographic measure: a move
+either lowers the product of the board (when `gcd(m, n) > 1`, since
+`gcd(m, n) * (lcm(m, n) / gcd(m, n)) = lcm(m, n) < m * n`), or keeps the product
+unchanged (when `gcd(m, n) = 1`) but strictly lowers the number of entries
+greater than `1`.  Hence there is no infinite play.
+
+For the rest, the key invariant is `gExp p B`, the `gcd` of the `p`-adic
+valuations of the entries: a move replaces `v_p m, v_p n` by
+`min (v_p m) (v_p n)` and `max (v_p m) (v_p n) - min (v_p m) (v_p n)`, whose
+`gcd` with the remaining valuations is unchanged.  Consequently
+`Mval B = ∏_{p ∣ ∏ B} p ^ gExp p B` is invariant along any play.  A move always
+produces at least one entry `> 1`, so a reachable terminal board has *exactly*
+one entry `M > 1`; on such a board every other entry equals `1`, hence
+`gExp p B' = v_p M` for every prime `p` and `M = Mval B' = Mval B₀`, which
+proves both the uniqueness in (a) and the invariance in (b), and identifies the
+terminal value explicitly.
+-/
+
+/-- Moves preserve the property that all entries are `≥ 1`. -/
+lemma move_ge_one {B B' : Board} (hmove : Move B B') (hB : ∀ a ∈ B, 1 ≤ a) :
+    ∀ a ∈ B', 1 ≤ a := by
+  obtain ⟨m, n, s, hm, hn, rfl, rfl⟩ := hmove
+  have hm0 : m ≠ 0 := by lia
+  have hn0 : n ≠ 0 := by lia
+  intro a ha
+  rw [Multiset.mem_cons] at ha
+  rcases ha with rfl | ha
+  · exact Nat.one_le_iff_ne_zero.mpr (fun h => by
+      rw [Nat.gcd_eq_zero_iff] at h
+      exact hm0 h.1)
+  rw [Multiset.mem_cons] at ha
+  rcases ha with rfl | ha
+  · have hlcm0 : Nat.lcm m n ≠ 0 := fun h => by
+      have h2 := Nat.gcd_mul_lcm m n
+      rw [h, mul_zero] at h2
+      exact (mul_ne_zero hm0 hn0) h2.symm
+    have hgl : Nat.gcd m n ≤ Nat.lcm m n :=
+      Nat.le_of_dvd (Nat.pos_of_ne_zero hlcm0)
+        ((Nat.gcd_dvd_left m n).trans (Nat.dvd_lcm_left m n))
+    have hg0 : 0 < Nat.gcd m n := Nat.pos_of_ne_zero (fun h => by
+      rw [Nat.gcd_eq_zero_iff] at h
+      exact hm0 h.1)
+    exact Nat.div_pos hgl hg0
+  · exact hB a (Multiset.mem_cons_of_mem (Multiset.mem_cons_of_mem ha))
+
+/-- Reachable boards have all entries `≥ 1`, provided the start board does. -/
+lemma ge_one_reachable {B₀ B : Board} (hge : ∀ a ∈ B₀, 1 ≤ a) (hreach : Reachable B₀ B) :
+    ∀ a ∈ B, 1 ≤ a := by
+  induction hreach with
+  | refl => exact hge
+  | tail _ hmove ih => exact move_ge_one hmove ih
+
+/-- A move always produces at least one entry `> 1`. -/
+lemma large_count_pos_of_move {B B' : Board} (hmove : Move B B') :
+    1 ≤ (B'.filter fun a => 1 < a).card := by
+  obtain ⟨m, n, s, hm, hn, rfl, rfl⟩ := hmove
+  have hm0 : m ≠ 0 := by lia
+  have hn0 : n ≠ 0 := by lia
+  have card_pos_of_mem {x : ℕ}
+      (hx : x ∈ (Nat.gcd m n ::ₘ (Nat.lcm m n / Nat.gcd m n) ::ₘ s).filter (fun a => 1 < a)) :
+      1 ≤ ((Nat.gcd m n ::ₘ (Nat.lcm m n / Nat.gcd m n) ::ₘ s).filter fun a => 1 < a).card := by
+    have hne : (Nat.gcd m n ::ₘ (Nat.lcm m n / Nat.gcd m n) ::ₘ s).filter (fun a => 1 < a) ≠ 0 :=
+      fun h => by
+        rw [h] at hx
+        exact Multiset.notMem_zero x hx
+    exact Nat.one_le_iff_ne_zero.mpr (fun hc => hne (Multiset.card_eq_zero.mp hc))
+  by_cases hg : 1 < Nat.gcd m n
+  · exact card_pos_of_mem (Multiset.mem_filter.mpr ⟨Multiset.mem_cons_self _ _, hg⟩)
+  · have hl : 1 < Nat.lcm m n / Nat.gcd m n := by
+      have hg1 : Nat.gcd m n = 1 := by
+        have hg0 : 0 < Nat.gcd m n := Nat.pos_of_ne_zero (fun h => by
+          rw [Nat.gcd_eq_zero_iff] at h
+          exact hm0 h.1)
+        lia
+      have hlcm : Nat.lcm m n = m * n := by
+        have h := Nat.gcd_mul_lcm m n
+        rw [hg1, one_mul] at h
+        exact h
+      rw [hlcm, hg1, Nat.div_one]
+      calc 1 < 2 * 2 := by norm_num
+        _ ≤ m * n := Nat.mul_le_mul hm hn
+    exact card_pos_of_mem (Multiset.mem_filter.mpr
+      ⟨Multiset.mem_cons_of_mem (Multiset.mem_cons_self _ _), hl⟩)
+
+/-- Reachable boards have at least one entry `> 1`, provided the start board does. -/
+lemma large_count_pos_of_reachable {B₀ B : Board}
+    (h : 1 ≤ (B₀.filter fun a => 1 < a).card) (hreach : Reachable B₀ B) :
+    1 ≤ (B.filter fun a => 1 < a).card := by
+  induction hreach with
+  | refl => exact h
+  | tail _ hmove _ => exact large_count_pos_of_move hmove
+
+/-- `gcd(min a b, max a b - min a b) = gcd(a, b)`. -/
+lemma gcd_min_sub_max (a b : ℕ) : Nat.gcd (min a b) (max a b - min a b) = Nat.gcd a b := by
+  rcases le_total a b with h | h
+  · rw [min_eq_left h, max_eq_right h, Nat.gcd_comm, Nat.gcd_sub_self_left h, Nat.gcd_comm]
+  · rw [min_eq_right h, max_eq_left h, Nat.gcd_comm, Nat.gcd_sub_self_left h]
+
+/-- For a prime `p`, the quantity `gExp p` is preserved by a move. -/
+lemma gExp_move {m n : ℕ} (hm : 1 < m) (hn : 1 < n) (s : Board) {p : ℕ} (hp : p.Prime) :
+    gExp p (Nat.gcd m n ::ₘ (Nat.lcm m n / Nat.gcd m n) ::ₘ s) =
+      gExp p (m ::ₘ n ::ₘ s) := by
+  have : Fact p.Prime := ⟨hp⟩
+  have hm0 : m ≠ 0 := by lia
+  have hn0 : n ≠ 0 := by lia
+  have hg0 : Nat.gcd m n ≠ 0 := fun h => by
+    rw [Nat.gcd_eq_zero_iff] at h
+    exact hm0 h.1
+  have hlcm0 : Nat.lcm m n ≠ 0 := fun h => by
+    have h2 := Nat.gcd_mul_lcm m n
+    rw [h, mul_zero] at h2
+    exact (mul_ne_zero hm0 hn0) h2.symm
+  have hl0 : Nat.lcm m n / Nat.gcd m n ≠ 0 := by
+    have hgl : Nat.gcd m n ≤ Nat.lcm m n :=
+      Nat.le_of_dvd (Nat.pos_of_ne_zero hlcm0)
+        ((Nat.gcd_dvd_left m n).trans (Nat.dvd_lcm_left m n))
+    have h2 : 0 < Nat.gcd m n := Nat.pos_of_ne_zero hg0
+    exact (Nat.div_pos hgl h2).ne'
+  have hvg : padicValNat p (Nat.gcd m n) = min (padicValNat p m) (padicValNat p n) := by
+    rw [← Nat.factorization_def _ hp, ← Nat.factorization_def _ hp,
+      ← Nat.factorization_def _ hp, Nat.factorization_gcd hm0 hn0, Finsupp.inf_apply]
+  have hvlcm : padicValNat p (Nat.lcm m n) = max (padicValNat p m) (padicValNat p n) := by
+    rw [← Nat.factorization_def _ hp, ← Nat.factorization_def _ hp,
+      ← Nat.factorization_def _ hp, Nat.factorization_lcm hm0 hn0, Finsupp.sup_apply]
+  have hvdiv : padicValNat p (Nat.lcm m n / Nat.gcd m n) =
+      max (padicValNat p m) (padicValNat p n) - min (padicValNat p m) (padicValNat p n) := by
+    have hgl : Nat.gcd m n * (Nat.lcm m n / Nat.gcd m n) = Nat.lcm m n :=
+      Nat.mul_div_cancel' ((Nat.gcd_dvd_left m n).trans (Nat.dvd_lcm_left m n))
+    have h := padicValNat.mul (p := p) hg0 hl0
+    rw [hgl, hvlcm, hvg] at h
+    lia
+  simp only [gExp, Multiset.map_cons, Multiset.gcd_cons]
+  rw [hvg, hvdiv]
+  change Nat.gcd (min (padicValNat p m) (padicValNat p n))
+      (Nat.gcd (max (padicValNat p m) (padicValNat p n) - min (padicValNat p m) (padicValNat p n))
+        (Multiset.map (fun a => padicValNat p a) s).gcd) =
+    Nat.gcd (padicValNat p m)
+      (Nat.gcd (padicValNat p n) (Multiset.map (fun a => padicValNat p a) s).gcd)
+  rw [← Nat.gcd_assoc, gcd_min_sub_max, Nat.gcd_assoc]
+
+/-- `Mval` is invariant under a move, for boards whose remaining entries are `≥ 1`. -/
+lemma Mval_move {m n : ℕ} (hm : 1 < m) (hn : 1 < n) (s : Board) (hs : ∀ a ∈ s, 1 ≤ a) :
+    Mval (Nat.gcd m n ::ₘ (Nat.lcm m n / Nat.gcd m n) ::ₘ s) = Mval (m ::ₘ n ::ₘ s) := by
+  have hm0 : m ≠ 0 := by lia
+  have hn0 : n ≠ 0 := by lia
+  have hP0 : s.prod ≠ 0 := fun h => by
+    rw [Multiset.prod_eq_zero_iff] at h
+    have := hs 0 h
+    lia
+  have hlcm0 : Nat.lcm m n ≠ 0 := fun h => by
+    have h2 := Nat.gcd_mul_lcm m n
+    rw [h, mul_zero] at h2
+    exact (mul_ne_zero hm0 hn0) h2.symm
+  have hgl : Nat.gcd m n * (Nat.lcm m n / Nat.gcd m n) = Nat.lcm m n :=
+    Nat.mul_div_cancel' ((Nat.gcd_dvd_left m n).trans (Nat.dvd_lcm_left m n))
+  have hprodL : (Nat.gcd m n ::ₘ (Nat.lcm m n / Nat.gcd m n) ::ₘ s).prod =
+      Nat.lcm m n * s.prod := by
+    rw [Multiset.prod_cons, Multiset.prod_cons, ← mul_assoc, hgl]
+  have hprodR : (m ::ₘ n ::ₘ s).prod = (m * n) * s.prod := by
+    rw [Multiset.prod_cons, Multiset.prod_cons, ← mul_assoc]
+  have hpf_lcm : (Nat.lcm m n).primeFactors = m.primeFactors ∪ n.primeFactors := by
+    have h1 : (Nat.lcm m n).primeFactors = (Nat.lcm m n).factorization.support := rfl
+    rw [h1, Nat.factorization_lcm hm0 hn0, Finsupp.support_sup]
+    rfl
+  have hsets : ((m * n) * s.prod).primeFactors = (Nat.lcm m n * s.prod).primeFactors := by
+    rw [Nat.primeFactors_mul (mul_ne_zero hm0 hn0) hP0, Nat.primeFactors_mul hlcm0 hP0,
+      Nat.primeFactors_mul hm0 hn0, hpf_lcm]
+  unfold Mval
+  rw [hprodL, hprodR, hsets]
+  apply Finset.prod_congr rfl
+  intro p hp
+  rw [gExp_move hm hn s (Nat.prime_of_mem_primeFactors hp)]
+
+/-- `Mval` is invariant along any finite play. -/
+lemma Mval_reachable {B₀ B : Board} (hge : ∀ a ∈ B₀, 1 ≤ a) (hreach : Reachable B₀ B) :
+    Mval B = Mval B₀ := by
+  induction hreach with
+  | refl => rfl
+  | tail hb hmove ih =>
+    rename_i Bmid Bend
+    obtain ⟨m, n, s, hm, hn, hbm, hbe⟩ := hmove
+    have hs : ∀ a ∈ s, 1 ≤ a := by
+      intro a ha
+      exact ge_one_reachable hge hb a
+        (hbm ▸ Multiset.mem_cons_of_mem (Multiset.mem_cons_of_mem ha))
+    rw [hbe, Mval_move hm hn s hs, ← hbm]
+    exact ih
+
+/-- On a terminal board with entries `≥ 1`, `Mval` equals the unique large entry. -/
+lemma Mval_terminal {B' : Board} (hge : ∀ a ∈ B', 1 ≤ a) (huniq : HasUniqueLarge B')
+    {M : ℕ} (hM : 1 < M) (hMem : M ∈ B') : Mval B' = M := by
+  have hfilt : B'.filter (fun a => 1 < a) = {M} := by
+    have hMf : M ∈ B'.filter (fun a => 1 < a) := Multiset.mem_filter.mpr ⟨hMem, hM⟩
+    obtain ⟨x, hx⟩ := Multiset.card_eq_one.mp huniq
+    rw [hx] at hMf
+    have hxM : x = M := (Multiset.mem_singleton.mp hMf).symm
+    rw [hx, hxM]
+  have hsplit : B' = B'.filter (fun a => 1 < a) + B'.filter (fun a => ¬ 1 < a) :=
+    (Multiset.filter_add_not (fun a => 1 < a) B').symm
+  have hnot1 : ∀ a ∈ B'.filter (fun a => ¬ 1 < a), a = 1 := by
+    intro a ha
+    rw [Multiset.mem_filter] at ha
+    have h1 := hge a ha.1
+    lia
+  have hprod : B'.prod = M := by
+    conv_lhs => rw [hsplit]
+    rw [Multiset.prod_add, hfilt, Multiset.prod_singleton,
+      Multiset.prod_eq_one hnot1, mul_one]
+  have hgexp : ∀ p : ℕ, p.Prime → gExp p B' = padicValNat p M := by
+    intro p hp
+    have hz : ((B'.filter (fun a => ¬ 1 < a)).map fun a => padicValNat p a).gcd = 0 := by
+      rw [Multiset.gcd_eq_zero_iff]
+      intro x hx
+      rw [Multiset.mem_map] at hx
+      obtain ⟨a, ha, rfl⟩ := hx
+      rw [hnot1 a ha, padicValNat_one_right]
+    simp only [gExp]
+    conv_lhs => rw [hsplit]
+    rw [Multiset.map_add, Multiset.gcd_add, hfilt, Multiset.map_singleton,
+      Multiset.gcd_singleton, hz, gcd_zero_right, normalize_idem, normalize_eq]
+  have hM0 : M ≠ 0 := by lia
+  have hfin : M = M.factorization.prod (· ^ ·) := (Nat.prod_factorization_pow_eq_self hM0).symm
+  unfold Mval
+  rw [hprod]
+  conv_rhs => rw [hfin, Nat.prod_factorization_eq_prod_primeFactors]
+  apply Finset.prod_congr rfl
+  intro p hp
+  have hpp := Nat.prime_of_mem_primeFactors hp
+  rw [hgexp p hpp, Nat.factorization_def M hpp]
+
+/-- Any terminal board reachable from an initial board `B₀` has exactly one
+entry `> 1`. -/
+lemma unique_large_of_reachable_terminal (B₀ : Board) (hB₀ : IsInitial B₀)
+    (B' : Board) (hreach : Reachable B₀ B') (hterm : IsTerminal B') :
+    HasUniqueLarge B' := by
+  have hf : B₀.filter (fun a => 1 < a) = B₀ := Multiset.filter_eq_self.mpr hB₀.2
+  have h0 : 1 ≤ (B₀.filter fun a => 1 < a).card := by
+    have hc : (B₀.filter fun a => 1 < a).card = 2026 := by rw [hf, hB₀.1]
+    lia
+  have h1 : 1 ≤ (B'.filter fun a => 1 < a).card := large_count_pos_of_reachable h0 hreach
+  exact le_antisymm hterm h1
+
+/-- Any entry `> 1` of a terminal board reachable from an initial board `B₀`
+equals `Mval B₀`. -/
+lemma large_mem_eq_Mval {B₀ B' : Board} (hB₀ : IsInitial B₀) (hreach : Reachable B₀ B')
+    (hterm : IsTerminal B') {M : ℕ} (hM : 1 < M) (hMem : M ∈ B') : M = Mval B₀ := by
+  have hge : ∀ a ∈ B', 1 ≤ a := ge_one_reachable (fun a ha => (hB₀.2 a ha).le) hreach
+  have huniq : HasUniqueLarge B' := unique_large_of_reachable_terminal B₀ hB₀ B' hreach hterm
+  have h1 : Mval B' = M := Mval_terminal hge huniq hM hMem
+  have h2 : Mval B' = Mval B₀ := Mval_reachable (fun a ha => (hB₀.2 a ha).le) hreach
+  rw [h2] at h1
+  exact h1.symm
+
+end Imo2026P1
