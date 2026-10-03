@@ -8,9 +8,11 @@ library's own types can never fire elsewhere and is harmless. This reads the com
 the library's modules registered in the instance and simp extensions, and whether its statement mentions a constant of the library.
 
   lake build tengoku-leakscan
-  lake env .lake/build/bin/tengoku-leakscan --module Tengoku.Lib [--prefix Tengoku.Lib …] [--strict]
+  lake env .lake/build/bin/tengoku-leakscan --module Tengoku.Lib [--prefix Tengoku.Lib …] [--tree-prefix Tengoku.Lib] [--strict]
 
-Report only unless `--strict` (then exit 1 when anything leaks). `--prefix` defaults to the modules named.
+Report only unless `--strict` (then exit 1 when anything leaks). `--prefix` defaults to the modules named. `--tree-prefix` is put in front
+of every module name in the report: the factory scans the library under its own module names, and the report is read in the tree's
+(`Tengoku.<Library>.<module>`, scripts/bump/scope_rewrite.py).
 -/
 import Lean
 open Lean Meta
@@ -80,9 +82,9 @@ def scan (pfxs : List Name) : CoreM (Array Leak × Counts) := do
       | .global _ => pure ()
   return (leaks, counts)
 
-def report (leaks : Array Leak) (c : Counts) : List String :=
+def report (treePrefix : Name) (leaks : Array Leak) (c : Counts) : List String :=
   let rows := leaks.toList.map fun l =>
-    s!"leak: {l.kind} {l.name} registered in {l.registeredIn}" ++
+    s!"leak: {l.kind} {l.name} registered in {treePrefix ++ l.registeredIn}" ++
       (match l.line, l.declaredIn with
        | some n, _ => s!" (declared at line {n})"
        | none, some m => s!" (declared in {m}: an `attribute` command of the library turns it on)"
@@ -93,12 +95,13 @@ def report (leaks : Array Leak) (c : Counts) : List String :=
 unsafe def main (argv : List String) : IO UInt32 := do
   enableInitializersExecution
   let flag (f : String) := (argv.zip (argv.drop 1)).filterMap fun (a, b) => if a == f then some b.toName else none
+  let treePrefix := (flag "--tree-prefix").headD .anonymous
   let mods := flag "--module"
   let pfxs := if (flag "--prefix").isEmpty then mods else flag "--prefix"
-  if mods.isEmpty then IO.eprintln "usage: tengoku-leakscan --module <M> [--module <M>…] [--prefix <P>…] [--strict]"; return 2
+  if mods.isEmpty then IO.eprintln "usage: tengoku-leakscan --module <M> [--module <M>…] [--prefix <P>…] [--tree-prefix <P>] [--strict]"; return 2
   initSearchPath (← findSysroot)
   let env ← importModules (mods.toArray.map fun m => { module := m }) {} (trustLevel := 0) (loadExts := true)
   let ctx : Core.Context := { fileName := "<tengoku-leakscan>", fileMap := default, maxHeartbeats := 0 }
   let ((leaks, counts), _) ← (scan pfxs).toIO ctx { env }
-  for ln in report leaks counts do IO.println ln
+  for ln in report treePrefix leaks counts do IO.println ln
   return (if argv.contains "--strict" && !leaks.isEmpty then 1 else 0)
