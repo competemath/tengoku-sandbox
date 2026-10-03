@@ -10,17 +10,19 @@ dangers below. Existing records are not re-judged: only lines a PR adds."""
 from __future__ import annotations
 
 import json
+import os
 import re
 import sys
 import tempfile
 from pathlib import Path
 
-from _git import added_lines, changed_files, fail, load_schema, match
+from _git import added_lines, changed_files, fail, load_schema, match, pascal
 from allowlist import violations
 
 # a line that starts (after its attributes and a scoped/local) a declaration of syntax: one message, two patterns
 _DECLARATION_PREFIX = r"^\s*(@\[[^\]]*\]\s*)*(scoped\s+|local\s+)?"
 _SYNTAX_DECLARATIONS = "syntax/macro/elab/notation declarations"
+NOTATION = _SYNTAX_DECLARATIONS
 FORBIDDEN = [
     (re.compile(r"^\s*import\b", re.M), "import (the generator supplies imports)"),
     (re.compile(r"#eval\b"), "#eval"),
@@ -44,8 +46,17 @@ FORBIDDEN = [
 SET_OPTION = re.compile(r"set_option\s+([A-Za-z_][\w.]*)")
 
 
-def check_text(label: str, text: str, allowed: set[str]) -> list[str]:
-    out = [f"{label}: {why}" for re_, why in FORBIDDEN if re_.search(text)]
+def intake_modules(base: str, head: str) -> tuple[str, ...]:
+    """The module paths of an intake bundle in this diff, when the repository's intake lint is `proposed` (variable TENGOKU_INTAKE_LINT):
+    notation commands are allowed there, as in scripts/ci/intake_check.py (the allow-list lint of the bundle). Nowhere else."""
+    if os.environ.get("TENGOKU_INTAKE_LINT") != "proposed":
+        return ()
+    libs = {m.group(1) for _, p in changed_files(base, head) if (m := re.fullmatch(r"data/intake/([^/]+)/manifest\.jsonl", p))}
+    return tuple(x for lib in libs for x in (f"Tengoku/{pascal(lib)}/", f"Tengoku/{pascal(lib)}.lean"))
+
+
+def check_text(label: str, text: str, allowed: set[str], notation_ok: bool = False) -> list[str]:
+    out = [f"{label}: {why}" for re_, why in FORBIDDEN if not (why == NOTATION and notation_ok) and re_.search(text)]
     out += [f"{label}: set_option {opt} is not on the allowlist" for opt in SET_OPTION.findall(text) if opt not in allowed]
     return list(dict.fromkeys(out))
 
@@ -78,21 +89,22 @@ def record_errors(base: str, head: str, p: str, allowed: set[str]) -> list[str]:
     return errors
 
 
-def module_errors(base: str, head: str, p: str, allowed: set[str]) -> list[str]:
+def module_errors(base: str, head: str, p: str, allowed: set[str], intake: tuple[str, ...] = ()) -> list[str]:
     """The lines a PR adds to a module: `import` lines are the generator's own (a promotion regenerates them); records may not contain one."""
     added = "\n".join(t for _, t in added_lines(base, head, p) if not re.match(r"^\s*import\b", t))
-    return check_text(p, added, allowed)
+    return check_text(p, added, allowed, notation_ok=p.startswith(intake) if intake else False)
 
 
 def diff_errors(base: str, head: str, allowed: set[str]) -> list[str]:
     errors: list[str] = []
+    intake = intake_modules(base, head)
     for _, p in changed_files(base, head):
         if match(p, RECORD_FILES):
             errors += record_errors(base, head, p, allowed)
         elif p.endswith(".lean") and p.startswith(
             "Tengoku/"
         ):  # modules only; root tool programs (TengokuExtract/TengokuAxioms) run in CI, not in the library
-            errors += module_errors(base, head, p, allowed)
+            errors += module_errors(base, head, p, allowed, intake)
     return errors
 
 

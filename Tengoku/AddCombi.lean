@@ -1,0 +1,12 @@
+import Tengoku.AddCombi.AddCombi.Convolution.Finite.Defs
+import Tengoku.AddCombi.AddCombi.Convolution.Finite.Order
+import Tengoku.AddCombi.AddCombi.Mathlib.Algebra.BigOperators.Ring.Finset
+import Tengoku.AddCombi.AddCombi.Mathlib.Algebra.Group.Action.Pointwise.Set.Basic
+import Tengoku.AddCombi.AddCombi.Mathlib.Algebra.GroupWithZero.Indicator
+import Tengoku.AddCombi.AddCombi.Mathlib.Algebra.Notation.Indicator
+import Tengoku.AddCombi.AddCombi.Mathlib.Algebra.Order.GroupWithZero.Indicator
+import Tengoku.AddCombi.AddCombi.Mathlib.Algebra.Order.Ring.NNRat
+import Tengoku.AddCombi.AddCombi.Mathlib.Algebra.Star.Pi
+import Tengoku.AddCombi.AddCombi.Mathlib.Combinatorics.Additive.Energy
+import Tengoku.AddCombi.AddCombi.Mathlib.Combinatorics.Additive.Sidon
+import Tengoku.AddCombi.AddCombi.Mathlib.Data.Finset.Density

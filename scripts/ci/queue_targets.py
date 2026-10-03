@@ -9,6 +9,7 @@ of every touched library instead (for the derived-files diff)."""
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -54,6 +55,14 @@ def generate(lib: str, extra: list[str]) -> None:
         fail(f"generate.py failed for {lib}: {' '.join(extra)}")
 
 
+# An intake library (a factory bundle: scripts/ci/intake_check.py) has no records to generate from: its modules ARE the content. The
+# queue builds the library root and skips generation and the derived-files comparison for it.
+intake: set[str] = set()
+for st, p in changed_files(base, head):
+    m = re.fullmatch(r"data/intake/([^/]+)/manifest\.jsonl", p)
+    if m:
+        intake.add(m.group(1))
+intake_ns = {pascal(lib) for lib in intake}
 work: dict[str, dict[str, set[str]]] = {}  # library -> source path -> names this group adds to staging
 left_out: dict[str, set[str]] = {}  # library -> garbled records the generator leaves out (they stay in staging)
 touched: set[str] = set()  # libraries with any data change (staging or trusted)
@@ -76,7 +85,7 @@ for st, p in changed_files(base, head):
         touched.add(library_of(p))
     elif regenerate:
         lib = library_of_module(p, corpora)
-        if lib:
+        if lib and pascal(lib) not in intake_ns:
             touched.add(lib)  # a derived module edited by hand is caught by regenerating its library
 
 if regenerate:
@@ -109,4 +118,5 @@ for lib, paths in sorted(work.items()):
 for lib in sorted(touched - set(work)):
     if lib in corpora:
         targets.append(f"Tengoku.{pascal(lib)}")  # tombstones: rebuild the library's modules
+targets += [f"Tengoku.{ns}" for ns in sorted(intake_ns)]
 print("\n".join(dict.fromkeys(targets)))

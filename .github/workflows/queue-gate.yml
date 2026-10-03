@@ -91,6 +91,7 @@ jobs:
       - name: Content lint (again, on the merged result)
         if: github.event_name == 'merge_group'
         shell: bash
+        env: { TENGOKU_INTAKE_LINT: "${{ vars.TENGOKU_INTAKE_LINT || 'strict' }}" }
         run: |
           set -o pipefail
           python3 scripts/ci/lint_banked.py "${{ github.event.merge_group.base_sha }}" HEAD 2>&1 | tee -a build.log  # the ejection comment reads build.log
