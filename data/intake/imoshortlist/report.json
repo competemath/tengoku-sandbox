@@ -1,0 +1,59 @@
+{
+ "library": "imoshortlist",
+ "lint_mode": "strict",
+ "modules_in_bundle": 191,
+ "modules_dropped": 21,
+ "dropped": {
+  "IMOSLLean4.Generalization.IMO2024N6.IMO2024N6": "lint: `notation` runs code while the tree compiles (or trusts the compiler); `notation` does not start an allowed command",
+  "IMOSLLean4.Main.IMO2006.A6.A6": "lint: `notation` runs code while the tree compiles (or trusts the compiler); `notation` does not start an allowed command",
+  "IMOSLLean4.Main.IMO2009.A4": "lint: `#I`: no # commands in a record",
+  "IMOSLLean4.Generalization.IMO2012N8.IMO2012N8": "lint: `notation` runs code while the tree compiles (or trusts the compiler); `notation` does not start an allowed command",
+  "IMOSLLean4.Main.IMO2007.A4": "lint: `notation` runs code while the tree compiles (or trusts the compiler); `notation` does not start an allowed command",
+  "IMOSLLean4.Main.IMO2009.C2": "lint: `#S`: no # commands in a record",
+  "IMOSLLean4.Main.IMO2009.N6": "lint: `termination_by` does not start an allowed command; `decreasing_by` does not start an allowed command",
+  "IMOSLLean4.Main.IMO2020.A3.A3": "lint: `notation` runs code while the tree compiles (or trusts the compiler); `notation` does not start an allowed command",
+  "IMOSLLean4.Main.IMO2022.C6": "lint: `infix` runs code while the tree compiles (or trusts the compiler); `infix` does not start an allowed command",
+  "IMOSLLean4.Main.IMO2012.N8": "lint: `notation` runs code while the tree compiles (or trusts the compiler); `notation` does not start an allowed command",
+  "IMOSLLean4.Main.IMO2016.C2": "lint: `#S`: no # commands in a record",
+  "IMOSLLean4.Main.IMO2006": "imports a module that cannot go to the tree",
+  "IMOSLLean4.Main.IMO2020": "imports a module that cannot go to the tree",
+  "IMOSLLean4.Main": "imports a module that cannot go to the tree",
+  "IMOSLLean4.Main.IMO2007": "imports a module that cannot go to the tree",
+  "IMOSLLean4.Main.IMO2012": "imports a module that cannot go to the tree",
+  "IMOSLLean4.Main.IMO2009": "imports a module that cannot go to the tree",
+  "IMOSLLean4.Main.IMO2016": "imports a module that cannot go to the tree",
+  "IMOSLLean4.Main.IMO2022": "imports a module that cannot go to the tree",
+  "IMOSLLean4.Generalization": "imports a module that cannot go to the tree",
+  "IMOSLLean4": "imports a module that cannot go to the tree"
+ },
+ "theorems": 2055,
+ "passed_total": 2235,
+ "left_out": {
+  "lint: `notation` runs code while the tree compiles (or trusts the compiler); `notation` does not start an allowed comman": 92,
+  "lint: `#I`: no # commands in a record": 8,
+  "lint: `#S`: no # commands in a record": 16,
+  "lint: `termination_by` does not start an allowed command; `decreasing_by` does not start an allowed command": 16,
+  "lint: `infix` runs code while the tree compiles (or trusts the compiler); `infix` does not start an allowed command": 23,
+  "verification build: module did not build, or imports one": 25
+ },
+ "kept_constants": 4692,
+ "stripped_attributes": {
+  "mk_iff": 3
+ },
+ "lint_cost": {
+  "`notation` does not start an allowed command": 105,
+  "`notation` runs code while the tree compiles (or trusts the compiler)": 105,
+  "`infix` runs code while the tree compiles (or trusts the compiler)": 23,
+  "`infix` does not start an allowed command": 23,
+  "`#S`: no # commands in a record": 16,
+  "`decreasing_by` does not start an allowed command": 16,
+  "`termination_by` does not start an allowed command": 16,
+  "`#I`: no # commands in a record": 8
+ },
+ "verification_dropped": {
+  "IMOSLLean4.Generalization.IMO2012A5.A5Cases.Case3": "did not build in the verification build",
+  "IMOSLLean4.Generalization.IMO2012A5.IMO2012A5": "imports a module that did not build",
+  "IMOSLLean4.Main.IMO2009.A3.A3": "did not build in the verification build",
+  "IMOSLLean4.Main.IMO2021.N1.N1": "did not build in the verification build"
+ }
+}
