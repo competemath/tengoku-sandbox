@@ -1,0 +1,40 @@
+/-
+Copyright (c) 2025 Andrew Yang. All rights reserved.
+Released under Apache 2.0 license as described in the file LICENSE.
+Authors: Andrew Yang
+-/
+module
+
+public import Tengoku
+public import Tengoku.Std
+public import Tengoku.Tactic.Aesop
+public import Tengoku.Meta.Qq
+
+/-!
+# Subfunctors
+
+Basic constructions for subfunctors of functors valued in `Type`, including
+the subfunctor cut out by a subset of the value at a terminal object.
+-/
+
+@[expose] public section
+
+universe w v u
+
+open Opposite CategoryTheory
+
+namespace CategoryTheory
+namespace Subfunctor
+
+variable {C : Type u} [Category.{v} C] (F : C ⥤ Type w)
+
+/-- The subfunctor defined by pulling back a subset of the terminal component. -/
+def ofIsTerminal {X : C} (hX : Limits.IsTerminal X) (s : Set (F.obj X)) :
+    Subfunctor F where
+  obj U := F.map (hX.from U) ⁻¹' s
+  map {U V} i := by
+    simp only [← Set.preimage_comp, ← hX.comp_from i, F.map_comp]
+    rfl
+
+end Subfunctor
+end CategoryTheory
