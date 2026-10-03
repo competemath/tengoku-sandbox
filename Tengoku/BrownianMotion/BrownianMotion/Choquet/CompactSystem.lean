@@ -1,0 +1,380 @@
+/-
+Copyright (c) 2026 Rémy Degenne. All rights reserved.
+Released under Apache 2.0 license as described in the file LICENSE.
+Authors: Rémy Degenne
+-/
+module
+
+public import Tengoku
+public import Tengoku.Std
+public import Tengoku.Tactic.Aesop
+public import Tengoku.Meta.Qq
+
+/-!
+# Analytic sets in the sense of a paved space
+
+TODO: we use `IsCompactSystem`, which corresponds to semi-compact pavings for D-M. We use this and
+not compact pavings (which would be the same, but for arbitrary intersections instead of countable
+ones), because it's sufficient for our applications, and because it's easier to work with.
+
+-/
+
+@[expose] public section
+
+open scoped ENNReal NNReal
+
+variable {𝓧 𝓨 𝓚 𝓚' ι : Type*} {p : Set (Set 𝓧)} {q : Set (Set 𝓚)} {s t : Set 𝓧} {f : ℕ → Set 𝓧}
+
+section Aux
+
+variable {α : Type*} {S : Set (Set α)}
+
+lemma mem_supClosure_set_iff (s : Set α) :
+    s ∈ supClosure S ↔ ∃ L : Finset (Set α), L.Nonempty ∧ s = ⋃₀ L ∧ ↑L ⊆ S := by
+  refine ⟨fun ⟨L, hL⟩ ↦ ?_, fun h ↦ ?_⟩
+  · choose hL_nonempty hL_subset hL_sup using hL
+    refine ⟨L, hL_nonempty, ?_, hL_subset⟩
+    rw [← hL_sup, ← Finset.sup_id_set_eq_sUnion, Finset.sup'_eq_sup]
+  · obtain ⟨L, hL_nonempty, hL_eq, hL_subset⟩ := h
+    refine ⟨L, hL_nonempty, hL_subset, ?_⟩
+    rw [hL_eq, ← Finset.sup_id_set_eq_sUnion, Finset.sup'_eq_sup]
+
+lemma mem_infClosure_set_iff (s : Set α) :
+    s ∈ infClosure S ↔ ∃ L : Finset (Set α), L.Nonempty ∧ s = ⋂₀ L ∧ ↑L ⊆ S := by
+  refine ⟨fun ⟨L, hL⟩ ↦ ?_, fun h ↦ ?_⟩
+  · choose hL_nonempty hL_subset hL_sup using hL
+    refine ⟨L, hL_nonempty, ?_, hL_subset⟩
+    rw [← hL_sup, ← Finset.inf_id_set_eq_sInter, Finset.inf'_eq_inf]
+  · obtain ⟨L, hL_nonempty, hL_eq, hL_subset⟩ := h
+    refine ⟨L, hL_nonempty, hL_subset, ?_⟩
+    rw [hL_eq, ← Finset.inf_id_set_eq_sInter, Finset.inf'_eq_inf]
+
+lemma mem_supClosure_set_iff' (s : Set α) :
+    s ∈ supClosure S ↔ ∃ (t : Finset ℕ) (_ : t.Nonempty) (A : ℕ → Set α),
+      (∀ n ∈ t, A n ∈ S) ∧ s = ⋃ n ∈ t, A n := by
+  rw [mem_supClosure_set_iff]
+  refine ⟨fun ⟨L, hL_nonempty, hL_eq, hL_subset⟩ ↦ ?_, fun ⟨t, ht_nonempty, A, hA, h_eq⟩ ↦ ?_⟩
+  · classical
+    have hcard : L.toList.length = L.card := Finset.length_toList L
+    refine ⟨Finset.range L.card,
+      Finset.nonempty_range_iff.mpr (Finset.card_ne_zero.mpr hL_nonempty),
+      fun n ↦ if h : n < L.toList.length then L.toList[n] else ∅, ?_, ?_⟩
+    · intro n hn
+      rw [Finset.mem_range, ← hcard] at hn
+      simp only [dite_eq_left hn]
+      exact hL_subset (Finset.mem_coe.mpr (Finset.mem_toList.mp (List.getElem_mem hn)))
+    · ext x
+      rw [hL_eq]
+      simp only [Set.mem_sUnion, Finset.mem_coe, Set.mem_iUnion, Finset.mem_range, exists_prop]
+      constructor
+      · rintro ⟨u, hu, hxu⟩
+        obtain ⟨n, hn, rfl⟩ := List.mem_iff_getElem.mp (Finset.mem_toList.mpr hu)
+        exact ⟨n, hcard ▸ hn, by simpa only [dite_eq_left hn]⟩
+      · rintro ⟨n, hn, hxn⟩
+        rw [← hcard] at hn
+        rw [dite_eq_left hn] at hxn
+        exact ⟨_, Finset.mem_toList.mp (List.getElem_mem hn), hxn⟩
+  · exact ⟨t.image A, by simpa, by simpa, by simpa⟩
+
+lemma mem_supClosure_insert_empty_iff (s : Set α) :
+    s ∈ supClosure (insert ∅ S) ↔ ∃ L : Finset (Set α), s = ⋃₀ L ∧ ↑L ⊆ insert ∅ S := by
+  rw [mem_supClosure_set_iff]
+  refine ⟨fun ⟨L, hL_nonempty, hL_eq, hL_subset⟩ ↦ ⟨L, hL_eq, hL_subset⟩,
+    fun ⟨L, hL_eq, hL_subset⟩ ↦ ?_⟩
+  classical
+  refine ⟨if L.Nonempty then L else {∅}, ?_, ?_, fun _ ↦ by simp; grind⟩
+  · split_ifs
+    · simpa
+    · simp
+  · rcases Finset.eq_empty_or_nonempty L with (rfl | hL_nonempty)
+    · simpa using hL_eq
+    · simpa [hL_nonempty]
+
+lemma mem_infClosure_insert_univ_iff (s : Set α) :
+    s ∈ infClosure (insert Set.univ S) ↔
+      ∃ L : Finset (Set α), s = ⋂₀ L ∧ ↑L ⊆ insert Set.univ S := by
+  rw [mem_infClosure_set_iff]
+  refine ⟨fun ⟨L, hL_nonempty, hL_eq, hL_subset⟩ ↦ ⟨L, hL_eq, hL_subset⟩,
+    fun ⟨L, hL_eq, hL_subset⟩ ↦ ?_⟩
+  refine ⟨if L.Nonempty then L else {Set.univ}, ?_, ?_, fun _ ↦ by simp; grind⟩
+  · split_ifs
+    · simpa
+    · simp
+  · rcases Finset.eq_empty_or_nonempty L with rfl | hL_nonempty
+    · simpa using hL_eq
+    · simpa [hL_nonempty]
+
+end Aux
+
+lemma isCompactSystem_singleton_empty {α : Type*} : IsCompactSystem {(∅ : Set α)} :=
+  fun C hC _ ↦ ⟨0, by simpa using hC 0⟩
+
+lemma isCompactSystem_Icc (α : Type*) [TopologicalSpace α] [T2Space α] [Preorder α]
+    [CompactIccSpace α] :
+    IsCompactSystem {t | ∃ a b : α, Set.Icc a b = t} :=
+  (isCompactSystem_isCompact _).mono fun _ ⟨_, _, heq⟩ ↦ heq ▸ isCompact_Icc
+
+lemma isCompactSystem_insert_empty_Icc (α : Type*) [TopologicalSpace α] [T2Space α] [Preorder α]
+    [CompactIccSpace α] :
+    IsCompactSystem (insert ∅ {t | ∃ a b : α, Set.Icc a b = t}) := by
+  refine (isCompactSystem_isCompact α).mono fun s hs ↦ ?_
+  cases hs with
+  | inl h => simp [h]
+  | inr h => obtain ⟨_, _, heq⟩ := h; exact heq ▸ isCompact_Icc
+
+/-- The set of Finset coercions forms a compact system. -/
+lemma IsCompactSystem.finsetCoe :
+    IsCompactSystem {t : Set 𝓚 | ∃ s : Finset 𝓚, (s : Set 𝓚) = t} := by
+  let : TopologicalSpace 𝓚 := ⊥
+  have : DiscreteTopology 𝓚 := ⟨rfl⟩
+  apply of_nonempty_iInter
+  intro C hC hC_nonempty
+  choose s hs using hC
+  have hsub : ∀ n, Set.dissipate C n ⊆ (s 0 : Set 𝓚) :=
+    fun n => (Set.antitone_dissipate (Nat.zero_le n)).trans
+      (Set.dissipate_subset le_rfl |>.trans (by rw [← hs 0]))
+  have h_compact : IsCompact (Set.dissipate C 0) :=
+    (s 0).finite_toSet.subset (hsub 0) |>.isCompact
+  obtain ⟨x, hx⟩ := IsCompact.nonempty_iInter_of_sequence_nonempty_isCompact_isClosed
+    (Set.dissipate C ·)
+    (fun i => Set.antitone_dissipate (Nat.le_succ i))
+    hC_nonempty h_compact
+    (fun _ => isClosed_discrete _)
+  simp only [Set.iInter_dissipate, Set.mem_iInter] at hx
+  simp only [Set.nonempty_iInter]
+  use x
+
+/-- Transport a compact system along an equivalence of types. -/
+lemma IsCompactSystem.equiv (e : 𝓚 ≃ 𝓚') {S : Set (Set 𝓚)} (hS : IsCompactSystem S) :
+    IsCompactSystem {t : Set 𝓚' | e ⁻¹' t ∈ S} := by
+  intro D hD hD_empty
+  have h (s : Set 𝓚') : s = ∅ ↔ e ⁻¹' s = ∅ := by
+    repeat rw [Set.eq_empty_iff_forall_notMem]
+    refine ⟨fun h x => h (e x), fun h x hx => h (e.invFun x) (by simp [hx])⟩
+  rw [h, Set.preimage_iInter] at hD_empty
+  obtain ⟨N, hN⟩ := hS (fun i => e ⁻¹' D i) hD hD_empty
+  rw [Set.dissipate, ← Set.preimage_iInter₂] at hN
+  refine ⟨N, by rw [Set.dissipate, h, hN]⟩
+
+lemma iInter_sigma_eq_empty_iff {𝓚 : ι → Type*} {β : Type*} (s : β → Set ι)
+    (f : β → (i : ι) → Set (𝓚 i)) :
+     ⋂ b, (s b).sigma (f b) = ∅ ↔ ∀ i ∈ ⋂ b, s b, ⋂ b, f b i = ∅ := by
+  simp only [Set.eq_empty_iff_forall_notMem, Set.mem_iInter, Set.mem_sigma_iff]
+  exact ⟨fun h i hi x hx => h ⟨i, x⟩ fun b => ⟨hi b, hx b⟩,
+    fun h ⟨i, x⟩ hx => h i (fun b => (hx b).1) x (fun b => (hx b).2)⟩
+
+/-- Variant with an additional condition `p b` (e.g. `b ≤ n` for `dissipate`). -/
+lemma iInter₂_sigma_eq_empty_iff {𝓚 : ι → Type*} {β : Type*} {p : β → Prop}
+    (s : β → Set ι) (f : β → (i : ι) → Set (𝓚 i)) :
+    ⋂ (b) (_ : p b), (s b).sigma (f b) = ∅ ↔
+      ∀ i ∈ ⋂ (b) (_ : p b), s b, ⋂ (b) (_ : p b), f b i = ∅ := by
+  simp only [Set.eq_empty_iff_forall_notMem, Set.mem_iInter, Set.mem_sigma_iff]
+  exact ⟨fun h i hi x hx => h ⟨i, x⟩ fun b hb => ⟨hi b hb, hx b hb⟩,
+    fun h ⟨i, x⟩ hx => h i (fun b hb => (hx b hb).1) x (fun b hb => (hx b hb).2)⟩
+
+lemma IsCompactSystem.sigma {𝓚 : ι → Type*} {q : (i : ι) → Set (Set (𝓚 i))}
+    (hq : ∀ i, IsCompactSystem (q i)) :
+    IsCompactSystem {t : Set (Σ i, 𝓚 i) |
+      ∃ s : Finset ι, t ∈ (s : Set ι).sigma '' (Set.univ.pi q)} := by
+  classical
+  intro C hC hC_empty
+  simp only [Set.mem_ofPred_eq, Set.mem_image, Set.mem_pi, Set.mem_univ,
+    forall_const] at hC
+  choose s f hf hCfs using hC
+  simp_rw [Set.dissipate, ← hCfs]
+  simp_rw [← hCfs, iInter_sigma_eq_empty_iff] at hC_empty
+  by_cases h : ⋂ b, (s b : Set ι) = ∅
+  · obtain ⟨n₀, hn₀⟩ := IsCompactSystem.finsetCoe (fun b => (s b : Set ι))
+      (fun b => ⟨s b, rfl⟩) h
+    refine ⟨n₀, ?_⟩
+    rw [Set.dissipate] at hn₀
+    simp_rw [iInter₂_sigma_eq_empty_iff, hn₀]
+    simp
+  · have hs : (s 0).Nonempty := by
+      rw [← Finset.coe_nonempty, Set.nonempty_iff_ne_empty]
+      exact fun h0 => h <| Set.subset_eq_empty (Set.iInter_subset _ 0) h0
+    obtain ⟨j₀, hj₀⟩ := hs
+    classical
+    have key₀ : ∀ j ∈ ⋂ b, s b, ∃ N,
+        ⋂ (b ≤ N), f b j = ∅ := by
+      intro j hj
+      exact hq j (f · j) (fun i ↦ hf i j) (hC_empty j hj)
+    have key₁ : ∀ j ∉ ⋂ b, s b, ∃ N, j ∉ s N := by
+      intro j hj
+      simpa [Set.mem_iInter, not_forall] using hj
+    -- For each j ∈ s 0, find N(j) such that the fibre over j in the bounded sigma is empty.
+    have key : ∀ j ∈ s 0, ∃ N,
+        ∀ x, (⟨j, x⟩ : Σ k, 𝓚 k) ∉ ⋂ y, ⋂ (_ : y ≤ N), (s y : Set ι).sigma (f y) := by
+      intro j _
+      by_cases hjs : j ∈ ⋂ b, s b
+      · obtain ⟨N, hN⟩ := key₀ j hjs
+        refine ⟨N, fun x hx => ?_⟩
+        have hxslice : x ∈ ⋂ b, ⋂ _ : b ≤ N, f b j := by
+          simp only [Set.mem_iInter, Set.mem_sigma_iff] at hx ⊢
+          exact fun b hb => (hx b hb).2
+        rw [hN] at hxslice; exact hxslice
+      · obtain ⟨b, hb⟩ := key₁ j hjs
+        refine ⟨b, fun x hx => ?_⟩
+        have : (⟨j, x⟩ : Σ k, 𝓚 k) ∈ (s b : Set ι).sigma (f b) :=
+          (Set.mem_iInter.mp (Set.mem_iInter.mp hx b) le_rfl)
+        exact hb (Finset.mem_coe.mp (Set.mem_sigma_iff.mp this).1)
+    choose N hN using key
+    use (s 0).attach.sup fun jh => N jh.val jh.prop
+    rw [Set.eq_empty_iff_forall_notMem]
+    rintro ⟨j, x⟩ hjx
+    have hj0 : j ∈ s 0 := by
+      have : (⟨j, x⟩ : Σ k, 𝓚 k) ∈ (s 0 : Set ι).sigma (f 0) :=
+        Set.mem_iInter.mp (Set.mem_iInter.mp hjx 0) (Nat.zero_le _)
+      exact Finset.mem_coe.mp (Set.mem_sigma_iff.mp this).1
+    have hle : N j hj0 ≤ ((s 0).attach.sup fun jh => N jh.val jh.prop) :=
+      Finset.le_sup (f := fun jh : { x // x ∈ s 0 } => N jh.val jh.prop)
+        (Finset.mem_attach _ ⟨j, hj0⟩)
+    exact hN j hj0 x
+      (Set.iInter₂_mono' (fun b' j' => ⟨b', j'.trans hle, Set.Subset.rfl⟩) hjx)
+
+/-- Sigma variant with fixed `s = Finset.univ`: subsystem of `IsCompactSystem.sigma`. -/
+lemma IsCompactSystem.sigma_ofFintype [Finite ι] {𝓚 : ι → Type*}
+    {q : (i : ι) → Set (Set (𝓚 i))} (hq : ∀ i, IsCompactSystem (q i)) :
+    IsCompactSystem (Set.univ.sigma '' (Set.univ.pi q)) := by
+  have : Fintype ι := Fintype.ofFinite ι
+  intro C hC hC_empty
+  refine IsCompactSystem.sigma hq C (fun i => ?_) hC_empty
+  obtain ⟨f, hf, hfC⟩ := hC i
+  refine ⟨(Finset.univ : Finset ι), f, fun j _ => hf j (Set.mem_univ _), ?_⟩
+  rw [Finset.coe_univ]; exact hfC
+
+lemma IsCompactSystem.sum.{u} {𝓚 𝓚' : Type u} {q : Set (Set 𝓚)} {q' : Set (Set 𝓚')}
+    (hq : IsCompactSystem q) (hq' : IsCompactSystem q') :
+    IsCompactSystem {t | Sum.inl ⁻¹' t ∈ q ∧ Sum.inr ⁻¹' t ∈ q'} := by
+  let Q : ∀ b : Bool, Set (Set (bif b then 𝓚' else 𝓚)) :=
+    fun b => match b with | true => q' | false => q
+  have hQ : ∀ b, IsCompactSystem (Q b) := fun b => by cases b <;> assumption
+  have h_equiv := IsCompactSystem.equiv (Equiv.sumEquivSigmaBool 𝓚 𝓚').symm
+    (IsCompactSystem.sigma_ofFintype hQ)
+  convert h_equiv using 1
+  ext t
+  simp only [Set.mem_ofPred_eq, Set.mem_image, Set.mem_pi, Set.mem_univ, forall_const]
+  constructor
+  · rintro ⟨hl, hr⟩
+    exact ⟨fun | true => Sum.inr ⁻¹' t | false => Sum.inl ⁻¹' t,
+      fun | true => hr | false => hl,
+      by ext ⟨b, x⟩; cases b <;> · simp [Equiv.sumEquivSigmaBool]⟩
+  · rintro ⟨f, hf, hfC⟩
+    have slice : ∀ b x, x ∈ f b ↔ (Equiv.sumEquivSigmaBool 𝓚 𝓚').symm ⟨b, x⟩ ∈ t :=
+      fun b x => by simpa using Set.ext_iff.mp hfC ⟨b, x⟩
+    constructor
+    · specialize hf false
+      simp only [Bool.cond_false] at hf
+      convert hf using 1
+      ext x
+      exact (slice false x).symm
+    · specialize hf true
+      simp only [Bool.cond_true] at hf
+      convert hf using 1
+      ext x
+      exact (slice true x).symm
+
+-- check if we need to insert univ or not
+-- PP: we don't need to insert univ in order for the lemma to be true. We proved that we can insert
+-- univ in any compact system, and it stays a compact system.
+-- this is proved in xxx
+-- proved in some mathlib PR
+
+namespace MeasureTheory
+
+lemma mem_image2_prod_mono {p' : Set (Set 𝓧)} (hp : p ⊆ p') {q' : Set (Set 𝓚)}
+    (hq : q ⊆ q') {s : Set (𝓧 × 𝓚)} (hs : s ∈ Set.image2 (· ×ˢ ·) p q) :
+    s ∈ Set.image2 (· ×ˢ ·) p' q' := by
+  simp only [Set.mem_image2] at hs
+  obtain ⟨A, hpA, B, hqB, rfl⟩ := hs
+  exact ⟨A, hp (hpA), B, hq (hqB), rfl⟩
+
+/-- The set is a countable intersection of countable unions of sets that can be written as a
+product of two sets, each satisfying a property. -/
+def prodSigmaDelta (p : Set (Set 𝓧)) (q : Set (Set 𝓚)) : Set (Set (𝓧 × 𝓚)) :=
+  countableInfClosure (countableSupClosure (Set.image2 (· ×ˢ ·) p q))
+
+lemma biUnion_finset_mem_supClosure' {s : Finset ℕ} (hs_nonempty : s.Nonempty)
+    {A : ℕ → Set 𝓧} (hs : ∀ n ∈ s, A n ∈ p) :
+    (⋃ n ∈ s, A n) ∈ supClosure p := by
+  rw [mem_supClosure_set_iff']
+  exact ⟨s, hs_nonempty, A, hs, rfl⟩
+
+lemma biUnion_finset_mem_supClosure {s : Finset ℕ} (hs_nonempty : s.Nonempty) {A : ℕ → Set 𝓧}
+    (hs : ∀ n ∈ s, A n ∈ supClosure p) :
+    (⋃ n ∈ s, A n) ∈ supClosure p := by
+  have := biUnion_finset_mem_supClosure' hs_nonempty hs
+  rwa [supClosure_idem] at this
+
+lemma mem_prodSigmaDelta_iff {s : Set (𝓧 × 𝓚)} :
+    s ∈ prodSigmaDelta p q ↔
+      ∃ (A : ℕ → ℕ → Set 𝓧) (_ : ∀ n m, A n m ∈ p) (K : ℕ → ℕ → Set 𝓚) (_ : ∀ n m, K n m ∈ q),
+        s = ⋂ n, ⋃ m, A n m ×ˢ K n m := by
+  unfold prodSigmaDelta
+  simp only [mem_countableInfClosure_iff_iInf, mem_countableSupClosure_iff_iSup, Set.mem_image2,
+    Set.iSup_eq_iUnion, Set.iInf_eq_iInter, exists_prop]
+  refine ⟨fun h ↦ ?_, fun h ↦ ?_⟩
+  · choose A hA hs using h
+    choose B hB hB' using hA
+    choose C hC hC' using hB
+    choose D hD hD' using hC'
+    refine ⟨C, hC, D, hD, ?_⟩
+    rw [← hs]
+    simp_rw [hD', ← hB']
+  · obtain ⟨A, hA, K, hK, rfl⟩ := h
+    refine ⟨fun n ↦ ⋃ m, A n m ×ˢ K n m, fun n ↦ ⟨fun m ↦ A n m ×ˢ K n m, fun m ↦ ?_, rfl⟩, rfl⟩
+    exact ⟨A n m, hA n m, ⟨K n m, hK n m, rfl⟩⟩
+
+lemma mem_countableSupClosure_image2_prod_iff {s : Set (𝓧 × 𝓚)} :
+    s ∈ countableSupClosure (Set.image2 (· ×ˢ ·) p q) ↔
+      ∃ (A : ℕ → Set 𝓧) (_ : ∀ n, A n ∈ p) (K : ℕ → Set 𝓚) (_ : ∀ n, K n ∈ q),
+        s = ⋃ n, A n ×ˢ K n := by
+  simp only [mem_countableSupClosure_iff_iSup, Set.mem_image2]
+  refine ⟨fun h ↦ ?_, fun h ↦ ?_⟩
+  · choose A hA hs using h
+    choose B hB C hC hA_eq using hA
+    refine ⟨B, hB, C, hC, ?_⟩
+    simp_rw [← hs, hA_eq]
+    rfl
+  · obtain ⟨A, hA, K, hK, rfl⟩ := h
+    exact ⟨fun n ↦ A n ×ˢ K n, fun n ↦ ⟨A n, hA n, K n, hK n, rfl⟩, rfl⟩
+
+lemma mem_prodSigmaDelta_of_mem {s : Set 𝓧} {t : Set 𝓚} (hs : s ∈ p) (hq : t ∈ q) :
+    s ×ˢ t ∈ prodSigmaDelta p q := by
+  rw [mem_prodSigmaDelta_iff]
+  exact ⟨fun n m ↦ s, fun _ _ ↦ hs, fun n m ↦ t, fun _ _ ↦ hq, by
+    simp [Set.iInter_const, Set.iUnion_const]⟩
+
+lemma prodSigmaDelta.mono {p' : Set (Set 𝓧)} {q' : Set (Set 𝓚)} (hp : p ⊆ p') (hq : q ⊆ q')
+    {s : Set (𝓧 × 𝓚)} (hs : s ∈ prodSigmaDelta p q) :
+    s ∈ prodSigmaDelta p' q' := by
+  simp_rw [mem_prodSigmaDelta_iff] at hs ⊢
+  obtain ⟨A, hA, K, hK, rfl⟩ := hs
+  exact ⟨A, fun n m ↦ hp (hA n m), K, fun n m ↦ hq (hK n m), rfl⟩
+
+/-- If the set is sup-closed, elements of `countableSupClosure` can be written as countable
+unions of *monotone* sequences of sets. -/
+protected
+lemma _root_.SupClosed.mem_countableSupClosure_iff (hp : SupClosed p) {s : Set 𝓧} :
+    s ∈ countableSupClosure p ↔ ∃ A : ℕ → Set 𝓧, (∀ n, A n ∈ p) ∧ Monotone A ∧ s = ⋃ n, A n := by
+  rw [mem_countableSupClosure_iff_iSup]
+  simp only [Set.iSup_eq_iUnion]
+  refine ⟨fun h ↦ ?_, fun ⟨A, hA, _, h_eq⟩ ↦ ⟨A, hA, h_eq.symm⟩⟩
+  choose A hA hs using h
+  refine ⟨Set.accumulate A, fun n ↦ ?_, Set.monotone_accumulate, ?_⟩
+  · induction n with
+    | zero => simp [hA]
+    | succ n hn =>
+      rw [Set.accumulate_succ]
+      exact hp hn (hA _)
+  · rw [Set.iUnion_accumulate, ← hs]
+
+-- proved in a Mathlib PR
+
+-- proved in a Mathlib PR
+
+-- proved in a Mathlib PR
+
+-- He (35.1) in the proof of 1.35
+
+end MeasureTheory

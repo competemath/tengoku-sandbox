@@ -1,0 +1,1 @@
+-- BrownianMotion: a factory bundle (data/intake/brownian-motion). This file only marks the library for Tengoku/All.lean.
