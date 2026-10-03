@@ -7,6 +7,7 @@ import Tengoku
 import Tengoku.Primenumbertheoremand
 import Tengoku.Imoshortlist
 import Tengoku.Aperiodicmonotiles
+import Tengoku.SpherePackingOrig
 import Tengoku.Tautology
 import Tengoku.EquationalTheories
 import Tengoku.AddCombi
