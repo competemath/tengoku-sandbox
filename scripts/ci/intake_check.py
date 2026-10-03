@@ -111,7 +111,9 @@ for i, r in enumerate(manifest, 1):
     if r.get("name") in seen:
         errors.append(f"{where}: {r.get('name')} twice")
     seen.add(r.get("name", ""))
-    if r.get("name") in existing:
+    # a record's name is the declaration as written in its file (inside `namespace X`, `theorem foo` is stored as `foo`; `hφ₀` as `h`): a bare
+    # bundle name equal to one proves nothing about the real names; only a qualified name is compared (the merge queue's build decides the rest)
+    if "." in str(r.get("name")) and r.get("name") in existing:
         errors.append(
             f"{where}: {r.get('name')} is already a record of the tree (the generator renames clashes; a bundle must not carry one)"
         )
@@ -128,7 +130,7 @@ for p in sorted(p for _, p in files if p.endswith(".lean") and p != ALL):
     total += len(text)
     body = []
     for ln in text.split("\n"):
-        m = HEADER.match(ln)
+        m = HEADER.match(ln.split("--", 1)[0])  # a comment after the module name is part of the line
         if m:
             if m.group(1) and not TREE_IMPORT.match(m.group(1)):
                 errors.append(f"{p}: imports {m.group(1)}, which is not the tree")

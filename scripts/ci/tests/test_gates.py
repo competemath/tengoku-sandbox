@@ -817,6 +817,36 @@ class Intake(unittest.TestCase):
         self.assertNotEqual(rc, 0)
         self.assertIn("run_cmd", out)
 
+    def with_record(self, name):
+        """A repository whose base (main) already holds a trusted record of that name, then the bundle's branch."""
+        r = self.repo()
+        r.write(
+            "data/trusted/lib2.jsonl",
+            json.dumps({"name": name, "statement": f"theorem {name} : True", "status": "trusted", "library": "lib2"}) + "\n",
+        )
+        r.commit("a record of the tree")
+        r.git("checkout", "-q", "main")
+        r.git("merge", "-q", "--ff-only", "pr")
+        r.git("checkout", "-q", "pr")
+        return r
+
+    def test_an_import_line_may_carry_a_comment(self):
+        r = self.repo()
+        self.bundle(r, mod="import Tengoku -- the tree\n" + self.MOD.replace("import Tengoku\n", "", 1))
+        rc, out = r.gate("intake_check.py")
+        self.assertEqual(rc, 0, out)
+
+    def test_a_bare_name_equal_to_a_records_proves_nothing_but_a_qualified_one_does(self):
+        r = self.with_record("good")  # the tree's `good` is a record written inside some namespace
+        self.bundle(r, name="good")
+        rc, out = r.gate("intake_check.py")
+        self.assertEqual(rc, 0, out)
+        r2 = self.with_record("Fx.good")
+        self.bundle(r2, name="Fx.good")
+        rc, out = r2.gate("intake_check.py")
+        self.assertNotEqual(rc, 0)
+        self.assertIn("already a record of the tree", out)
+
     def test_the_rebuilt_archive_is_the_factorys_archive(self):
         r = self.repo()
         self.bundle(r)
