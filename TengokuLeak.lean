@@ -31,6 +31,8 @@ structure Counts where
   instScoped : Nat := 0
   simp : Nat := 0
   simpScoped : Nat := 0
+  /-- declarations of the library whose name has one component: nothing in the name says which library they belong to -/
+  roots : Array Name := #[]
 
 def stripForall : Expr → Expr
   | .forallE _ _ b _ => stripForall b
@@ -80,6 +82,10 @@ def scan (pfxs : List Name) : CoreM (Array Leak × Counts) := do
           leaks := leaks.push { kind := "simp", name := n, registeredIn := modName, declaredIn := dm,
                                 line := if dm == some modName then r.map (·.range.pos.line) else none }
       | .global _ => pure ()
+  for (n, _) in env.constants.map₁.toList do
+    if let some m := env.getModuleIdxFor? n then
+      if idxs.contains m && n.isAtomic && !n.isInternal && !n.hasMacroScopes then
+        counts := { counts with roots := counts.roots.push n }
   return (leaks, counts)
 
 def report (treePrefix : Name) (leaks : Array Leak) (c : Counts) : List String :=
@@ -89,7 +95,8 @@ def report (treePrefix : Name) (leaks : Array Leak) (c : Counts) : List String :
        | some n, _ => s!" (declared at line {n})"
        | none, some m => s!" (declared in {m}: an `attribute` command of the library turns it on)"
        | none, none => "")
-  rows ++ [s!"leakscan: {c.inst} global instances ({(leaks.filter (·.kind == "instance")).size} touch no type of the library), {c.instScoped} scoped; " ++
+  rows ++ [s!"roots: {c.roots.size} declarations of the library are in the root namespace (nothing in their names tells libraries apart; a second library declaring one fails to import): " ++
+    s!"{(c.roots.toList.take 20).map toString}"] ++ [s!"leakscan: {c.inst} global instances ({(leaks.filter (·.kind == "instance")).size} touch no type of the library), {c.instScoped} scoped; " ++
     s!"{c.simp} global simp lemmas ({(leaks.filter (·.kind == "simp")).size} trigger on nothing of the library), {c.simpScoped} scoped"]
 
 unsafe def main (argv : List String) : IO UInt32 := do
