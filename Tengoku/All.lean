@@ -5,6 +5,7 @@ import Tengoku.Physlib
 import Tengoku.Leanslt
 import Tengoku.FormalMathfin
 import Tengoku.Leanmodularforms
+import Tengoku.SphereEversion
 import Tengoku
 import Tengoku.Primenumbertheoremand
 import Tengoku.Imoshortlist
