@@ -1,0 +1,36 @@
+{
+ "library": "automatatheory",
+ "lint_mode": "strict",
+ "modules_in_bundle": 11,
+ "modules_dropped": 16,
+ "dropped": {
+  "AutomataTheory.Languages.Basic": "lint: `postfix` runs code while the tree compiles (or trusts the compiler); attribute `notation_class` is not on the allow-list; `postfix` does not start an allowed command",
+  "AutomataTheory": "imports a module that cannot go to the tree",
+  "AutomataTheory.Automata.Loop": "imports a module that cannot go to the tree",
+  "AutomataTheory.Automata.Concat": "imports a module that cannot go to the tree",
+  "AutomataTheory.Congruences.Basic": "imports a module that cannot go to the tree",
+  "AutomataTheory.Automata.Congr": "imports a module that cannot go to the tree",
+  "AutomataTheory.Automata.Det": "imports a module that cannot go to the tree",
+  "AutomataTheory.Languages.RegLang": "imports a module that cannot go to the tree",
+  "AutomataTheory.Automata.DetConcat": "imports a module that cannot go to the tree",
+  "AutomataTheory.Automata.DetProd": "imports a module that cannot go to the tree",
+  "AutomataTheory.Languages.DetMullerLang": "imports a module that cannot go to the tree",
+  "AutomataTheory.Automata.PSet": "imports a module that cannot go to the tree",
+  "AutomataTheory.Languages.ChouekaLemma": "imports a module that cannot go to the tree",
+  "AutomataTheory.Automata.Pair": "imports a module that cannot go to the tree",
+  "AutomataTheory.Congruences.BuchiCongr": "imports a module that cannot go to the tree",
+  "AutomataTheory.Languages.OmegaRegLang": "imports a module that cannot go to the tree"
+ },
+ "theorems": 67,
+ "passed_total": 108,
+ "left_out": {
+  "imports a module that cannot go to the tree": 33,
+  "lint: `postfix` runs code while the tree compiles (or trusts the compiler); attribute `notation_class` is not on the all": 8
+ },
+ "kept_constants": 471,
+ "lint_cost": {
+  "attribute `notation_class` is not on the allow-list": 41,
+  "`postfix` runs code while the tree compiles (or trusts the compiler)": 41,
+  "`postfix` does not start an allowed command": 41
+ }
+}
