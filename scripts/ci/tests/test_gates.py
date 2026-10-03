@@ -790,7 +790,7 @@ class Intake(unittest.TestCase):
         rc, out = r.gate("lint_banked.py", env={"TENGOKU_INTAKE_LINT": "proposed"})
         self.assertEqual(rc, 0, out)
         # and only inside the bundle's own modules: a notation in any other module of the tree is still refused
-        r.write("Tengoku/Lib/Basic.lean", "theorem Lib.old : 1 + 1 = 2 := rfl\nnotation \"ℓ\" => 1\n")
+        r.write("Tengoku/Lib/Basic.lean", 'theorem Lib.old : 1 + 1 = 2 := rfl\nnotation "ℓ" => 1\n')
         r.commit("a notation in an older library")
         rc, out = r.gate("lint_banked.py", env={"TENGOKU_INTAKE_LINT": "proposed"})
         self.assertNotEqual(rc, 0)
