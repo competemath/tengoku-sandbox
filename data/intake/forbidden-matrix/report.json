@@ -1,0 +1,20 @@
+{
+ "library": "forbidden-matrix",
+ "lint_mode": "strict",
+ "modules_in_bundle": 5,
+ "modules_dropped": 2,
+ "dropped": {
+  "ForbiddenMatrix.PermutationPatterns": "lint: `#t`: no # commands in a record; `#P_pts`: no # commands in a record",
+  "ForbiddenMatrix": "imports a module that cannot go to the tree"
+ },
+ "theorems": 37,
+ "passed_total": 51,
+ "left_out": {
+  "lint: `#t`: no # commands in a record; `#P_pts`: no # commands in a record": 14
+ },
+ "kept_constants": 286,
+ "lint_cost": {
+  "`#t`: no # commands in a record": 14,
+  "`#P_pts`: no # commands in a record": 14
+ }
+}
