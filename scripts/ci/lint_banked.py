@@ -16,8 +16,9 @@ import sys
 import tempfile
 from pathlib import Path
 
-from _git import added_lines, changed_files, fail, load_schema, match, pascal
+from _git import added_lines, blob, changed_files, fail, load_schema, match, pascal
 from allowlist import violations
+from lean_lex import code_only
 
 # a line that starts (after its attributes and a scoped/local) a declaration of syntax: one message, two patterns
 _DECLARATION_PREFIX = r"^\s*(@\[[^\]]*\]\s*)*(scoped\s+|local\s+)?"
@@ -89,22 +90,30 @@ def record_errors(base: str, head: str, p: str, allowed: set[str]) -> list[str]:
     return errors
 
 
-def module_errors(base: str, head: str, p: str, allowed: set[str], intake: tuple[str, ...] = ()) -> list[str]:
-    """The lines a PR adds to a module: `import` lines are the generator's own (a promotion regenerates them); records may not contain one."""
-    added = "\n".join(t for _, t in added_lines(base, head, p) if not re.match(r"^\s*import\b", t))
-    return check_text(p, added, allowed, notation_ok=p.startswith(intake) if intake else False)
+def module_errors(base: str, head: str, p: str, allowed: set[str], intake: tuple[str, ...] = (), added: bool = False) -> list[str]:
+    """The lines a PR adds to a module: `import` lines are the generator's own (a promotion regenerates them); records may not contain one.
+    A module the PR adds is read whole and without its comments and string literals (lean_lex.code_only): the words this list refuses are
+    refused where they run, not where a docstring mentions them (`#print axioms` in a doc comment is prose). A module the PR changes is read
+    by the lines it adds, comments included: a line alone cannot tell code from the middle of a comment."""
+    notation_ok = p.startswith(intake) if intake else False
+    raw = blob(head, p) if added else None
+    if raw is not None:
+        text = "\n".join(ln for ln in raw.decode("utf-8", "replace").split("\n") if not re.match(r"^\s*import\b", ln))
+        return check_text(p, code_only(text), allowed, notation_ok=notation_ok)
+    text = "\n".join(t for _, t in added_lines(base, head, p) if not re.match(r"^\s*import\b", t))
+    return check_text(p, text, allowed, notation_ok=notation_ok)
 
 
 def diff_errors(base: str, head: str, allowed: set[str]) -> list[str]:
     errors: list[str] = []
     intake = intake_modules(base, head)
-    for _, p in changed_files(base, head):
+    for st, p in changed_files(base, head):
         if match(p, RECORD_FILES):
             errors += record_errors(base, head, p, allowed)
         elif p.endswith(".lean") and p.startswith(
             "Tengoku/"
         ):  # modules only; root tool programs (TengokuExtract/TengokuAxioms) run in CI, not in the library
-            errors += module_errors(base, head, p, allowed, intake)
+            errors += module_errors(base, head, p, allowed, intake, added=st == "A")
     return errors
 
 
