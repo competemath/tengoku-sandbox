@@ -10,12 +10,14 @@ dangers below. Existing records are not re-judged: only lines a PR adds."""
 from __future__ import annotations
 
 import json
+import os
 import re
 import sys
 
-from _git import added_lines, changed_files, fail, load_schema, match
+from _git import added_lines, changed_files, fail, load_schema, match, pascal
 from allowlist import violations
 
+NOTATION = "syntax/macro/elab/notation declarations"
 FORBIDDEN = [
     (re.compile(r"^\s*import\b", re.M), "import (the generator supplies imports)"),
     (re.compile(r"#eval\b"), "#eval"),
@@ -34,7 +36,7 @@ FORBIDDEN = [
             r"^\s*(@\[[^\]]*\]\s*)*(scoped\s+|local\s+)?(macro|macro_rules|syntax|elab|elab_rules|declare_syntax_cat|notation3?|infixl?|infixr|prefix|postfix)\b",
             re.M,
         ),
-        "syntax/macro/elab/notation declarations",
+        NOTATION,
     ),
     (re.compile(r"\bnative_decide\b"), "native_decide (trusts the compiler)"),
     (re.compile(r"^\s*opaque\b", re.M), "opaque"),
@@ -44,9 +46,20 @@ FORBIDDEN = [
 SET_OPTION = re.compile(r"set_option\s+([A-Za-z_][\w.]*)")
 
 
-def check_text(label: str, text: str, allowed: set[str]) -> list[str]:
+def intake_modules(base: str, head: str) -> tuple[str, ...]:
+    """The module paths of an intake bundle in this diff, when the repository's intake lint is `proposed` (variable TENGOKU_INTAKE_LINT):
+    notation commands are allowed there, as in scripts/ci/intake_check.py (the allow-list lint of the bundle). Nowhere else."""
+    if os.environ.get("TENGOKU_INTAKE_LINT") != "proposed":
+        return ()
+    libs = {m.group(1) for _, p in changed_files(base, head) if (m := re.fullmatch(r"data/intake/([^/]+)/manifest\.jsonl", p))}
+    return tuple(x for lib in libs for x in (f"Tengoku/{pascal(lib)}/", f"Tengoku/{pascal(lib)}.lean"))
+
+
+def check_text(label: str, text: str, allowed: set[str], notation_ok: bool = False) -> list[str]:
     out = []
     for re_, why in FORBIDDEN:
+        if why == NOTATION and notation_ok:
+            continue
         if re_.search(text):
             out.append(f"{label}: {why}")
     for opt in SET_OPTION.findall(text):
@@ -62,6 +75,7 @@ def main() -> None:
         errors = check_text(sys.argv[2], open(sys.argv[2]).read(), allowed)
     else:
         base, head = sys.argv[1], sys.argv[2]
+        intake = intake_modules(base, head)
         for st, p in changed_files(base, head):
             if match(
                 p,
@@ -90,7 +104,12 @@ def main() -> None:
                 "Tengoku/"
             ):  # modules only; root tool programs (TengokuExtract/TengokuAxioms) run in CI, not in the library
                 # `import` lines in a module are the generator's own (a promotion regenerates them); records may not contain one.
-                errors += check_text(p, "\n".join(t for _, t in added_lines(base, head, p) if not re.match(r"^\s*import\b", t)), allowed)
+                errors += check_text(
+                    p,
+                    "\n".join(t for _, t in added_lines(base, head, p) if not re.match(r"^\s*import\b", t)),
+                    allowed,
+                    notation_ok=p.startswith(intake) if intake else False,
+                )
     if errors:
         fail("banked content lint:\n  " + "\n  ".join(errors[:20]))
     print("content lint OK")
