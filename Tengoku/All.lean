@@ -5,6 +5,7 @@ import Tengoku
 import Tengoku.Imoshortlist
 import Tengoku.Tautology
 import Tengoku.EquationalTheories
+import Tengoku.LerayHopf
 import Tengoku.AddCombi
 import Tengoku.Vcvio
 import Tengoku.Compfiles
