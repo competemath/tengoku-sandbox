@@ -6,5 +6,6 @@ import Tengoku.Imoshortlist
 import Tengoku.Tautology
 import Tengoku.EquationalTheories
 import Tengoku.AddCombi
+import Tengoku.Pfr
 import Tengoku.Vcvio
 import Tengoku.Compfiles
