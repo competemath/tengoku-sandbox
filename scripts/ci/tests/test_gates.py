@@ -758,6 +758,21 @@ class Intake(unittest.TestCase):
         self.assertNotEqual(rc, 0)
         self.assertIn("not valid UTF-8", out)
 
+    def test_the_queues_content_lint_follows_the_intake_lint_policy(self):
+        r = self.repo()
+        self.bundle(r, mod=self.MOD + '\nnotation "ℓ" => 1\n')
+        rc, out = r.gate("lint_banked.py")
+        self.assertNotEqual(rc, 0)  # strict: a notation command is not allowed anywhere
+        self.assertIn("notation", out)
+        rc, out = r.gate("lint_banked.py", env={"TENGOKU_INTAKE_LINT": "proposed"})
+        self.assertEqual(rc, 0, out)
+        # and only inside the bundle's own modules: a notation in any other module of the tree is still refused
+        r.write("Tengoku/Lib/Basic.lean", "theorem Lib.old : 1 + 1 = 2 := rfl\nnotation \"ℓ\" => 1\n")
+        r.commit("a notation in an older library")
+        rc, out = r.gate("lint_banked.py", env={"TENGOKU_INTAKE_LINT": "proposed"})
+        self.assertNotEqual(rc, 0)
+        self.assertIn("Tengoku/Lib/Basic.lean", out)
+
     def test_the_rebuilt_archive_is_the_factorys_archive(self):
         r = self.repo()
         self.bundle(r)
