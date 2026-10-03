@@ -19,40 +19,89 @@ def _blank(s: str) -> str:
     return "".join("\n" if ch == "\n" else " " for ch in s)
 
 
+def _past(text: str, k: int, closer: str) -> int:
+    """The index just past the next `closer` found from `k`; the end of the text when there is none."""
+    e = text.find(closer, k)
+    return len(text) if e < 0 else e + len(closer)
+
+
+def _block_comment_end(text: str, k: int) -> int:
+    """The index just past the (nested) block comment whose `/-` is at `k`; the end when it never closes."""
+    depth, k, n = 1, k + 2, len(text)
+    while k < n and depth:
+        if text.startswith("/-", k):
+            depth, k = depth + 1, k + 2
+        elif text.startswith("-/", k):
+            depth, k = depth - 1, k + 2
+        else:
+            k += 1
+    return k
+
+
+def _line_comment_end(text: str, k: int) -> int:
+    """The index of the line break that ends the comment at `k` (the end of the text when there is none)."""
+    nl = text.find("\n", k)
+    return len(text) if nl < 0 else nl
+
+
+def _string_body_end(text: str, i: int) -> int:
+    """For a plain string whose opening quote is at `i`: the index of its closing quote (at or past the end if unclosed)."""
+    j, n = i + 1, len(text)
+    while j < n and text[j] != '"':
+        j += 2 if text[j] == "\\" else 1
+    return j
+
+
+def _after_ident(text: str, i: int) -> bool:
+    return i > 0 and bool(_IDENT.match(text[i - 1]))
+
+
+def _raw_open(text: str, i: int) -> re.Match[str] | None:
+    """The opening `r#"` of a raw string at `i`, unless the `r` ends an identifier."""
+    if text[i] != "r" or _after_ident(text, i):
+        return None
+    return _RAW_OPEN.match(text, i)
+
+
+def _is_interpolated_quote(text: str, i: int) -> bool:
+    """`s!"`, `m!"`, `f!"`: a quote after `!` after an identifier character opens an interpolated string."""
+    return text[i] == '"' and i >= 2 and text[i - 1] == "!" and bool(_IDENT.match(text[i - 2]))
+
+
+def _char_literal(text: str, i: int) -> re.Match[str] | None:
+    """A character literal at `i`, unless the quote is an identifier's prime."""
+    if text[i] != "'" or _after_ident(text, i):
+        return None
+    return _CHAR.match(text, i)
+
+
+def _skip_opaque(text: str, k: int) -> int | None:
+    """If a comment, escaped identifier, string or character literal starts at `k`, the index just past it; else None."""
+    if text[k] == "«":  # an escaped identifier: opaque
+        return _past(text, k + 1, "»")
+    if text.startswith("/-", k):
+        return _block_comment_end(text, k)
+    if text.startswith("--", k):
+        return _line_comment_end(text, k)
+    if m := _raw_open(text, k):  # a raw string: a brace or quote inside it is text
+        return _past(text, m.end(), '"' + m.group(1))
+    if _is_interpolated_quote(text, k):
+        return _interpolated(text, k)[1]
+    if text[k] == '"':
+        return _string_body_end(text, k) + 1
+    if m := _char_literal(text, k):
+        return m.end()
+    return None
+
+
 def _hole_end(text: str, j: int) -> int:
     """The index just past the `}` that closes the interpolation hole whose `{` is at `j`. Braces count only in code:
     strings (interpolated ones included), character literals and comments inside the hole are stepped over whole."""
     depth, k, n = 1, j + 1, len(text)
     while k < n and depth:
-        prev_ident = bool(_IDENT.match(text[k - 1]))
-        if text[k] == "«":  # an escaped identifier: opaque
-            e = text.find("»", k + 1)
-            k = n if e < 0 else e + 1
-        elif text.startswith("/-", k):
-            d, k = 1, k + 2
-            while k < n and d:
-                if text.startswith("/-", k):
-                    d, k = d + 1, k + 2
-                elif text.startswith("-/", k):
-                    d, k = d - 1, k + 2
-                else:
-                    k += 1
-        elif text.startswith("--", k):
-            nl = text.find("\n", k)
-            k = n if nl < 0 else nl
-        elif text[k] == "r" and not prev_ident and (m := _RAW_OPEN.match(text, k)):
-            close = '"' + m.group(1)  # a raw string: a brace or quote inside it is text
-            e = text.find(close, m.end())
-            k = n if e < 0 else e + len(close)
-        elif text[k] == '"' and k >= 2 and text[k - 1] == "!" and _IDENT.match(text[k - 2]):
-            _, k = _interpolated(text, k)
-        elif text[k] == '"':
-            k += 1
-            while k < n and text[k] != '"':
-                k += 2 if text[k] == "\\" else 1
-            k += 1
-        elif text[k] == "'" and not prev_ident and (m := _CHAR.match(text, k)):
-            k = m.end()
+        skipped = _skip_opaque(text, k)
+        if skipped is not None:
+            k = skipped
         else:
             depth += {"{": 1, "}": -1}.get(text[k], 0)
             k += 1
@@ -80,51 +129,43 @@ def _interpolated(text: str, i: int) -> tuple[str, int]:
     return "".join(out), j + 1
 
 
+def _emit(text: str, i: int, out: list[str]) -> int:
+    """Append what the token at `i` leaves in the code-only text to `out`; the index after the token."""
+    c = text[i]
+    if c == "«":  # an escaped identifier: its text is a name, whatever it contains (--, /-, braces, quotes)
+        j = _past(text, i + 1, "»")
+        out.append(text[i:j])
+        return j
+    if text.startswith("/-", i):  # a block comment leaves its line breaks, so line numbers stay put
+        j = _block_comment_end(text, i)
+        out.append("\n" * text.count("\n", i, j))
+        return j
+    if text.startswith("--", i):
+        return _line_comment_end(text, i)
+    if m := _raw_open(text, i):
+        close = '"' + m.group(1)
+        j = text.find(close, m.end())
+        j = len(text) if j < 0 else j
+        out.append(text[i : m.end()] + _blank(text[m.end() : j]) + close)  # delimiters kept: columns stay put
+        return j + len(close)
+    if _is_interpolated_quote(text, i):
+        s, j = _interpolated(text, i)  # s!"…{e}…": the holes are code
+        out.append(s)
+        return j
+    if c == '"':
+        j = _string_body_end(text, i)
+        out.append('"' + _blank(text[i + 1 : min(j, len(text))]) + '"')
+        return j + 1
+    if m := _char_literal(text, i):
+        out.append("' '")
+        return m.end()
+    out.append(c)
+    return i + 1
+
+
 def code_only(text: str) -> str:
     out: list[str] = []
-    i, n, depth = 0, len(text), 0
+    i, n = 0, len(text)
     while i < n:
-        if depth:  # inside a block comment: only nested delimiters and line breaks matter
-            if text.startswith("/-", i):
-                depth, i = depth + 1, i + 2
-            elif text.startswith("-/", i):
-                depth, i = depth - 1, i + 2
-            else:
-                if text[i] == "\n":
-                    out.append("\n")
-                i += 1
-            continue
-        c = text[i]
-        prev_ident = i > 0 and bool(_IDENT.match(text[i - 1]))
-        if c == "«":  # an escaped identifier: its text is a name, whatever it contains (--, /-, braces, quotes)
-            j = text.find("»", i + 1)
-            j = n if j < 0 else j + 1
-            out.append(text[i:j])
-            i = j
-        elif text.startswith("/-", i):
-            depth, i = 1, i + 2
-        elif text.startswith("--", i):
-            j = text.find("\n", i)
-            i = n if j < 0 else j
-        elif c == "r" and not prev_ident and (m := _RAW_OPEN.match(text, i)):
-            close = '"' + m.group(1)
-            j = text.find(close, m.end())
-            j = n if j < 0 else j
-            out.append(text[i : m.end()] + _blank(text[m.end() : j]) + close)  # delimiters kept: columns stay put
-            i = j + len(close)
-        elif c == '"' and i >= 2 and text[i - 1] == "!" and _IDENT.match(text[i - 2]):
-            s, i = _interpolated(text, i)  # s!"…{e}…": the holes are code
-            out.append(s)
-        elif c == '"':
-            j = i + 1
-            while j < n and text[j] != '"':
-                j += 2 if text[j] == "\\" else 1
-            out.append('"' + _blank(text[i + 1 : min(j, n)]) + '"')
-            i = j + 1
-        elif c == "'" and not prev_ident and (m := _CHAR.match(text, i)):
-            out.append("' '")
-            i = m.end()
-        else:
-            out.append(c)
-            i += 1
+        i = _emit(text, i, out)
     return "".join(out)

@@ -59,7 +59,12 @@ jobs:
           git show "$GITHUB_SHA:scripts/ci/axiom_scan.py" > "$RUNNER_TEMP/axiom_scan.py"
       - name: elan
         run: |
-          curl -sSfL https://raw.githubusercontent.com/leanprover/elan/0e36a07b9bbcc5381fa6250df109f9a4f94d7bac/elan-init.sh | sh -s -- -y --default-toolchain none   # the installer at a fixed commit (as promote.yml)
+          # elan at a fixed version, checked against its published sha256 (a moving `latest` would run whatever it is today)
+          elan_tgz=elan-x86_64-unknown-linux-gnu.tar.gz
+          curl -sSfL --proto '=https' --tlsv1.2 -o "$elan_tgz" "https://github.com/leanprover/elan/releases/download/v4.2.4/$elan_tgz"
+          echo "42b94d4244e8353142c456ec0e4ca6528fd898a6c604d4059f494e706e431f63  $elan_tgz" | sha256sum -c -
+          tar xzf "$elan_tgz"
+          ./elan-init -y --default-toolchain none
           echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
       - name: The compiled tree (the published cache, then whatever this commit has beyond it)
         env: { GH_TOKEN: "${{ github.token }}" }   # gh attestation verify

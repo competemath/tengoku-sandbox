@@ -66,7 +66,11 @@ jobs:
 
       - name: Install elan (toolchain pinned by lean-toolchain)
         run: |
-          curl -sSfL https://github.com/leanprover/elan/releases/latest/download/elan-x86_64-unknown-linux-gnu.tar.gz | tar xz
+          # elan at a fixed version, checked against its published sha256 (a moving `latest` would run whatever it is today)
+          elan_tgz=elan-x86_64-unknown-linux-gnu.tar.gz
+          curl -sSfL --proto '=https' --tlsv1.2 -o "$elan_tgz" "https://github.com/leanprover/elan/releases/download/v4.2.4/$elan_tgz"
+          echo "42b94d4244e8353142c456ec0e4ca6528fd898a6c604d4059f494e706e431f63  $elan_tgz" | sha256sum -c -
+          tar xzf "$elan_tgz"
           ./elan-init -y --default-toolchain none
           echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
 
@@ -221,7 +225,7 @@ jobs:
   relaunch:
     needs: build
     # only after a build job that ended well (time cap reached, or a stale tip): a failed build never re-dispatches
-    if: needs.build.result == 'success' && ((needs.build.outputs.complete == 'false' && github.event.inputs.resumed != '5') || (needs.build.outputs.stale == 'true' && github.event.inputs.retried != '2'))
+    if: needs.build.result == 'success' && ((needs.build.outputs.complete == 'false' && fromJSON(github.event.inputs.resumed || '0') < 5) || (needs.build.outputs.stale == 'true' && fromJSON(github.event.inputs.retried || '0') < 2))
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions: { actions: write }
@@ -260,14 +264,14 @@ jobs:
           for space in $SPACES; do
             host="$(echo "$space" | tr '/A-Z' '-a-z').hf.space"
             if [ -n "$HF_TOKEN" ]; then
-              if curl -fsS -o /dev/null -X POST -H "Authorization: Bearer $HF_TOKEN" \
+              if curl --proto '=https' --tlsv1.2 -fsS -o /dev/null -X POST -H "Authorization: Bearer $HF_TOKEN" \
                    "https://huggingface.co/api/spaces/$space/restart?factory=true"; then
                 echo "$space: factory rebuild requested (bakes the new cache into the image)"
               else
                 echo "::warning::$space: rebuild request failed; it refreshes itself on its next start"
               fi
             else
-              if out="$(curl -fsS -m 30 -X POST "https://$host/refresh" 2>/dev/null)"; then
+              if out="$(curl --proto '=https' --tlsv1.2 -fsS -m 30 -X POST "https://$host/refresh" 2>/dev/null)"; then
                 echo "$space: $out"
               else
                 echo "$space: not reachable (asleep?) — it refreshes itself on its next start"

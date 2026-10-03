@@ -174,6 +174,29 @@ class Gates(unittest.TestCase):
         for needle in ["status 'trusted'", "allowlist", "already trusted", "not JSON", "library 'other'"]:
             self.assertIn(needle, out)
 
+    def test_source_path_stays_in_the_corpus(self):
+        r = Repo()
+        paths = ["../../.github/workflows/x.lean", "/etc/passwd", "-rf/x.lean", "A/../../B.lean", "A\\B.lean", "~/x.lean", ".", "A/.", "A/"]
+        for i, sp in enumerate(paths):
+            r.append(
+                "data/staging/lib.jsonl",
+                json.dumps({**GOOD, "name": f"Lib.p{i}", "statement": f"theorem Lib.p{i} : 1 + 1 = 2", "source_path": sp}) + "\n",
+            )
+        r.commit("paths that leave the corpus")
+        rc, out = r.gate("validate_records.py")
+        self.assertEqual(rc, 1)
+        for sp in paths:  # (on Actions every error is printed twice, as an annotation and as a line: no counting)
+            self.assertIn(f"source_path {sp!r} is not a path inside the corpus", out)
+        ok = Repo()
+        ok.append(
+            "data/staging/lib.jsonl",
+            json.dumps({**GOOD, "name": "Lib.fine", "statement": "theorem Lib.fine : 1 + 1 = 2", "source_path": "Lib/Sub/File.lean"})
+            + "\n",
+        )
+        ok.commit("a path inside the corpus")
+        rc, out = ok.gate("validate_records.py")
+        self.assertNotIn("is not a path inside the corpus", out)
+
     def test_content_lint(self):
         r = Repo()
         for i, (body, why) in enumerate(
@@ -767,7 +790,7 @@ class Intake(unittest.TestCase):
         rc, out = r.gate("lint_banked.py", env={"TENGOKU_INTAKE_LINT": "proposed"})
         self.assertEqual(rc, 0, out)
         # and only inside the bundle's own modules: a notation in any other module of the tree is still refused
-        r.write("Tengoku/Lib/Basic.lean", "theorem Lib.old : 1 + 1 = 2 := rfl\nnotation \"ℓ\" => 1\n")
+        r.write("Tengoku/Lib/Basic.lean", 'theorem Lib.old : 1 + 1 = 2 := rfl\nnotation "ℓ" => 1\n')
         r.commit("a notation in an older library")
         rc, out = r.gate("lint_banked.py", env={"TENGOKU_INTAKE_LINT": "proposed"})
         self.assertNotEqual(rc, 0)
@@ -1097,7 +1120,9 @@ class Sbom(unittest.TestCase):
             self.assertEqual(by["mathlib"]["purl"], "pkg:github/leanprover-community/mathlib4@" + "a" * 40)
             self.assertEqual(by["equational-theories"]["version"], "c" * 40)
             records = {p["name"]: p["value"] for p in by["equational-theories"]["properties"]}
-            self.assertEqual(records["tengoku:trusted-records"], "2")  # the tombstone is not a record
+            self.assertEqual(
+                records["tengoku:trusted-records"], "1"
+            )  # a tombstone is not a record, and the record it retracts is not counted
             self.assertEqual(by["competemath"]["licenses"][0]["license"]["id"], "Apache-2.0")
 
 
