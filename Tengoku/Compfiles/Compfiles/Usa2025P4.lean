@@ -1,0 +1,255 @@
+/-
+Copyright (c) 2026. All rights reserved.
+Released under Apache 2.0 license as described in the file LICENSE.
+Authors: Daniel Liao
+-/
+
+module
+
+public import Tengoku
+public import Tengoku.Std
+public import Tengoku.Tactic.Aesop
+public import Tengoku.Meta.Qq
+
+@[expose] public section
+
+/-!
+# USA Mathematical Olympiad 2025, Problem 4
+
+Let `H` be the orthocenter of an acute triangle `ABC`, let `F` be the foot of the altitude
+from `C` to `AB`, and let `P` be the reflection of `H` across `BC`. Suppose that the
+circumcircle of triangle `AFP` intersects line `BC` at two distinct points `X` and `Y`.
+Prove that `CX = CY`.
+
+-/
+
+namespace Usamo2025P4
+
+open EuclideanGeometry RealInnerProductSpace
+
+noncomputable def Mc (A H C : EuclideanSpace ℝ (Fin 2)) : EuclideanSpace ℝ (Fin 2) :=
+  (2⁻¹ : ℝ) • (A - H + (2 : ℝ) • C)
+
+/-- A point on line `RS` differs from `R` by a multiple of `S -ᵥ R`. -/
+lemma vsub_smul_of_mem_pair {R S Q : EuclideanSpace ℝ (Fin 2)}
+    (hQ : Q ∈ affineSpan ℝ ({R, S} : Set (EuclideanSpace ℝ (Fin 2)))) :
+    ∃ k : ℝ, Q -ᵥ R = k • (S -ᵥ R) := by
+  have hmem : Q -ᵥ R ∈ vectorSpan ℝ ({R, S} : Set (EuclideanSpace ℝ (Fin 2))) := by
+    rw [← direction_affineSpan]
+    exact AffineSubspace.vsub_mem_direction hQ (left_mem_affineSpan_pair ℝ R S)
+  rw [vectorSpan_pair] at hmem
+  obtain ⟨k, hk⟩ := Submodule.mem_span_singleton.mp hmem
+  exact ⟨-k, by rw [← hk, neg_smul, ← smul_neg, neg_vsub_eq_vsub_rev]⟩
+
+lemma p4_reduction (B C O X Y : EuclideanSpace ℝ (Fin 2))
+    (hperp : ⟪O -ᵥ C, B -ᵥ C⟫ = 0)
+    (hX : X ∈ affineSpan ℝ ({B, C} : Set (EuclideanSpace ℝ (Fin 2))))
+    (hY : Y ∈ affineSpan ℝ ({B, C} : Set (EuclideanSpace ℝ (Fin 2))))
+    (hd : dist O X = dist O Y) :
+    dist C X = dist C Y := by
+  -- Every point `Z` on line `BC` satisfies `O -ᵥ C ⊥ Z -ᵥ C`, since `Z -ᵥ C` is a
+  -- multiple of `B -ᵥ C`.
+  have key : ∀ Z : EuclideanSpace ℝ (Fin 2),
+      Z ∈ affineSpan ℝ ({B, C} : Set (EuclideanSpace ℝ (Fin 2))) →
+      ⟪O -ᵥ C, Z -ᵥ C⟫ = 0 := by
+    intro Z hZ
+    obtain ⟨k, hk⟩ := vsub_smul_of_mem_pair hZ
+    have hZC : Z -ᵥ C = (1 - k) • (B -ᵥ C) := by
+      rw [show Z -ᵥ C = (Z -ᵥ B) + (B -ᵥ C) by rw [vsub_add_vsub_cancel], hk]
+      simp only [vsub_eq_sub]; module
+    rw [hZC, real_inner_smul_right, hperp, mul_zero]
+  -- Pythagoras: as `C` is the foot of the perpendicular from `O` to line `BC`,
+  -- `OZ² = OC² + CZ²` for any `Z` on the line.
+  have pyth : ∀ Z : EuclideanSpace ℝ (Fin 2), ⟪O -ᵥ C, Z -ᵥ C⟫ = 0 →
+      dist O Z ^ 2 = dist O C ^ 2 + dist C Z ^ 2 := by
+    exact fun _ hZ => dist_sq_of_inner_eq_zero hZ
+  have hsq : dist C X ^ 2 = dist C Y ^ 2 := by
+    have e1 := pyth X (key X hX)
+    have e2 := pyth Y (key Y hY)
+    have hOXY : dist O X ^ 2 = dist O Y ^ 2 := by rw [hd]
+    linarith
+  exact (sq_eq_sq₀ dist_nonneg dist_nonneg).mp hsq
+
+lemma p4_circumcenter (A B C H F P : EuclideanSpace ℝ (Fin 2))
+    (hH1 : ⟪H -ᵥ A, C -ᵥ B⟫ = 0)
+    (hH2 : ⟪H -ᵥ B, C -ᵥ A⟫ = 0)
+    (hFline : F ∈ affineSpan ℝ ({A, B} : Set (EuclideanSpace ℝ (Fin 2))))
+    (hFperp : ⟪C -ᵥ F, B -ᵥ A⟫ = 0)
+    (hPperp : ⟪P -ᵥ H, C -ᵥ B⟫ = 0)
+    (hPmid : midpoint ℝ H P ∈ affineSpan ℝ ({B, C} : Set (EuclideanSpace ℝ (Fin 2)))) :
+    dist (Mc A H C) A = dist (Mc A H C) F ∧ dist (Mc A H C) A = dist (Mc A H C) P := by
+  -- The third orthocenter relation: `CH ⊥ AB`, derived from `AH ⊥ BC` and `BH ⊥ CA`.
+  have hCH : ⟪C -ᵥ H, B -ᵥ A⟫ = 0 := by
+    have h1 := hH1; have h2 := hH2
+    simp only [vsub_eq_sub, inner_sub_left, inner_sub_right] at h1 h2 ⊢
+    linarith [real_inner_comm A B, real_inner_comm A C, real_inner_comm B C]
+  obtain ⟨t, ht⟩ := vsub_smul_of_mem_pair hFline
+  obtain ⟨w, hw⟩ := vsub_smul_of_mem_pair hPmid
+  refine ⟨AffineSubspace.mem_perpBisector_iff_dist_eq.mp ?_, AffineSubspace.mem_perpBisector_iff_dist_eq.mp ?_⟩
+  · -- `Mc` lies on the perpendicular bisector of `A` and `F`.
+    rw [AffineSubspace.mem_perpBisector_iff_inner_eq_zero']
+    have hmid : Mc A H C -ᵥ midpoint ℝ A F = (2⁻¹ : ℝ) • ((C -ᵥ H) + (C -ᵥ F)) := by
+      simp only [Mc, midpoint_eq_smul_add, vsub_eq_sub, invOf_eq_inv]; module
+    have e1 : ⟪B -ᵥ A, C -ᵥ H⟫ = 0 := by rw [real_inner_comm]; exact hCH
+    have e2 : ⟪B -ᵥ A, C -ᵥ F⟫ = 0 := by rw [real_inner_comm]; exact hFperp
+    rw [hmid, ht, real_inner_smul_left, real_inner_smul_right, inner_add_right, e1, e2]
+    ring
+  · -- `Mc` lies on the perpendicular bisector of `A` and `P`.
+    rw [AffineSubspace.mem_perpBisector_iff_inner_eq_zero']
+    have hmidP : Mc A H C -ᵥ midpoint ℝ A P = C -ᵥ midpoint ℝ H P := by
+      simp only [Mc, midpoint_eq_smul_add, vsub_eq_sub, invOf_eq_inv]; module
+    have hCm : C -ᵥ midpoint ℝ H P = (1 - w) • (C -ᵥ B) := by
+      rw [show C -ᵥ midpoint ℝ H P = (C -ᵥ B) - (midpoint ℝ H P -ᵥ B) by
+        rw [vsub_sub_vsub_cancel_right], hw, sub_smul, one_smul]
+    have hPACB : ⟪P -ᵥ A, C -ᵥ B⟫ = 0 := by
+      rw [show P -ᵥ A = (P -ᵥ H) + (H -ᵥ A) by rw [vsub_add_vsub_cancel],
+        inner_add_left, hPperp, hH1, add_zero]
+    rw [hmidP, hCm, real_inner_smul_right, hPACB, mul_zero]
+
+lemma p4_perp (A B C H : EuclideanSpace ℝ (Fin 2))
+    (hH1 : ⟪H -ᵥ A, C -ᵥ B⟫ = 0) :
+    ⟪Mc A H C -ᵥ C, B -ᵥ C⟫ = 0 := by
+  unfold Mc;
+  norm_num [ Fin.sum_univ_two, inner ] at * ; linarith
+
+lemma angle_lt_pi_div_two_inner_pos (p q r : EuclideanSpace ℝ (Fin 2))
+    (hq1 : p ≠ q) (hq2 : r ≠ q) (h : ∠ p q r < Real.pi / 2) :
+    0 < ⟪p -ᵥ q, r -ᵥ q⟫ := by
+  have hcos : Real.cos (∠ p q r) = ⟪p -ᵥ q, r -ᵥ q⟫ / (‖p -ᵥ q‖ * ‖r -ᵥ q‖) := by
+    rw [EuclideanGeometry.angle]; exact InnerProductGeometry.cos_angle _ _
+  have hpos : 0 < Real.cos (∠ p q r) :=
+    Real.cos_pos_of_mem_Ioo ⟨by linarith [Real.pi_pos, EuclideanGeometry.angle_nonneg p q r], h⟩
+  rw [hcos] at hpos
+  have hden : 0 < ‖p -ᵥ q‖ * ‖r -ᵥ q‖ := by
+    apply mul_pos <;> rw [norm_pos_iff] <;> [exact sub_ne_zero.mpr hq1; exact sub_ne_zero.mpr hq2]
+  nlinarith [mul_pos hpos hden, div_mul_cancel₀ (⟪p -ᵥ q, r -ᵥ q⟫) (ne_of_gt hden)]
+
+lemma p4_not_collinear (A B C H F P O : EuclideanSpace ℝ (Fin 2)) (r : ℝ)
+    (htri : AffineIndependent ℝ ![A, B, C])
+    (hacuteA : ∠ B A C < Real.pi / 2)
+    (hacuteB : ∠ A B C < Real.pi / 2)
+    (hacuteC : ∠ B C A < Real.pi / 2)
+    (hH1 : ⟪H -ᵥ A, C -ᵥ B⟫ = 0)
+    (hH2 : ⟪H -ᵥ B, C -ᵥ A⟫ = 0)
+    (hFline : F ∈ affineSpan ℝ ({A, B} : Set (EuclideanSpace ℝ (Fin 2))))
+    (hFperp : ⟪C -ᵥ F, B -ᵥ A⟫ = 0)
+    (hPperp : ⟪P -ᵥ H, C -ᵥ B⟫ = 0)
+    (hPmid : midpoint ℝ H P ∈ affineSpan ℝ ({B, C} : Set (EuclideanSpace ℝ (Fin 2))))
+    (hOA : dist O A = r) (hOF : dist O F = r) (hOP : dist O P = r) :
+    ¬ Collinear ℝ ({A, F, P} : Set (EuclideanSpace ℝ (Fin 2))) := by
+  have hAB : A ≠ B := by simpa using htri.injective.ne (show (0 : Fin 3) ≠ 1 by decide)
+  have hAC : A ≠ C := by simpa using htri.injective.ne (show (0 : Fin 3) ≠ 2 by decide)
+  have hBC : B ≠ C := by simpa using htri.injective.ne (show (1 : Fin 3) ≠ 2 by decide)
+  have posA : 0 < ⟪B -ᵥ A, C -ᵥ A⟫ :=
+    angle_lt_pi_div_two_inner_pos B A C hAB.symm hAC.symm hacuteA
+  have posB : 0 < ⟪A -ᵥ B, C -ᵥ B⟫ :=
+    angle_lt_pi_div_two_inner_pos A B C hAB hBC.symm hacuteB
+  have posC : 0 < ⟪A -ᵥ C, B -ᵥ C⟫ := by
+    have := angle_lt_pi_div_two_inner_pos B C A hBC hAC hacuteC
+    rwa [real_inner_comm] at this
+  have hAF : A ≠ F := by
+    intro h; rw [← h] at hFperp; rw [real_inner_comm] at hFperp; linarith [posA]
+  have hFP : F ≠ P := by
+    intro hFP
+    have hPA : ⟪P -ᵥ A, C -ᵥ B⟫ = 0 := by
+      rw [← vsub_add_vsub_cancel P H A, inner_add_left, hPperp, hH1, add_zero]
+    obtain ⟨s, hs⟩ := mem_affineSpan_pair_iff_exists_lineMap_eq.mp hFline
+    rw [AffineMap.lineMap_apply] at hs
+    have hFmA : F -ᵥ A = s • (B -ᵥ A) := by rw [← hs]; simp
+    have hBApos : 0 < ⟪B -ᵥ A, B -ᵥ A⟫ :=
+      real_inner_self_pos.mpr (sub_ne_zero.mpr (Ne.symm hAB))
+    have key : s * ⟪B -ᵥ A, C -ᵥ B⟫ = 0 := by
+      have h2 : ⟪F -ᵥ A, C -ᵥ B⟫ = s * ⟪B -ᵥ A, C -ᵥ B⟫ := by
+        rw [hFmA, inner_smul_left]; simp
+      rw [hFP, hPA] at h2; linarith
+    have hsval : ⟪C -ᵥ A, B -ᵥ A⟫ = s * ⟪B -ᵥ A, B -ᵥ A⟫ := by
+      have h3 : ⟪C -ᵥ F, B -ᵥ A⟫ = ⟪C -ᵥ A, B -ᵥ A⟫ - s * ⟪B -ᵥ A, B -ᵥ A⟫ := by
+        rw [← vsub_sub_vsub_cancel_right C F A, hFmA, inner_sub_left, inner_smul_left]; simp
+      rw [hFperp] at h3; linarith
+    have hsg : 0 < s := by
+      rw [real_inner_comm] at posA
+      nlinarith [hsval, posA, hBApos]
+    have hzero : ⟪B -ᵥ A, C -ᵥ B⟫ = 0 := by
+      rcases mul_eq_zero.mp key with h | h
+      · linarith
+      · exact h
+    have hneg : ⟪A -ᵥ B, C -ᵥ B⟫ = - ⟪B -ᵥ A, C -ᵥ B⟫ := by
+      rw [← inner_neg_left, neg_vsub_eq_vsub_rev]
+    rw [hzero, neg_zero] at hneg
+    linarith [posB]
+  have hAP : A ≠ P := by
+    intro hAP
+    rw [← hAP] at hPmid
+    obtain ⟨u, hu⟩ := mem_affineSpan_pair_iff_exists_lineMap_eq.mp hPmid
+    rw [AffineMap.lineMap_apply] at hu
+    have hmidA : midpoint ℝ H A -ᵥ A = (2 : ℝ)⁻¹ • (H -ᵥ A) := by
+      rw [midpoint_comm]; exact midpoint_vsub_left A H
+    have hHA : H -ᵥ A = (2 * u) • (C -ᵥ B) + (2 : ℝ) • (B -ᵥ A) := by
+      have e : (u • (C -ᵥ B) +ᵥ B) -ᵥ A = (2 : ℝ)⁻¹ • (H -ᵥ A) := by rw [hu]; exact hmidA
+      rw [vadd_vsub_assoc] at e
+      have e2 : (2 : ℝ) • (u • (C -ᵥ B) + (B -ᵥ A)) = H -ᵥ A := by
+        rw [e, smul_smul]; norm_num
+      rw [smul_add, smul_smul] at e2
+      linear_combination (norm := module) -e2
+    have hHB : H -ᵥ B = (2 * u) • (C -ᵥ B) + (B -ᵥ A) := by
+      have h : H -ᵥ B = (H -ᵥ A) - (B -ᵥ A) := by rw [vsub_sub_vsub_cancel_right]
+      rw [h, hHA]; module
+    have hm : ⟪C -ᵥ B, C -ᵥ A⟫ = ⟪A -ᵥ C, B -ᵥ C⟫ := by
+      rw [show A -ᵥ C = -(C -ᵥ A) by rw [neg_vsub_eq_vsub_rev],
+          show B -ᵥ C = -(C -ᵥ B) by rw [neg_vsub_eq_vsub_rev],
+          inner_neg_neg, real_inner_comm]
+    have hD : ⟪C -ᵥ B, C -ᵥ B⟫ = ⟪A -ᵥ B, C -ᵥ B⟫ + ⟪A -ᵥ C, B -ᵥ C⟫ := by
+      have hmc : ⟪A -ᵥ C, B -ᵥ C⟫ = ⟪C -ᵥ A, C -ᵥ B⟫ := by rw [← hm, real_inner_comm]
+      rw [hmc, ← inner_add_left]
+      congr 1
+      rw [add_comm, vsub_add_vsub_cancel]
+    have hpBneg : ⟪B -ᵥ A, C -ᵥ B⟫ = - ⟪A -ᵥ B, C -ᵥ B⟫ := by
+      rw [← inner_neg_left]; congr 1; rw [neg_vsub_eq_vsub_rev]
+    have hE1 : u * (⟪A -ᵥ B, C -ᵥ B⟫ + ⟪A -ᵥ C, B -ᵥ C⟫) = ⟪A -ᵥ B, C -ᵥ B⟫ := by
+      rw [hHA, inner_add_left, real_inner_smul_left, real_inner_smul_left, hD, hpBneg] at hH1
+      linear_combination hH1 / 2
+    have hE2 : 2 * u * ⟪A -ᵥ C, B -ᵥ C⟫ = - ⟪B -ᵥ A, C -ᵥ A⟫ := by
+      rw [hHB, inner_add_left, real_inner_smul_left, hm, add_eq_zero_iff_eq_neg] at hH2
+      exact hH2
+    nlinarith [hE1, hE2, posA, posB, posC, mul_pos posB posC]
+  have hcosph : Cospherical ({A, F, P} : Set (EuclideanSpace ℝ (Fin 2))) := by
+    refine ⟨O, r, ?_⟩
+    intro p hp
+    simp only [Set.mem_insert_iff, Set.mem_singleton_iff] at hp
+    rcases hp with rfl | rfl | rfl <;> rw [dist_comm] <;> assumption
+  have hai := hcosph.affineIndependent_of_mem_of_ne
+    (Set.mem_insert _ _)
+    (Set.mem_insert_of_mem _ (Set.mem_insert _ _))
+    (Set.mem_insert_of_mem _ (Set.mem_insert_of_mem _ (Set.mem_singleton _)))
+    hAF hAP hFP
+  rwa [affineIndependent_iff_not_collinear_set] at hai
+
+lemma p4_lin_indep (A F P : EuclideanSpace ℝ (Fin 2))
+    (h : ¬ Collinear ℝ ({A, F, P} : Set (EuclideanSpace ℝ (Fin 2)))) :
+    LinearIndependent ℝ ![A -ᵥ F, A -ᵥ P] := by
+  have hAmem : A ∈ ({A, F, P} : Set (EuclideanSpace ℝ (Fin 2))) := by simp
+  rw [linearIndependent_fin2]
+  simp only [Fin.isValue, Matrix.cons_val_zero, Matrix.cons_val_one]
+  refine ⟨?_, ?_⟩
+  · intro hP
+    rw [vsub_eq_zero_iff_eq] at hP
+    refine h ((collinear_iff_of_mem hAmem).2 ⟨F -ᵥ A, ?_⟩)
+    intro p hp
+    simp only [Set.mem_insert_iff, Set.mem_singleton_iff] at hp
+    rcases hp with rfl | rfl | rfl
+    · exact ⟨0, by simp⟩
+    · exact ⟨1, by simp⟩
+    · exact ⟨0, by simp [← hP]⟩
+  · intro a ha
+    refine h ((collinear_iff_of_mem hAmem).2 ⟨P -ᵥ A, ?_⟩)
+    intro p hp
+    simp only [Set.mem_insert_iff, Set.mem_singleton_iff] at hp
+    rcases hp with rfl | hpF | rfl
+    · exact ⟨0, by simp⟩
+    · subst p
+      refine ⟨a, ?_⟩
+      rw [eq_vadd_iff_vsub_eq, ← neg_vsub_eq_vsub_rev A F, ← ha, ← smul_neg,
+        neg_vsub_eq_vsub_rev]
+    · exact ⟨1, by simp⟩
+
+end Usamo2025P4

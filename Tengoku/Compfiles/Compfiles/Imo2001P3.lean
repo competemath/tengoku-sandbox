@@ -1,0 +1,93 @@
+/-
+Copyright (c) 2024 the Compfiles Contributers. All rights reserved.
+Released under Apache 2.0 license as described in the file LICENSE.
+Authors: Jeremy Tan, David Renshaw
+-/
+
+module
+
+public import Tengoku
+public import Tengoku.Std
+public import Tengoku.Tactic.Aesop
+public import Tengoku.Meta.Qq
+
+@[expose] public section
+
+/-!
+# International Mathematical Olympiad 2001, Problem 3
+
+Twenty-one girls and twenty-one boys took part in a mathematical competition.
+It turned out that each contestant solved at most six problems, and for each
+pair of a girl and a boy, there was at most one problem solved by both the
+girl and the boy. Show that there was a problem solved by at least three
+girls and at least three boys.
+-/
+
+namespace Imo2001P3
+
+open Finset
+
+/-- A problem is easy for a cohort (boys or girls) if at least three
+    of its members solved it. -/
+def Easy {α : Type} [Fintype α] (F : α → Finset ℕ) (p : ℕ) : Prop := 3 ≤ #{i | p ∈ F i}
+
+/-
+# Solution
+Note that not all of the problems a girl $g$ solves can be "hard" for boys, in the sense that
+at most two boys solved it. If that was true, by condition 1 at most $6 × 2 = 12$ boys solved
+some problem $g$ solved, but by condition 2 that property holds for all 21 boys, which is a
+contradiction.
+Hence there are at most 5 problems $g$ solved that are hard for boys, and the number of girl-boy
+pairs who solved some problem in common that was hard for boys is at most $5 × 2 × 21 = 210$.
+By the same reasoning this bound holds when "girls" and "boys" are swapped throughout, but there
+are $21^2$ girl-boy pairs in all and $21^2 > 210 + 210$, so some girl-boy pairs solved only problems
+in common that were not hard for girls or boys. By condition 2 the result follows.
+-/
+
+open Classical in
+/-- Every contestant solved at most five problems that were not easy for the other cohort. -/
+lemma card_not_easy_le_five {α β : Type} [Fintype α]
+    {β_solved : β → Finset ℕ} {α_solved : α → Finset ℕ}
+    (hcard : 21 = Fintype.card α)
+    {i : β} (hG : #(β_solved i) ≤ 6) (hB : ∀ j, ¬Disjoint (β_solved i) (α_solved j)) :
+    #{p ∈ β_solved i | ¬Easy α_solved p} ≤ 5 := by
+  by_contra! h
+  replace h := le_antisymm (card_filter_le ..) (hG.trans h)
+  simp_rw [card_filter_eq_iff, Easy, not_le] at h
+  suffices 21 ≤ 12 by norm_num at this
+  calc
+    _ = #{j | ¬Disjoint (β_solved i) (α_solved j)} := by simp [filter_true_of_mem fun j _ ↦ hB j]
+                                                         exact hcard
+    _ = #((β_solved i).biUnion fun p ↦ {j | p ∈ α_solved j}) := by congr 1; ext j; simp [not_disjoint_iff]
+    _ ≤ ∑ p ∈ β_solved i, #{j | p ∈ α_solved j}              := card_biUnion_le
+    _ ≤ ∑ p ∈ β_solved i, 2                           := sum_le_sum fun p mp ↦ Nat.le_of_lt_succ (h p mp)
+    _ ≤ _                                      := by rw [sum_const, smul_eq_mul]; lia
+
+open Classical in
+/-- There are at most 210 girl-boy pairs who solved some problem in common that was not easy for
+a fixed cohort. -/
+lemma card_not_easy_le_210 {α β : Type} [Fintype α] [Fintype β]
+    (hcard_α : 21 = Fintype.card α)
+    (hcard_β : 21 = Fintype.card β)
+    {α_solved : α → Finset ℕ} {β_solved : β → Finset ℕ}
+    (hA : ∀ i, #(β_solved i) ≤ 6) (hB : ∀ i j, ¬Disjoint (β_solved i) (α_solved j)) :
+    #{ij : β × α | ∃ p, ¬Easy α_solved p ∧ p ∈ β_solved ij.1 ∩ α_solved ij.2} ≤ 210 :=
+  calc
+    _ = ∑ i, #{j | ∃ p, ¬Easy α_solved p ∧ p ∈ β_solved i ∩ α_solved j} := by
+      simp_rw [card_filter, ← univ_product_univ, sum_product]
+    _ = ∑ i, #({p ∈ β_solved i | ¬Easy α_solved p}.biUnion fun p ↦ {j | p ∈ α_solved j}) := by
+      congr!; ext
+      simp_rw [mem_biUnion, mem_inter, mem_filter, mem_univ, true_and]
+      grind
+    _ ≤ ∑ i, ∑ p ∈ β_solved i with ¬Easy α_solved p, #{j | p ∈ α_solved j} := sum_le_sum fun _ _ ↦ card_biUnion_le
+    _ ≤ ∑ i, ∑ p ∈  β_solved i with ¬Easy α_solved p, 2 := by
+      gcongr with i _ p mp
+      rw [mem_filter, Easy, not_le] at mp
+      exact Nat.le_of_lt_succ mp.2
+    _ ≤ ∑ i : β, 5 * 2 := by
+      gcongr with i
+      rw [sum_const, smul_eq_mul]
+      exact mul_le_mul_left (card_not_easy_le_five hcard_α (hA _) (hB _)) _
+    _ = _ := by simp [← hcard_β]
+
+end Imo2001P3

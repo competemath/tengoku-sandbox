@@ -1,0 +1,154 @@
+/-
+Copyright (c) 2023 David Renshaw. All rights reserved.
+Released under Apache 2.0 license as described in the file LICENSE.
+Authors: David Renshaw
+-/
+
+module
+
+public import Tengoku
+public import Tengoku.Std
+public import Tengoku.Tactic.Aesop
+public import Tengoku.Meta.Qq
+
+@[expose] public section
+
+/-!
+# International Mathematical Olympiad 1979, Problem 1
+
+Suppose that p and q are positive integers such that
+
+  p / q = 1 - 1/2 + 1/3 - 1/4 + ... - 1/1318 + 1/1319.
+
+Prove that p is divisible by 1979.
+-/
+
+namespace Imo1979P1
+
+lemma lemma3 : ∑ i ∈ Finset.range 1319, (-(1:ℚ))^i / (i + 1) =
+      ∑ i ∈ Finset.range 1319, (1:ℚ) / (i + 1) -
+         2 * ∑ i ∈ Finset.range 659, (1:ℚ) / (2 * (i + 1)) := by
+  have h2 := Finset.sum_filter_add_sum_filter_not
+           (Finset.range 1319) (Even ·) (λ i ↦ (1:ℚ) / (i + 1))
+  rw [← h2]
+  let g : ℕ ↪ ℕ :=
+    ⟨fun x ↦ 2 * x + 1, by intro a b hab; lia⟩
+
+  have h4 : (Finset.range 659).map g =
+        (Finset.range 1319).filter (fun x ↦ ¬Even x) := by
+    ext a
+    rw [Finset.mem_map, Finset.mem_filter, Finset.mem_range]
+    constructor
+    · intro ha
+      obtain ⟨b, hb1, hb2⟩ := ha
+      rw [Finset.mem_range] at hb1
+      replace hb2 : 2 * b + 1 = a := hb2
+      rw [← hb2]
+      constructor
+      · lia
+      · exact Nat.not_even_iff_odd.mpr ⟨b, rfl⟩
+    · rintro ⟨ha1, ha2⟩
+      have h5 : Odd a := Nat.not_even_iff_odd.mp ha2
+      obtain ⟨r, hr⟩ := h5
+      use r
+      constructor
+      · rw [Finset.mem_range]; lia
+      · exact hr.symm
+  have h5 : ∑ i ∈ Finset.range 659, 1 / (2 * ((i:ℚ) + 1))
+       = ∑ i ∈ Finset.range 659, (1 / (((g i):ℚ) + 1)) := by
+    apply Finset.sum_congr rfl
+    intro x _
+    show (1:ℚ) / (2 * ((x:ℚ) + 1)) = 1 / (((2 * x + 1 : ℕ):ℚ) + 1)
+    push_cast
+    ring_nf
+  have h6 := Finset.sum_map (Finset.range 659) g (fun j ↦ 1 / ((j:ℚ) + 1))
+
+  have h3 :
+    ∑ x ∈ Finset.filter (fun x ↦ ¬Even x) (Finset.range 1319),
+     1 / ((x:ℚ) + 1) =
+      ∑ i ∈ Finset.range 659, 1 / (2 * ((i:ℚ) + 1)) := by
+    rw [h5]
+    rw [← h6, h4]
+  rw [h3, two_mul, add_sub_add_right_eq_sub]
+  rw [← h3, ← h4, h6, ← h5, ← h3]
+  have h7 :
+   ∑ i ∈ Finset.filter (fun x ↦ Even x) (Finset.range 1319), 1 / ((i:ℚ) + 1) =
+    ∑ i ∈ Finset.filter (fun x ↦ Even x) (Finset.range 1319),
+      (-1 : ℚ)^i / ((i:ℚ) + 1) := by
+    apply Finset.sum_congr rfl
+    intro x hx
+    rw [Finset.mem_filter] at hx
+    have h9: (-1 : ℚ)^x = 1 := Even.neg_one_pow hx.2
+    rw [h9]
+  rw [h7]; clear h7
+  rw [Rat.sub_eq_add_neg, ← Finset.sum_neg_distrib]
+  have h10 : ∑ x ∈ Finset.filter (fun x ↦ ¬Even x) (Finset.range 1319),
+               -(1 / ((x:ℚ) + 1)) =
+              ∑ x ∈ Finset.filter (fun x ↦ ¬Even x) (Finset.range 1319),
+               (-1 : ℚ)^x / ((x:ℚ) + 1) := by
+    apply Finset.sum_congr rfl
+    intro x hx
+    rw [Finset.mem_filter] at hx
+    have h9: (-1 : ℚ)^x = -1 := Odd.neg_one_pow (Nat.not_even_iff_odd.mp hx.2)
+    rw [h9]
+    field_simp
+  rw [h10, Finset.sum_filter_add_sum_filter_not]
+
+lemma lemma4 (n m : ℕ) (f : ℕ → ℚ) :
+    ∑ i ∈ Finset.Ico n (n + 2 * m), f i =
+    ∑ i ∈ Finset.range m, (f (n + i) + f (n + (2 * m - 1 - i))) := by
+  rw [Finset.sum_Ico_eq_sum_range, add_tsub_cancel_left]
+  rw [two_mul, Finset.sum_range_add, Finset.sum_add_distrib]
+  congr 1
+  rw [← Finset.sum_range_reflect (fun x ↦ f (n + (m + x)))]
+  refine Finset.sum_congr rfl fun x hx => ?_
+  rw [Finset.mem_range] at hx
+  congr 1; lia
+
+lemma lemma9' (i : ℕ) (hi : i ∈ Finset.range 330) :
+     (((∏ j ∈ Finset.range 330,
+         (660 + j) * (1319 - j)):ℕ):ℚ) / ((660 + (i:ℚ)) * (1319 - (i:ℚ)))
+       = ∏ j ∈ (Finset.range 330).erase i, (660 + j) * (1319 - j) := by
+  rw [← Finset.prod_erase_mul _ _ hi]
+  rw [Finset.mem_range] at hi
+  have : i ≤ 1319 := by lia
+  push_cast [this]
+  rw [Rat.mul_div_cancel]
+  have : (i: ℚ) < 330 := by norm_cast
+  nlinarith
+
+lemma lemma9 :
+    (∑ i ∈ Finset.range 330, 1 / ((660 + (i:ℚ)) * (1319 - (i:ℚ)))) *
+      (((∏ j ∈ Finset.range 330, (660 + j) * (1319 - j)):ℕ):ℚ) =
+    (∑ i ∈ Finset.range 330, ∏ j ∈ (Finset.range 330).erase i,
+         (660 + j) * (1319 - j)) := by
+  simp_rw [Finset.sum_mul, div_mul_eq_mul_div, one_mul]
+  rw [Finset.sum_congr rfl lemma9']
+  push_cast
+  rfl
+
+lemma h4 (i : ℕ) (hi : i ∈ Finset.range 330) :
+    1 / ((((659 + i):ℕ):ℚ) + 1) + 1 / ((((659 + (2 * 330 - 1 - i)):ℕ):ℚ) + 1) =
+    1979 / ((660 + (i:ℚ)) * (1319 - (i:ℚ))) := by
+  rw [Finset.mem_range] at hi
+  have h5 : (((659 + i) : ℕ) : ℚ) + 1 = 660 + (i : ℚ) := by zify; ring
+  have h6 : (((659 + (2 * 330 - 1 - i)):ℕ):ℚ) + 1 = 1319 - (i:ℚ) := by
+    rw [show 2 * 330 - 1 - i = 659 - i by lia]
+    rw [show 659 + (659 - i) = 1318 - i by lia]
+    have h10 : (((1318 - i):ℕ):ℚ) = 1318 - ↑i := by
+      have : i ≤ 1318 := by lia
+      rw [Nat.cast_sub this]
+      rfl
+    rw [h10]
+    ring
+  rw [h5, h6]; clear h5 h6
+  have : (1319 : ℚ) - i ≠ 0 := by
+    have h8 : 1319 ≠ i := by lia
+    intro H
+    have h9 : 1319 = (i : ℚ) := by linarith
+    norm_cast at h9
+  field_simp; norm_num
+
+lemma prime_1979 : Nat.Prime 1979 := by norm_num1
+
+end Imo1979P1
