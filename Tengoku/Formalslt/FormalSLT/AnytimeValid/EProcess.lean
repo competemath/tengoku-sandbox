@@ -1,0 +1,184 @@
+/-
+Copyright (c) 2026 Robby Sneiderman. All rights reserved.
+Released under MIT license as described in the file LICENSE.
+Authors: Robby Sneiderman
+-/
+import Tengoku
+import Tengoku.Std
+import Tengoku.Tactic.Aesop
+import Tengoku.Meta.Qq
+import Tengoku.Formalslt.FormalSLT.AnytimeValid.VilleMaximalIneq
+import Tengoku.Formalslt.FormalSLT.AnytimeValid.SubGaussianCS
+
+/-!
+# Test supermartingales, e-values, and safe-testing Type-I control
+
+This file packages the safe-testing / anytime-valid testing layer on top of the
+banked nonnegative-supermartingale Ville maximal inequality
+`FormalSLT.AnytimeValid.ville_maximal_ineq`. This module formalizes the
+nonnegative-supermartingale subclass of e-processes: a process
+`E : ℕ → Ω → ℝ` that is (i) nonnegative, (ii) normalized at the origin
+(`E 0 = 1`), and (iii) a `𝒢`-supermartingale under `μ`.
+Its running prefix maximum is the realized "betting wealth"; rejecting the null
+when that wealth reaches `1/α` controls the Type-I error at level `α`, uniformly
+over the stopping rule. This is the testing-side counterpart of the
+confidence-sequence layer in `SubGaussianCS.lean` / `MixtureCS.lean`.
+
+Three named results package the maximal-inequality, structural-product, and
+optional-stopping interfaces (no new hard analysis):
+
+* `eProcess_typeI_control`: the safe-testing guarantee. For an `EProcess μ 𝒢 E`
+  under a probability measure, level `0 < α`, and horizon `n`, the rejection
+  event "the realized prefix max of `E` reaches `1/α`" has `μ`-measure at most
+  `α`: `μ.real {ω | 1/α ≤ finiteRunningMax E n ω} ≤ α`. This is the literal
+  anytime-valid Type-I statement up to `n` (the running-max event, i.e. rejecting
+  at *any* time `≤ n`), not a single fixed-time event. Instantiate
+  `ville_maximal_ineq` at `a = 1/α`, divide through, and collapse `∫ E 0 = 1`.
+
+* `eProcess_product_of_supermartingale`: a product constructor under an explicit
+  product-supermartingale premise. The
+  pointwise product of two e-processes is again an e-process provided the product
+  is again a `𝒢`-supermartingale. The module does not formalize an independence
+  condition implying that premise. It packages the remaining obligations:
+  nonnegativity and the start at `1` (`1 * 1 = 1`).
+
+* `eProcess_optionalContinuation`: optional continuation / stopped e-value. For
+  any `ℕ∞`-valued `𝒢`-stopping time `τ` bounded by `n`, the stopped value
+  `stoppedValue E τ` integrates to at most `1`: `∫ ω, stoppedValue E τ ω ∂μ ≤ 1`.
+  This is the `E[E_τ] ≤ 1` form of the e-value guarantee under optional stopping;
+  it follows from `Submartingale.expected_stoppedValue_mono` applied to `-E`
+  (`E[E_τ] ≤ E[E_0] = 1`), the same route the keystone uses.
+
+A nonconstant witness (the fixed-tilt exponential of a Rademacher increment, a
+nonnegative supermartingale with `E 0 = 1` and `E_1 > 1` on a positive-mass
+event) is built in `examples/CheckEProcess.lean`. The checker instantiates the
+three theorems and obtains the numeric Type-I bound `≤ 1/4` at threshold
+`1/α = 4`; it does not claim that this higher threshold is crossed.
+
+## References
+
+* Grünwald, P., de Heide, R., Koolen, W. (2024). "Safe testing." *Journal of the
+  Royal Statistical Society: Series B* 86(5), 1091–1128.
+* Ramdas, A., Grünwald, P., Vovk, V., Shafer, G. (2023). "Game-theoretic
+  statistics and safe anytime-valid inference." *Statistical Science* 38(4),
+  576–601.
+* Howard, S., Ramdas, A., McAuliffe, J., Sekhon, J. (2021). "Time-uniform,
+  nonparametric, nonasymptotic confidence sequences." *The Annals of Statistics*
+  49(2) / Probability Surveys 17.
+* Ville, J. (1939). *Étude critique de la notion de collectif.* (Original
+  supermartingale maximal inequality.)
+
+## Formal-methods scope
+
+The module makes no novelty or priority claim. Its scope differs from nearby
+formal developments as follows:
+Karayel–Tan (AFP 2023) mechanise Hoeffding/Bernstein/McDiarmid concentration in
+Isabelle/HOL (fixed-sample, no anytime-valid object, no e-process, no test
+martingale). Sonoda et al. 2025 (arXiv:2503.19605) and Zhang–Lee–Liu 2026
+(arXiv:2602.02285) are continuous-process Lean efforts of separate scope, neither
+an e-value / safe-testing Type-I guarantee nor an e-process rejection rule.
+Tassarotti (2021) is a probabilistic-program / Coq verification line, not
+anytime-valid testing. Bagnall–Stewart (2019) is a Coq PAC-learning /
+generalization-bound line (fixed-sample, no e-process). These bounded
+comparisons are not an ecosystem-wide absence result.
+-/
+
+open MeasureTheory ProbabilityTheory Finset
+open scoped BigOperators
+
+namespace FormalSLT.AnytimeValid
+
+variable {Ω : Type*} {m0 : MeasurableSpace Ω} {μ : Measure Ω}
+  {𝒢 : Filtration ℕ m0}
+
+/--
+The library's **supermartingale e-process** for the null `μ` with respect to the
+filtration `𝒢`: a process
+`E : ℕ → Ω → ℝ` that is nonnegative, normalized to `1` at the origin, and a
+`𝒢`-supermartingale under `μ`. These are exactly the three structural fields and
+nothing that smuggles the Type-I conclusion. The `E 0 = 1` normalization is the
+deterministic-start case (`∀ ω, E 0 ω = 1`), so `∫ E 0 = 1` under a probability
+measure. -/
+structure EProcess (μ : Measure Ω) (𝒢 : Filtration ℕ m0) (E : ℕ → Ω → ℝ) :
+    Prop where
+  /-- The process is pointwise nonnegative. -/
+  nonneg : 0 ≤ E
+  /-- The process starts deterministically at `1`. -/
+  start_one : ∀ ω, E 0 ω = 1
+  /-- The process is a `𝒢`-supermartingale under `μ`. -/
+  supermartingale : Supermartingale E 𝒢 μ
+
+/-- A finite weighted sum of real-valued processes.  The weights and the
+component processes are fixed before the path is observed. -/
+def finiteWeightedProcess {κ : Type*} [Fintype κ]
+    (weight : κ → ℝ) (E : κ → ℕ → Ω → ℝ) (n : ℕ) (ω : Ω) : ℝ :=
+  ∑ j : κ, weight j * E j n ω
+
+/-- A normalized finite mixture of e-processes is an e-process.  Strict
+positivity of the weights is not needed for this closure theorem; catalog
+selection results add it when dividing by the selected atom's weight. -/
+theorem finiteWeightedProcess_eProcess
+    {κ : Type*} [Fintype κ] [DecidableEq κ] [IsFiniteMeasure μ]
+    {weight : κ → ℝ} {E : κ → ℕ → Ω → ℝ}
+    (hweight_nonneg : ∀ j, 0 ≤ weight j)
+    (hweight_sum_one : ∑ j : κ, weight j = 1)
+    (hE : ∀ j, EProcess μ 𝒢 (E j)) :
+    EProcess μ 𝒢 (finiteWeightedProcess weight E) := by
+  classical
+  have hfixed : ∀ j, Supermartingale
+      (fun n ω => weight j * E j n ω) 𝒢 μ := by
+    intro j
+    have hscaled := (hE j).supermartingale.smul_nonneg
+      (c := weight j) (hweight_nonneg j)
+    change Supermartingale (weight j • E j) 𝒢 μ
+    exact hscaled
+  have hsum : ∀ s : Finset κ, Supermartingale
+      (fun n ω => ∑ j ∈ s, weight j * E j n ω) 𝒢 μ := by
+    intro s
+    induction s using Finset.induction with
+    | empty =>
+        simp only [Finset.sum_empty]
+        exact (MeasureTheory.martingale_zero ℝ 𝒢 μ).supermartingale
+    | @insert j s hj ih =>
+        simp only [Finset.sum_insert hj]
+        exact (hfixed j).add ih
+  refine
+    { nonneg := ?_
+      start_one := ?_
+      supermartingale := ?_ }
+  · intro n ω
+    exact Finset.sum_nonneg fun j _ =>
+      mul_nonneg (hweight_nonneg j) ((hE j).nonneg n ω)
+  · intro ω
+    unfold finiteWeightedProcess
+    simp_rw [(hE _).start_one]
+    simpa using hweight_sum_one
+  · change Supermartingale
+      (fun n ω => ∑ j : κ, weight j * E j n ω) 𝒢 μ
+    simpa using hsum (Finset.univ : Finset κ)
+
+/-- For an e-process under a probability measure, `∫ E 0 = 1`. -/
+theorem EProcess.integral_start_eq_one [IsProbabilityMeasure μ]
+    {E : ℕ → Ω → ℝ} (hE : EProcess μ 𝒢 E) :
+    ∫ ω, E 0 ω ∂μ = 1 := by
+  have hbody : (fun ω => E 0 ω) =ᵐ[μ] fun _ => (1 : ℝ) :=
+    Filter.Eventually.of_forall hE.start_one
+  rw [integral_congr_ae hbody]
+  simp [integral_const]
+
+/--
+**Product constructor (supermartingale form).** The pointwise product of two
+e-processes is again an e-process provided the product is again a
+`𝒢`-supermartingale (`hprod_sup`). This is the honest, dischargeable hypothesis:
+the module does not formalize a conditional-independence criterion that would
+imply it. The statement records exactly the property used, while nonnegativity
+and the `1 * 1 = 1` start are discharged from the two factor e-processes. -/
+theorem eProcess_product_of_supermartingale
+    {E F : ℕ → Ω → ℝ} (hE : EProcess μ 𝒢 E) (hF : EProcess μ 𝒢 F)
+    (hprod_sup : Supermartingale (fun n ω => E n ω * F n ω) 𝒢 μ) :
+    EProcess μ 𝒢 (fun n ω => E n ω * F n ω) where
+  nonneg := fun n ω => mul_nonneg (hE.nonneg n ω) (hF.nonneg n ω)
+  start_one := fun ω => by rw [hE.start_one ω, hF.start_one ω, mul_one]
+  supermartingale := hprod_sup
+
+end FormalSLT.AnytimeValid
