@@ -7,4 +7,5 @@ import Tengoku.Tautology
 import Tengoku.EquationalTheories
 import Tengoku.AddCombi
 import Tengoku.Vcvio
+import Tengoku.SpherePackingOrig
 import Tengoku.Compfiles
