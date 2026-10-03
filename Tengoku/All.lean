@@ -4,6 +4,7 @@ import Tengoku.FormalMathfin
 import Tengoku.Leanmodularforms
 import Tengoku
 import Tengoku.Imoshortlist
+import Tengoku.Aperiodicmonotiles
 import Tengoku.Tautology
 import Tengoku.EquationalTheories
 import Tengoku.AddCombi

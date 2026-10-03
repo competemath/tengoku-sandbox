@@ -1,0 +1,12 @@
+{
+ "library": "aperiodicmonotiles",
+ "lint_mode": "strict",
+ "modules_in_bundle": 10,
+ "modules_dropped": 0,
+ "dropped": {},
+ "theorems": 311,
+ "passed_total": 311,
+ "left_out": {},
+ "kept_constants": 656,
+ "lint_cost": {}
+}
