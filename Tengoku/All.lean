@@ -1,5 +1,6 @@
 -- Everything in the tree: the seeded root plus every library of verified additions.
 import Tengoku.Physlib
+import Tengoku.Leanslt
 import Tengoku.FormalMathfin
 import Tengoku
 import Tengoku.Imoshortlist
