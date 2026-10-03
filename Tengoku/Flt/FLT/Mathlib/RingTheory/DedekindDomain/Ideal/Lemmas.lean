@@ -1,0 +1,60 @@
+/-
+Copyright (c) 2025 Kevin Buzzard. All rights reserved.
+Released under Apache 2.0 license as described in the file LICENSE.
+Authors: Kevin Buzzard
+-/
+module
+
+public import Tengoku
+public import Tengoku.Std
+public import Tengoku.Tactic.Aesop
+public import Tengoku.Meta.Qq
+
+/-!
+# Lemmas
+
+Material destined for Mathlib.
+-/
+
+@[expose] public section
+
+open IsDedekindDomain
+open scoped NumberField
+
+/-- Pulling back elements of `HeightOneSpectrum` along a ring isomorphism. -/
+def RingEquiv.heightOneSpectrumComap {A B : Type*} [CommRing A] [CommRing B] (e : A ≃+* B)
+    (P : HeightOneSpectrum B) : HeightOneSpectrum A :=
+  {
+    asIdeal := .comap e P.asIdeal
+    isPrime := P.asIdeal.comap_isPrime e
+    ne_bot h := P.ne_bot <| Ideal.comap_injective_of_surjective e e.surjective <| by
+      rw [h, Ideal.comap_bot_of_injective e e.injective]
+  }
+
+open IsDedekindDomain in
+/-- The bijection `HeightOneSpectrum A ≃ HeightOneSpectrum B` induced by a ring isomorphism
+between `A` and `B`. -/
+def RingEquiv.heightOneSpectrum {A B : Type*} [CommRing A] [CommRing B] (e : A ≃+* B) :
+    HeightOneSpectrum A ≃ HeightOneSpectrum B where
+      toFun := e.symm.heightOneSpectrumComap
+      invFun := e.heightOneSpectrumComap
+      left_inv P := by
+        ext1
+        convert! Ideal.comap_comap e.toRingHom e.symm.toRingHom
+        simp
+      right_inv Q := by
+        ext1
+        convert! Ideal.comap_comap e.symm.toRingHom e.toRingHom
+        simp
+
+/-- The element of `HeightOneSpectrum ℤ` associated to a prime number. -/
+def Nat.Prime.toHeightOneSpectrumInt {p : ℕ} (hp : p.Prime) : HeightOneSpectrum ℤ where
+  asIdeal := .span {(p : ℤ)}
+  isPrime := by
+    rwa [Ideal.span_singleton_prime (Int.ofNat_ne_zero.mpr hp.ne_zero), ← prime_iff_prime_int]
+  ne_bot := mt Submodule.span_singleton_eq_bot.mp (Int.ofNat_ne_zero.mpr hp.ne_zero)
+
+/-- The element of `HeightOneSpectrum (𝓞 ℚ)` associated to a prime number. -/
+noncomputable def Nat.Prime.toHeightOneSpectrumRingOfIntegersRat {p : ℕ} (hp : p.Prime) :
+    IsDedekindDomain.HeightOneSpectrum (𝓞 ℚ) :=
+  Rat.ringOfIntegersEquiv.symm.heightOneSpectrum <| hp.toHeightOneSpectrumInt
