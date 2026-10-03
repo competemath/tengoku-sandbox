@@ -4,6 +4,7 @@ import Tengoku.Physlib
 import Tengoku.FormalMathfin
 import Tengoku.Leanmodularforms
 import Tengoku
+import Tengoku.Primenumbertheoremand
 import Tengoku.Imoshortlist
 import Tengoku.Aperiodicmonotiles
 import Tengoku.Tautology
