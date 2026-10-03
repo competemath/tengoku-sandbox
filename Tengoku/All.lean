@@ -2,6 +2,7 @@
 import Tengoku.Physlib
 import Tengoku.FormalMathfin
 import Tengoku
+import Tengoku.Primenumbertheoremand
 import Tengoku.Imoshortlist
 import Tengoku.Tautology
 import Tengoku.EquationalTheories
