@@ -15,3 +15,4 @@ import Tengoku.AddCombi
 import Tengoku.Pfr
 import Tengoku.Vcvio
 import Tengoku.Compfiles
+import Tengoku.BrownianMotion

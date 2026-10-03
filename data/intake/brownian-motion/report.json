@@ -1,0 +1,77 @@
+{
+ "library": "brownian-motion",
+ "lint_mode": "strict",
+ "modules_in_bundle": 43,
+ "modules_dropped": 27,
+ "dropped": {
+  "BrownianMotion.Verso.Brownian": "an error outside any declaration (glue)",
+  "BrownianMotion.StochasticIntegral.Jump": "lint: `notation` runs code while the tree compiles (or trusts the compiler); `scoped` does not start an allowed command",
+  "BrownianMotion.Auxiliary.AEEq": "lint: `notation` runs code while the tree compiles (or trusts the compiler); `notation` does not start an allowed command",
+  "BrownianMotion.Auxiliary.Indistinguishable": "lint: `notation3` runs code while the tree compiles (or trusts the compiler); `notation3` does not start an allowed command",
+  "BrownianMotion.StochasticIntegral.SimpleProcess": "lint: `notation` runs code while the tree compiles (or trusts the compiler); `notation` does not start an allowed command",
+  "BrownianMotion.Auxiliary.Adapted": "lint: `infixr` runs code while the tree compiles (or trusts the compiler); `infixr` does not start an allowed command",
+  "BrownianMotion.StochasticIntegral.UniformIntegrable": "imports a module that cannot go to the tree",
+  "BrownianMotion.StochasticIntegral.ApproxSeq": "imports a module that cannot go to the tree",
+  "BrownianMotion.StochasticIntegral.OptionalSampling": "imports a module that cannot go to the tree",
+  "BrownianMotion.Auxiliary.LimitProcess": "imports a module that cannot go to the tree",
+  "BrownianMotion.StochasticIntegral.Quasimartingale.Basic": "imports a module that cannot go to the tree",
+  "BrownianMotion.StochasticIntegral.SquareIntegrable": "imports a module that cannot go to the tree",
+  "BrownianMotion.Auxiliary.StoppedProcess": "imports a module that cannot go to the tree",
+  "BrownianMotion.Verso.Processes": "imports a module that cannot go to the tree",
+  "BrownianMotion.StochasticIntegral.LocalMartingale": "imports a module that cannot go to the tree",
+  "BrownianMotion.StochasticIntegral.Quasimartingale.MaximalInequality": "imports a module that cannot go to the tree",
+  "BrownianMotion.StochasticIntegral.StochasticIntegral": "imports a module that cannot go to the tree",
+  "BrownianMotion.StochasticIntegral.Quasimartingale.CadlagModification": "imports a module that cannot go to the tree",
+  "BrownianMotion.StochasticIntegral.ContinuousSquareIntegrable": "imports a module that cannot go to the tree",
+  "BrownianMotion.StochasticIntegral.QuadraticVariation": "imports a module that cannot go to the tree",
+  "BrownianMotion.StochasticIntegral.LocalizingLeastGE": "imports a module that cannot go to the tree",
+  "BrownianMotion.Auxiliary.StoppedValue": "imports a module that cannot go to the tree",
+  "BrownianMotion.StochasticIntegral.StochasticInterval": "imports a module that cannot go to the tree",
+  "BrownianMotion": "imports a module that cannot go to the tree",
+  "BrownianMotion.StochasticIntegral.ClassD": "imports a module that cannot go to the tree",
+  "BrownianMotion.StochasticIntegral.PredictableTime": "imports a module that cannot go to the tree",
+  "BrownianMotion.StochasticIntegral.DoobMeyer": "imports a module that cannot go to the tree"
+ },
+ "theorems": 442,
+ "passed_total": 1003,
+ "left_out": {
+  "lint: `notation` runs code while the tree compiles (or trusts the compiler); `notation` does not start an allowed comman": 104,
+  "lint: `infixr` runs code while the tree compiles (or trusts the compiler); `infixr` does not start an allowed command": 17,
+  "lint: `notation3` runs code while the tree compiles (or trusts the compiler); `notation3` does not start an allowed comm": 14,
+  "imports a module that cannot go to the tree": 272,
+  "lint: `notation` runs code while the tree compiles (or trusts the compiler); `scoped` does not start an allowed command": 18,
+  "verification build: module did not build, or imports one": 71,
+  "the tree's build: module did not build, or imports one": 65
+ },
+ "kept_constants": 2887,
+ "stripped_attributes": {
+  "instance_reducible": 1
+ },
+ "lint_cost": {
+  "`notation3` does not start an allowed command": 407,
+  "`notation3` runs code while the tree compiles (or trusts the compiler)": 407,
+  "`notation` runs code while the tree compiles (or trusts the compiler)": 394,
+  "`notation` does not start an allowed command": 263,
+  "`infixr` does not start an allowed command": 218,
+  "`infixr` runs code while the tree compiles (or trusts the compiler)": 218,
+  "`scoped` does not start an allowed command": 131
+ },
+ "verification_dropped": {
+  "BrownianMotion.Choquet.MeasurableSection": "did not build in the verification build",
+  "BrownianMotion.Continuity.CoveringNumber": "did not build in the verification build",
+  "BrownianMotion.Continuity.HasBoundedInternalCoveringNumber": "imports a module that did not build",
+  "BrownianMotion.Continuity.IsKolmogorovProcess": "imports a module that did not build",
+  "BrownianMotion.Continuity.KolmogorovChentsov": "imports a module that did not build",
+  "BrownianMotion.Continuity.KolmogorovChentsovInequality": "imports a module that did not build",
+  "BrownianMotion.Gaussian.BrownianMotion": "imports a module that did not build",
+  "BrownianMotion.StochasticIntegral.Komlos": "did not build in the verification build"
+ },
+ "queue_dropped": {
+  "BrownianMotion.Auxiliary.StronglyMeasurablePath": "imports a module that did not build on the tree",
+  "BrownianMotion.StochasticIntegral.Cadlag": "did not build on the tree",
+  "BrownianMotion.StochasticIntegral.DoobLp": "imports a module that did not build on the tree",
+  "BrownianMotion.StochasticIntegral.LocalMonad": "imports a module that did not build on the tree",
+  "BrownianMotion.StochasticIntegral.Locally": "imports a module that did not build on the tree",
+  "BrownianMotion.StochasticIntegral.MonotoneProcess": "imports a module that did not build on the tree"
+ }
+}
