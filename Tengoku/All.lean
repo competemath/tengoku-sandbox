@@ -3,4 +3,5 @@ import Tengoku
 import Tengoku.Imoshortlist
 import Tengoku.Tautology
 import Tengoku.EquationalTheories
+import Tengoku.Vcvio
 import Tengoku.AddCombi
