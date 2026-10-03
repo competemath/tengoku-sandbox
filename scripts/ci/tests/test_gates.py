@@ -796,6 +796,27 @@ class Intake(unittest.TestCase):
         self.assertNotEqual(rc, 0)
         self.assertIn("Tengoku/Lib/Basic.lean", out)
 
+    def test_the_queues_content_lint_reads_an_added_module_without_its_comments(self):
+        r = self.repo()
+        prose = "/-- Axioms: `#print axioms` confirms it; no `native_decide`, no `#eval`, no `initialize`. -/\n"
+        self.bundle(
+            r,
+            mod=self.MOD.replace("theorem good", prose + "theorem good")
+            + "-- run_cmd in a line comment\n/- a block: IO.Process.spawn -/\n",
+        )
+        rc, out = r.gate("lint_banked.py")
+        self.assertEqual(rc, 0, out)
+        r2 = self.repo()
+        self.bundle(r2, mod=self.MOD + "\n#print axioms Fx.good\n")
+        rc, out = r2.gate("lint_banked.py")
+        self.assertNotEqual(rc, 0)
+        self.assertIn("#print axioms", out)
+        r3 = self.repo()
+        self.bundle(r3, mod=self.MOD + '\nopen Lean in\nrun_cmd logInfo "x"\n')
+        rc, out = r3.gate("lint_banked.py")
+        self.assertNotEqual(rc, 0)
+        self.assertIn("run_cmd", out)
+
     def test_the_rebuilt_archive_is_the_factorys_archive(self):
         r = self.repo()
         self.bundle(r)
