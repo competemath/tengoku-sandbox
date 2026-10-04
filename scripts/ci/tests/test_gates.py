@@ -263,6 +263,230 @@ class Gates(unittest.TestCase):
         self.assertIn("What to do", out)
 
 
+class ScopeFix(unittest.TestCase):
+    """A scope-fix PR: existing modules of an intake library, a registration made local, nothing else (scope_fix_check.py judges every line)."""
+
+    BASIC = "import Tengoku\n\nnamespace Fx\n\ninstance : Coe (ℕ × ℕ) (ℤ × ℤ) := ⟨fun p => p⟩\n\n@[simp] theorem s : 1 + 1 = 2 := rfl\n\ntheorem good : 1 + 1 = 2 := rfl\n\nend Fx\n"
+    USE = "import Tengoku\nimport Tengoku.FxLib.Fx.Basic\n\ntheorem use : 1 + 1 = 2 := by simp\n"
+    BOT = {"PR_ACTOR": "tengoku-bot", "TENGOKU_BOT": "tengoku-bot"}
+
+    def repo(self):
+        r = Repo()
+        r.write("Tengoku/FxLib/Fx/Basic.lean", self.BASIC)
+        r.write("Tengoku/FxLib/Fx/Use.lean", self.USE)
+        r.write("Tengoku/FxLib.lean", "import Tengoku.FxLib.Fx.Basic\nimport Tengoku.FxLib.Fx.Use\n")
+        r.write("data/intake/fx-lib/manifest.jsonl", json.dumps({"name": "Fx.good", "library": "fx-lib"}) + "\n")
+        r.commit("an intake library")
+        r.git("checkout", "-q", "main")
+        r.git("merge", "-q", "--ff-only", "pr")
+        r.git("checkout", "-q", "pr")
+        return r
+
+    def edit(self, r, basic=None, use=None, extra=()):
+        if basic is not None:
+            r.write("Tengoku/FxLib/Fx/Basic.lean", basic)
+        if use is not None:
+            r.write("Tengoku/FxLib/Fx/Use.lean", use)
+        for path, text in extra:
+            r.write(path, text)
+        r.commit("scope fix")
+
+    def judge(self, r):
+        rc, out = r.gate("classify.py", env=self.BOT)
+        if rc != 0:
+            return rc, out
+        self.assertIn("class=scope-fix", out)
+        return r.gate("scope_fix_check.py")
+
+    def test_the_exact_transformation_passes(self):
+        r = self.repo()
+        basic = (
+            self.BASIC.replace("instance :", "local instance :").replace("@[simp]", "@[local simp]")
+            + "-- Tengoku: 2 registration(s) of this module made local so they do not change other libraries (generated)\n"
+        )
+        use = self.USE.replace(
+            "\ntheorem use", "\nattribute [local instance] Fx.instCoeProdNatInt\nattribute [local simp] Fx.s\n\ntheorem use"
+        )
+        self.edit(r, basic, use)
+        rc, out = self.judge(r)
+        self.assertEqual(rc, 0, out)
+        self.assertIn("scope-fix ok: 2 modules", out)
+
+    def test_only_the_factory_may_send_one(self):
+        r = self.repo()
+        self.edit(r, self.BASIC.replace("instance :", "local instance :"))
+        rc, out = r.gate("classify.py", env={"PR_ACTOR": "someone", "TENGOKU_BOT": "tengoku-bot"})
+        self.assertNotEqual(rc, 0)
+        self.assertIn("factory's account", out)
+
+    def test_a_changed_statement_or_a_new_declaration_is_refused(self):
+        for basic in (
+            self.BASIC.replace("1 + 1 = 2 := rfl\n\nend", "2 + 2 = 4 := rfl\n\nend"),
+            self.BASIC.replace("end Fx", "theorem extra : True := trivial\n\nend Fx"),
+            self.BASIC.replace("theorem good", "local theorem good"),
+            self.BASIC.replace("instance :", "local instance :").replace("\n\nend Fx", "\nend Fx"),
+        ):
+            r = self.repo()
+            self.edit(r, basic)
+            rc, out = self.judge(r)
+            self.assertNotEqual(rc, 0, basic)
+
+    def test_a_local_in_a_comment_or_a_string_is_refused(self):
+        r = self.repo()
+        self.edit(
+            r,
+            self.BASIC.replace("namespace Fx", "-- an instance of the thing\nnamespace Fx").replace(
+                "-- an instance", "-- an local instance"
+            ),
+        )
+        self.assertNotEqual(self.judge(r)[0], 0)
+
+    def test_an_added_attribute_must_repeat_a_registration_of_the_library(self):
+        r = self.repo()
+        self.edit(
+            r, None, self.USE.replace("\ntheorem use", "\nattribute [local instance] Matrix.linftyOpNormedAddCommGroup\n\ntheorem use")
+        )
+        rc, out = self.judge(r)
+        self.assertNotEqual(rc, 0)
+        self.assertIn("is not an instance this library registers", out)
+
+    def test_other_files_and_other_libraries_are_not_a_scope_fix(self):
+        r = self.repo()
+        self.edit(r, self.BASIC.replace("instance :", "local instance :"), extra=[("Tengoku/All.lean", "import Tengoku.FxLib\n")])
+        rc, out = r.gate("classify.py", env=self.BOT)
+        self.assertNotIn("class=scope-fix", out)
+        r2 = self.repo()
+        self.edit(r2, None, None, extra=[("Tengoku/Lib/Basic.lean", "/-\nAuthors: Someone\n-/\nlocal instance : Foo := x\n")])
+        self.assertNotIn("class=scope-fix", r2.gate("classify.py", env=self.BOT)[1])
+
+    def test_the_queue_builds_the_library_of_a_scope_fix_again(self):
+        r = ScopeFix().repo()
+        r.write("schemas/sources.json", json.dumps({"corpora": {}}))
+        r.commit("schemas")
+        r.git("checkout", "-q", "main")
+        r.git("merge", "-q", "--ff-only", "pr")
+        r.git("checkout", "-q", "pr")
+        ScopeFix().edit(r, ScopeFix.BASIC.replace("instance :", "local instance :"))
+        rc, out = r.gate("queue_targets.py")
+        self.assertEqual(rc, 0, out)
+        self.assertIn("Tengoku.FxLib", out.split())
+
+
+class ScopeFixUnits(unittest.TestCase):
+    """The pure parts of scope_fix_check.py, in process."""
+
+    def setUp(self):
+        sys.path.insert(0, str(CI))
+        import scope_fix_check
+
+        self.sf = scope_fix_check
+
+    def test_the_mask_blanks_comments_and_strings_and_keeps_the_columns(self):
+        text = 'a -- instance\n/- x /- nested instance -/ y -/ b "s \\" instance" c /- never closed instance'
+        masked = self.sf.mask(text)
+        self.assertEqual(len(masked), len(text))
+        self.assertEqual(masked.count("\n"), text.count("\n"))
+        self.assertNotIn("instance", masked)
+        self.assertEqual(masked[:2], "a ")
+        self.assertIn(" b ", masked)
+        self.assertIn(" c ", masked)
+
+    def test_local_insertion(self):
+        ok = self.sf.local_insertion
+        self.assertTrue(ok("instance : Foo", "local instance : Foo"))
+        self.assertTrue(ok("@[simp, x] theorem t", "@[local simp, x] theorem t"))
+        self.assertTrue(ok("attribute [instance] A", "attribute [local instance] A"))
+        self.assertFalse(ok("theorem t", "local theorem t"))  # not before instance/simp
+        self.assertFalse(ok("simp_all", "local simp_all"))  # a different word
+        self.assertFalse(ok("-- instance", "-- local instance"))  # inside a comment
+        self.assertFalse(ok("instance", "instance"))  # nothing inserted
+        self.assertFalse(ok("instance : A", "local instance : B"))  # something else changed too
+
+    def test_what_a_library_registers_by_kind(self):
+        text = self.sf.mask(
+            "namespace A\ninstance (priority := low) foo : X := x\n@[simp] theorem s1 : a = b := rfl\n"
+            "attribute [instance, simp] B.c\n  D.e\nattribute [reducible] F.g\n-- instance ignored : Y\nend A\n"
+        )
+        got = self.sf.registrations(text)
+        self.assertEqual(got["instance"], {"foo", "c", "e"})
+        self.assertEqual(got["simp"], {"s1", "c", "e"})
+
+    def test_added_lines(self):
+        known = {"instance": {"foo"}, "simp": {"s1"}}
+        f = self.sf.added_line_errors
+        self.assertEqual(f("p", 1, "", known), [])
+        self.assertEqual(
+            f("p", 1, "-- Tengoku: 2 registration(s) of this module made local so they do not change other libraries (generated)", known),
+            [],
+        )
+        self.assertEqual(f("p", 1, "attribute [local instance] X.foo X.instBar", known), [])
+        self.assertEqual(f("p", 1, "attribute [local instance 100] X.foo", known), [])
+        self.assertEqual(f("p", 1, "attribute [local simp] X.s1", known), [])
+        self.assertTrue(f("p", 1, "attribute [local simp] X.foo", known))  # an instance's name is not a simp lemma
+        self.assertTrue(f("p", 1, "attribute [local instance] X.s1", known))  # and the other way round
+        self.assertTrue(f("p", 1, "attribute [local instance] X.instBar Matrix.other", known))
+        self.assertTrue(f("p", 1, "axiom bad : False", known))
+
+    def test_a_removed_or_resized_edit_is_refused(self):
+        known = {"instance": set(), "simp": set()}
+        self.assertTrue(self.sf.check_file("p", "a\nb\nc", "a\nc", known))  # a line removed
+        self.assertTrue(self.sf.check_file("p", "a\nb", "a\nb\nc", known))  # an unexpected line added
+        self.assertEqual(self.sf.check_file("p", "a\ninstance : X\nb", "a\nlocal instance : X\nb", known), [])
+
+    def test_file_errors_in_process(self):
+        from unittest import mock
+
+        sf = self.sf
+        blobs = {("b", "Tengoku/FxLib/Fx/A.lean"): b"instance : X := x\n", ("h", "Tengoku/FxLib/Fx/A.lean"): b"local instance : X := x\n"}
+        sf.base, sf.head = "b", "h"
+        with mock.patch.object(sf, "blob", lambda rev, p: blobs.get((rev, p))), mock.patch.object(sf, "run", lambda *a, **k: ""):
+            cache: dict = {}
+            self.assertEqual(sf.file_errors("M", "Tengoku/FxLib/Fx/A.lean", {"FxLib"}, cache), [])
+            self.assertIn("FxLib", cache)  # scanned once
+            self.assertTrue(sf.file_errors("A", "Tengoku/FxLib/Fx/A.lean", {"FxLib"}, cache))  # added, not modified
+            self.assertTrue(sf.file_errors("M", "Tengoku/Other/Fx/A.lean", {"FxLib"}, cache))  # a library that is not an intake bundle
+            self.assertTrue(sf.file_errors("M", "README.md", {"FxLib"}, cache))
+            self.assertIn("not readable", sf.file_errors("M", "Tengoku/FxLib/Fx/Gone.lean", {"FxLib"}, cache)[0])
+            blobs[("h", "Tengoku/FxLib/Fx/B.lean")] = b"\xff\xfe"
+            blobs[("b", "Tengoku/FxLib/Fx/B.lean")] = b"x\n"
+            self.assertIn("not valid UTF-8", sf.file_errors("M", "Tengoku/FxLib/Fx/B.lean", {"FxLib"}, cache)[0])
+
+    def test_main_in_process(self):
+        import io
+        from contextlib import redirect_stdout
+        from unittest import mock
+
+        sf = self.sf
+        ok = [("M", "Tengoku/FxLib/Fx/A.lean"), ("M", "Tengoku/FxLib/Fx/B.lean")]
+        with (
+            mock.patch.object(sf, "changed_files", lambda b, h: ok),
+            mock.patch.object(sf, "intake_namespaces", lambda: {"FxLib"}),
+            mock.patch.object(sf, "file_errors", lambda *a: []),
+            redirect_stdout(io.StringIO()) as out,
+        ):
+            sf.main(["x", "b", "h"])
+        self.assertIn("scope-fix ok: 2 modules of 1 libraries", out.getvalue())
+        with mock.patch.object(sf, "changed_files", lambda b, h: []), mock.patch.object(sf, "intake_namespaces", lambda: set()):
+            with self.assertRaises(SystemExit):
+                sf.main(["x", "b", "h"])
+        many = [("M", f"Tengoku/FxLib/Fx/M{i}.lean") for i in range(12)]
+        with (
+            mock.patch.object(sf, "changed_files", lambda b, h: many),
+            mock.patch.object(sf, "intake_namespaces", lambda: {"FxLib"}),
+            mock.patch.object(sf, "file_errors", lambda *a: ["e"]),
+        ):
+            with self.assertRaises(SystemExit):
+                sf.main(["x", "b", "h"])
+
+    def test_intake_namespaces_in_process(self):
+        from unittest import mock
+
+        sf = self.sf
+        listing = "data/intake/fx-lib/manifest.jsonl\ndata/intake/fx-lib/report.json\ndata/intake/other/manifest.jsonl"
+        with mock.patch.object(sf, "run", lambda *a, **k: listing):
+            self.assertEqual(sf.intake_namespaces(), {"FxLib", "Other"})
+
+
 if __name__ == "__main__":
     unittest.main()
 

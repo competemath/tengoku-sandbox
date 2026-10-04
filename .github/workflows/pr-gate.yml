@@ -55,7 +55,7 @@ jobs:
         env: { GH_TOKEN: "${{ github.token }}", CLASS: "${{ steps.c.outputs.class }}", PR: "${{ github.event.pull_request.number }}" }
         run: |
           # one class label at a time: a PR whose class changes (docs, then content) loses the old one
-          old=$(gh pr view "$PR" -R "$GITHUB_REPOSITORY" --json labels --jq '.labels[].name' | grep -xE 'content|tombstone|tooling|docs|promotion|derived|intake' | grep -vxF "$CLASS" | paste -sd, - || true)
+          old=$(gh pr view "$PR" -R "$GITHUB_REPOSITORY" --json labels --jq '.labels[].name' | grep -xE 'content|tombstone|tooling|docs|promotion|derived|intake|scope-fix' | grep -vxF "$CLASS" | paste -sd, - || true)
           args=(--add-label "$CLASS"); [ -n "$old" ] && args+=(--remove-label "$old")
           gh pr edit "$PR" -R "$GITHUB_REPOSITORY" "${args[@]}" || echo "::warning::could not label the PR '$CLASS' (scripts/ci/labels.sh creates the class labels)"
 
@@ -152,6 +152,30 @@ jobs:
                  --signer-workflow "competemath/emissary-archangel/.github/workflows/$wf.yml"; then ok=1; break; fi
           done
           [ "${ok:-0}" = 1 ] || { echo "::error::no build attestation of competemath/emissary-archangel matches the bundle in this PR"; exit 1; }
+
+  # A scope-fix PR (a merged intake library's global registrations made local) is judged line by line: only `local ` inserted before
+  # instance/simp, the library's own registrations repeated as local attributes, blank lines and one note comment. Nothing of the PR runs.
+  scope-fix:
+    needs: classify
+    if: github.event_name == 'pull_request_target' && needs.classify.outputs.class == 'scope-fix'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions: { contents: read }
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
+        with: { egress-policy: audit }
+      # The base commit with plain git, not actions/checkout: the repository is public, so nothing needs a token (the next step fetches the PR the
+      # same way), and no credential is ever written into the checkout. Only the base is checked out; the PR is read as git objects.
+      - name: The base commit (the checks are main's)
+        run: |
+          git init -q .
+          git remote add origin "https://github.com/$GITHUB_REPOSITORY"
+          git fetch -q --no-tags --filter=blob:none origin "$BASE"
+          git checkout -q --detach "$BASE"
+      - name: The PR's commits, as data (the checks are main's)
+        run: git fetch -q --no-tags --filter=blob:none origin "+$PR_REF:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
+      - name: scope-fix checks
+        run: python3 scripts/ci/scope_fix_check.py "$BASE" "$HEAD"
 
   secrets:
     needs: classify
@@ -307,7 +331,7 @@ jobs:
         run: printf '%s' "$BODY" > body.txt && python3 scripts/ci/depends.py body.txt
 
   pr-gate:
-    needs: [classify, data-rules, credits, dco, secrets, workflows, depends, vacuity, goals, intake]
+    needs: [classify, data-rules, credits, dco, secrets, workflows, depends, vacuity, goals, intake, scope-fix]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 10
