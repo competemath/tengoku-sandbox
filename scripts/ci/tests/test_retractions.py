@@ -101,6 +101,38 @@ class Retractions(unittest.TestCase):
         self.assertIn("credit is one `Author:` line", out)
         self.assertIn("evidence is an http(s) link", out)
 
+    def test_a_tombstone_key_written_with_an_escape_is_found(self):
+        r = Repo()
+        r.git("checkout", "-q", "main")
+        r.append(T, '{"tomb\\u0073tone": "Lib.old", "category": "duplicate", "reason": "r", "by": "t", "at": "2026-09-29"}\n')
+        r.commit("base: an escaped tombstone key")
+        r.git("checkout", "-q", "-B", "pr")
+        r.append(T, line(tombstone_note="Lib.old", note="see Nat.two"))
+        r.commit("note")
+        rc, out = self.check(r)
+        self.assertEqual(rc, 0, out)
+
+    def test_times_are_utc_and_evidence_names_a_host(self):
+        for bad_at in ("2026-09-30T01:00:00+02:00", "30/09/2026", "yesterday"):
+            r = Repo()
+            r.append(T, line(credit_correction="Lib.old", credit="Author: Ada", evidence="https://example.org/e", at=bad_at))
+            r.commit("bad time")
+            rc, out = self.check(r)
+            self.assertNotEqual(rc, 0, bad_at)
+            self.assertIn("at is a UTC date or time", out)
+        for bad_link in ("https://?proof", "https:///x", "ftp://example.org/e", "https://localhost/e"):
+            r = Repo()
+            r.append(T, line(credit_correction="Lib.old", credit="Author: Ada", evidence=bad_link))
+            r.commit("bad link")
+            rc, out = self.check(r)
+            self.assertNotEqual(rc, 0, bad_link)
+            self.assertIn("evidence is an http(s) link", out)
+        r = Repo()
+        r.append(T, line(credit_correction="Lib.old", credit="Author: Ada", evidence="https://example.org/e", at="2026-09-30T01:00:00Z"))
+        r.commit("good")
+        rc, out = self.check(r)
+        self.assertEqual(rc, 0, out)
+
     def test_a_credit_correction_for_a_retracted_record_fails(self):
         r = Repo()
         r.append(T, line(tombstone="Lib.old", category="incorrect", reason="wrong"))

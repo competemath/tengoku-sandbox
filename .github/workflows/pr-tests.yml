@@ -34,19 +34,20 @@ jobs:
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { fetch-depth: 2, filter: "blob:none", persist-credentials: false }
+        with: { fetch-depth: 2, filter: "blob:none", persist-credentials: false }   # 2: the merge commit and the base (the fuzz step's diff)
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with: { python-version: "3.12" }
-      - run: "pip install -q --require-hashes --only-binary :all: -r scripts/ci/requirements/yaml.txt"   # workflow_rules.py reads YAML
+      - run: pip install -q --require-hashes -r scripts/ci/requirements/yaml.txt   # workflow_rules.py reads YAML
       # `| tail` used to hide the test result: a failing test passed the job (found by the campaign).
       - shell: bash
         run: |
           set -o pipefail
           python3 -m unittest discover -s scripts/tests -v 2>&1 | tail -5
-          python3 -m unittest scripts.ci.tests.test_gates -v 2>&1 | tail -5
-          python3 -m unittest scripts.ci.tests.test_workflow_rules -v 2>&1 | tail -5
-          python3 -m unittest scripts.ci.tests.test_axioms_check -v 2>&1 | tail -5
-          python3 -m unittest scripts.ci.tests.test_fuzz -v 2>&1 | tail -5
+          # every module in scripts/ci/tests, found the same way CONTRIBUTING.md runs them (naming modules here left
+          # the goals, retractions, headlines and promotion-notify tests out of CI)
+          python3 -m unittest discover -s scripts/ci/tests -p 'test_*.py' -v 2>&1 | tail -5
+      # The fuzz targets of the gate scripts this PR changes (docs/testing.md, "Fuzzing"); nothing for a PR that changes
+      # none. The merge queue runs the same on the merged result, and the merge waits for it there.
       - name: Fuzz the gate scripts this PR changes
         run: |
           # a separate assignment: a runner that cannot even list its targets fails the step (bash -e), never skips it

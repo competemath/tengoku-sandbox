@@ -11,6 +11,7 @@ import re
 import sys
 
 from _git import changed_files, fail, gh_output, pascal, run, tier_of
+from restructure_check import is_restructure
 
 base, head = sys.argv[1], sys.argv[2]
 files = changed_files(base, head)
@@ -46,6 +47,15 @@ if files and all(st == "M" and (m := re.fullmatch(r"Tengoku/([^/]+)/.+\.lean", p
     print(f"class=scope-fix ({len(files)} modules)")
     gh_output("class", "scope-fix")
     gh_output("files", " ".join(p for _, p in files))
+    sys.exit(0)
+# A RESTRUCTURE PR moves the seed into Tengoku/Seed/ (scripts/restructure.py). scripts/ci/restructure_check.py recomputes it from the base commit and
+# accepts only exactly that, so the PR may touch what the script owns although derived and tooling paths are mixed in it.
+if is_restructure(base, head):
+    bot_ = os.environ.get("TENGOKU_BOT", "tengoku-bot")
+    if not (os.environ.get("PR_ACTOR", "") == bot_ or os.environ.get("TENGOKU_ACTOR_CHECKED") == "1"):
+        fail(f"a restructure PR comes from the factory's account ({bot_}), not from {os.environ.get('PR_ACTOR') or 'nobody'}")
+    print(f"class=restructure ({len(files)} files)")
+    gh_output("class", "restructure")
     sys.exit(0)
 by = {}
 for st, p in files:

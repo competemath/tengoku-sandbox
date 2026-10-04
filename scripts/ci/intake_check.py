@@ -9,7 +9,7 @@ git objects only:
   shape       one library; only its modules, its root file, its manifest and report, and ONE added line in Tengoku/All.lean; every file is
               new (a library already in the tree is not intaken again); size caps
   manifest    one JSON line per theorem: name, statement, module, library, toolchain (= lean-toolchain), module = a file of the PR, names unique
-              and not already a record of the tree
+              and not already a trusted record of the tree or a theorem of an intake bundle in it
   lint        every module passes the content allow-list (scripts/ci/allowlist.py: known-inert commands, attributes, options; no code that
               runs while compiling) after its header; the header may only import the tree (Tengoku.*) and Lean/Std/Init.
               `--lint proposed` additionally allows notation commands (notation, infix, prefix, postfix, notation3, scoped, local)
@@ -36,7 +36,8 @@ tar_out = args[args.index("--tar") + 1] if "--tar" in args else ""
 MAX_FILES, MAX_BYTES = 20000, 400 * 1024 * 1024
 ALL = "Tengoku/All.lean"
 NOTATION_OK = re.compile(r"`(?:notation3?|infix[lr]?|prefix|postfix|scoped|local)`")
-HEADER = re.compile(r"^\s*(?:(?:public|private|meta)\s+)*import\s+(?:all\s+)?(\S+)\s*$|^\s*(?:module|prelude)\s*$")
+IMPORT_LINE = re.compile(r"^\s*(?:(?:public|private|meta)\s+)*import\s+(?:all\s+)?(\S+)\s*$")
+MODULE_LINE = re.compile(r"^\s*(?:module|prelude)\s*$")
 TREE_IMPORT = re.compile(r"(?:Tengoku|Lean|Std|Init)(?:\.|$)")
 
 files = changed_files(base, head)
@@ -86,18 +87,25 @@ try:
 except Exception as e:  # noqa: BLE001
     manifest = []
     errors.append(f"manifest.jsonl is not JSON lines: {e}")
+# what is in the tree: the trusted records and the theorems of the intake bundles already merged. Staging and tentative records are not
+# built into the tree (the generator renames a clash when one is promoted), so a name they share with this bundle proves nothing
 existing: set[str] = set()
-for tier in ("trusted", "staging", "tentative"):
-    d = ROOT / "data" / tier
-    for f in list(d.glob("*.jsonl")) + list(d.glob("*/*.jsonl")) if d.exists() else []:
-        if f.stem == lib or f.parent.name == lib:
-            continue  # the library's own tentative records are what this bundle translates
-        for ln in f.read_text(errors="replace").splitlines():
-            m = re.search(r'"name":\s*"([^"]+)"', ln)
-            if m and tier != "tentative":
-                existing.add(m.group(1))
+tree_files = [
+    f
+    for tier in ("trusted", "intake")
+    for f in (ROOT / "data" / tier).glob("**/*.jsonl")
+    if f.stem != lib and f.parent.name != lib  # the library's own records are what this bundle translates
+]
+for f in tree_files:
+    for m in re.finditer(r'"name":\s*"([^"]+)"', f.read_text(errors="replace")):
+        existing.add(m.group(1))
+if not manifest:
+    errors.append("the manifest has no theorem: a bundle that carries none is empty")
 for i, r in enumerate(manifest, 1):
     where = f"manifest line {i}"
+    if not isinstance(r, dict):
+        errors.append(f"{where}: not a JSON object")
+        continue
     for k in ("name", "statement", "module", "library", "toolchain"):
         if not isinstance(r.get(k), str) or not r[k].strip():
             errors.append(f"{where}: `{k}` missing")
@@ -105,18 +113,17 @@ for i, r in enumerate(manifest, 1):
         errors.append(f"{where}: library {r.get('library')!r}, expected {lib!r}")
     if r.get("toolchain") != toolchain:
         errors.append(f"{where}: toolchain {r.get('toolchain')!r}, the tree is on {toolchain!r}")
-    mod = r.get("module", "")
-    if f"{mod.replace('.', '/')}.lean" not in modules:
+    mod = r.get("module")
+    if not isinstance(mod, str) or f"{mod.replace('.', '/')}.lean" not in modules:
         errors.append(f"{where}: module {mod} is not a file of this PR")
-    if r.get("name") in seen:
-        errors.append(f"{where}: {r.get('name')} twice")
-    seen.add(r.get("name", ""))
+    name = r.get("name") if isinstance(r.get("name"), str) else ""  # a non-string name was reported above; it is never hashed
+    if name in seen:
+        errors.append(f"{where}: {name} twice")
+    seen.add(name)
     # a record's name is the declaration as written in its file (inside `namespace X`, `theorem foo` is stored as `foo`; `hφ₀` as `h`): a bare
     # bundle name equal to one proves nothing about the real names; only a qualified name is compared (the merge queue's build decides the rest)
-    if "." in str(r.get("name")) and r.get("name") in existing:
-        errors.append(
-            f"{where}: {r.get('name')} is already a record of the tree (the generator renames clashes; a bundle must not carry one)"
-        )
+    if "." in name and name in existing:
+        errors.append(f"{where}: {name} is already a trusted record or a bundle theorem of the tree (a bundle must not declare it again)")
 
 # lint
 allowed_options = set(json.loads((ROOT / "schemas" / "allowed-options.json").read_text())["allowed"])
@@ -130,13 +137,10 @@ for p in sorted(p for _, p in files if p.endswith(".lean") and p != ALL):
     total += len(text)
     body = []
     for ln in text.split("\n"):
-        m = HEADER.match(ln.split("--", 1)[0])  # a comment after the module name is part of the line
-        if m:
-            if m.group(1) and not TREE_IMPORT.match(m.group(1)):
-                errors.append(f"{p}: imports {m.group(1)}, which is not the tree")
-            body.append("")
-        else:
-            body.append(ln)
+        m = IMPORT_LINE.match(ln.split("--", 1)[0])  # a comment after the module name is part of the line
+        if m and not TREE_IMPORT.match(m.group(1)):
+            errors.append(f"{p}: imports {m.group(1)}, which is not the tree")
+        body.append("" if m or MODULE_LINE.match(ln) else ln)
     vs = violations("\n".join(body), allowed_options)
     if lint_mode == "proposed":
         vs = [v for v in vs if not NOTATION_OK.search(v)]

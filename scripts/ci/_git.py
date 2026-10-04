@@ -46,8 +46,23 @@ APPEND_ONLY = [
 ]
 
 
+# Library keys that cannot exist: Tengoku/Seed/ is the seeded upstream code and Tengoku/Native/ is kept for a later folder. A library
+# there would be generated over that folder, and its prefix would make the folder "derived" here. scripts/seed.py keeps the same list
+# for the generator; a test holds the two together.
+RESERVED_KEYS = ("seed", "native")
+
+
 def _pascal(s: str) -> str:
     return "".join(w[:1].upper() + w[1:] for w in re.split(r"[-_ ]+", s) if w)
+
+
+def check_key(lib: str) -> str:
+    """`lib` as a library key, unless its folder (`Tengoku/<Pascal>/`, compared without case: some file systems have none) is a reserved one."""
+    if _pascal(lib).lower() in RESERVED_KEYS:
+        fail(
+            f"library key {lib!r}: Tengoku/{_pascal(lib)}/ is reserved, not a library's folder ({', '.join(RESERVED_KEYS)} cannot be keys)"
+        )
+    return lib
 
 
 def derived_prefixes() -> list[str]:
@@ -55,13 +70,14 @@ def derived_prefixes() -> list[str]:
     libs = {f.stem for tier in ("trusted", "staging", "tentative") for f in (ROOT / "data" / tier).glob("*.jsonl")}
     out = []
     for lib in libs:
-        ns = _pascal(lib)
+        ns = _pascal(check_key(lib))
         out += [f"Tengoku/{ns}/", f"Tengoku/{ns}.lean"]
     return out
 
 
 def run(*args: str, check: bool = True) -> str:
-    return subprocess.run(["git", *args], cwd=ROOT, capture_output=True, text=True, check=check).stdout
+    # errors="replace": a file with bytes that are not UTF-8 (the fuzzer's corpus has some) must not end a gate in a traceback
+    return subprocess.run(["git", *args], cwd=ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace", check=check).stdout
 
 
 def match(path: str, patterns: list[str]) -> bool:
@@ -90,7 +106,9 @@ def tier_of(path: str) -> str:
 
 
 def _range(base: str, head: str) -> list[str]:
-    return ["--cached"] if head == "--staged" else [f"{base}...{head}" if "..." not in base else base]
+    if head == "--staged":
+        return ["--cached"]
+    return [base if "..." in base else f"{base}...{head}"]
 
 
 def changed_files(base: str, head: str) -> list[tuple[str, str]]:
@@ -107,9 +125,43 @@ def changed_files(base: str, head: str) -> list[tuple[str, str]]:
     return out
 
 
+_DIFFS: dict[tuple[str, str], dict[str, str]] = {}
+
+
+def _section_path(section: list[str]) -> str | None:
+    """The path a `diff --git` section is about, or None when git quoted it."""
+    for line in section:
+        for prefix in ("+++ b/", "--- a/"):
+            if line.startswith(prefix):
+                p = line[len(prefix) :].rstrip("\n").removesuffix("\t")
+                return None if p.startswith('"') else p
+    head = section[0][len("diff --git ") :].rstrip("\n")  # binary or mode-only: "a/P b/P"
+    n = (len(head) - 5) // 2
+    return head[2 : 2 + n] if head == f"a/{head[2 : 2 + n]} b/{head[2 : 2 + n]}" else None
+
+
+def file_diff(base: str, head: str, path: str) -> str:
+    """What `git diff -U0 <range> -- <path>` prints. The range is diffed once per run and split by file:
+    one git call per file took minutes on a PR touching every seeded module (credits and sorry-advisory
+    ran out of their 5-minute budget). Rename detection is off, as a one-path diff has no partner for it
+    either; a path git had to quote is looked up with its own call."""
+    key = (base, head)
+    if key not in _DIFFS:
+        whole = run("-c", "core.quotePath=false", "diff", "-U0", "--no-renames", *_range(base, head))
+        sections: list[list[str]] = []
+        for line in whole.splitlines(keepends=True):
+            if line.startswith("diff --git "):
+                sections.append([line])
+            elif sections:
+                sections[-1].append(line)
+        _DIFFS[key] = {p: "".join(s) for s in sections if (p := _section_path(s)) is not None}
+    found = _DIFFS[key].get(path)
+    return found if found is not None else run("diff", "-U0", *_range(base, head), "--", path)
+
+
 def added_lines(base: str, head: str, path: str) -> list[tuple[int, str]]:
     """(new line number, text) for lines added in the diff of one file."""
-    diff = run("diff", "-U0", *_range(base, head), "--", path)
+    diff = file_diff(base, head, path)
     out, new_no = [], 0
     for line in diff.splitlines():
         if line.startswith("@@"):
@@ -119,14 +171,14 @@ def added_lines(base: str, head: str, path: str) -> list[tuple[int, str]]:
             out.append((new_no, line[1:]))
             new_no += 1
         elif line.startswith("-") and not line.startswith("---"):
-            pass
+            continue  # a removed line: the new file's line number does not advance
         elif not line.startswith(("diff", "index", "\\")):
             new_no += 1
     return out
 
 
 def removed_lines(base: str, head: str, path: str) -> list[tuple[int, str]]:
-    diff = run("diff", "-U0", *_range(base, head), "--", path)
+    diff = file_diff(base, head, path)
     out, old_no = [], 0
     for line in diff.splitlines():
         if line.startswith("@@"):
@@ -136,7 +188,7 @@ def removed_lines(base: str, head: str, path: str) -> list[tuple[int, str]]:
             out.append((old_no, line[1:]))
             old_no += 1
         elif line.startswith("+"):
-            pass
+            continue  # an added line: the old file's line number does not advance
         elif not line.startswith(("diff", "index", "\\")):
             old_no += 1
     return out
@@ -181,7 +233,9 @@ def annotation(msg: str) -> str:
 
 
 def plain(text: str) -> str:
-    """Text for the log that can carry no workflow command (mirror of the library's _git.plain)."""
+    """Text for the log that can carry no workflow command: a command is `::name::…`, so every `::` is broken up, a
+    run of colons too (`:::` → `: : :`; a plain replace left `: ::`, found by scripts/ci/fuzz), and CR dropped. The
+    line breaks of a readable message stay."""
     return re.sub(r":(?=:)", ": ", text.replace("\r", ""))
 
 
@@ -190,7 +244,7 @@ def fail(msg: str) -> None:
         # `::error::` becomes a check-run annotation (what the verdict comment quotes); newlines must be
         # %0A-encoded or GitHub keeps only the first line. The readable form goes to the log too.
         print("::error::" + annotation(msg))
-    print("FAIL: " + msg)
+    print("FAIL: " + plain(msg))  # the workflow prints this line; a record name in msg comes from the PR
     sys.exit(1)
 
 
@@ -201,11 +255,12 @@ def load_schema(name: str) -> dict:
 def library_of(path: str) -> str:
     """data/<tier>/<library>.jsonl → library; data/<tier>/<library>/<file>.jsonl → library."""
     parts = path.split("/")
-    return parts[2] if len(parts) == 4 else Path(path).stem
+    return check_key(parts[2] if len(parts) == 4 else Path(path).stem)
 
 
 def pascal(s: str) -> str:
     """equational-theories -> EquationalTheories (the generated library directory)."""
+    check_key(s)
     return "".join(w[:1].upper() + w[1:] for w in s.replace("_", "-").split("-") if w)
 
 

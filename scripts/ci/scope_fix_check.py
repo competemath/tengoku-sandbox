@@ -29,9 +29,12 @@ NAME = r"[\w.'«»!?]+"
 ATTR_LINE = re.compile(rf"attribute \[local (?:instance(?: \d+)?|simp)\]( {NAME})+")
 NOTE = re.compile(r"-- Tengoku: \d+ registration\(s\) of this module made local so they do not change other libraries \(generated\)")
 KEYWORD = re.compile(r"(?:instance|simp)(?![\w'.])")
-INSTANCE_DECL = re.compile(rf"(?<![\w.])instance\s+(?:\(priority\s*:=[^)]*\)\s*)?({NAME})")
+INSTANCE_DECL = re.compile(
+    rf"^[ \t]*(?:@\[[^\]]*\][ \t]*)*(?:(?:private|protected|noncomputable|nonrec|partial|unsafe|public)[ \t]+)*instance\s+(?:\(priority\s*:=[^)]*\)\s*)?({NAME})",
+    re.M,
+)  # a global instance declaration at the start of a line (not `local instance`, not the word inside an attribute list)
 SIMP_DECL = re.compile(
-    rf"@\[[^\]]*(?<![\w.])simp\b[^\]]*\]\s*(?:(?:private|protected|noncomputable|nonrec|partial|unsafe)\s+)*(?:theorem|lemma|def|abbrev)\s+({NAME})"
+    rf"@\[[^\]]*(?<![\w.\-])(?<!local )(?<!scoped )simp\b[^\]]*\]\s*(?:(?:private|protected|noncomputable|nonrec|partial|unsafe)\s+)*(?:theorem|lemma|def|abbrev)\s+({NAME})"
 )
 ATTRIBUTE_CMD = re.compile(
     rf"attribute\s*\[([^\]]*)\]((?:[ \t]+{NAME})+(?:[ \t]*\n[ \t]+{NAME}(?:[ \t]+{NAME})*)*)"
@@ -88,16 +91,20 @@ def registered(ns: str) -> dict[str, set[str]]:
     return out
 
 
+GLOBAL_ATTR = re.compile(r"(instance|simp)(?![\w'.])")  # an attribute that starts with the kind: not `local …`, `scoped …` or `-simp`
+
+
 def registrations(text: str) -> dict[str, set[str]]:
-    """the (last components of the) names an instance or simp registration of this masked module text mentions, by kind"""
+    """the (last components of the) names a GLOBAL instance or simp registration of this masked module text mentions, by kind: a `local` or
+    `scoped` registration or a removal (`-simp`) is not one, and in a mixed list each attribute counts on its own"""
     out = {
         "instance": {last(m.group(1)) for m in INSTANCE_DECL.finditer(text)},
         "simp": {last(m.group(1)) for m in SIMP_DECL.finditer(text)},
     }
     for m in ATTRIBUTE_CMD.finditer(text):
-        for kind in ("instance", "simp"):
-            if re.search(rf"(?<![\w.]){kind}\b", m.group(1)):
-                out[kind] |= {last(n) for n in m.group(2).split()}
+        kinds = {g.group(1) for a in m.group(1).split(",") if (g := GLOBAL_ATTR.match(a.strip()))}
+        for kind in kinds:
+            out[kind] |= {last(n) for n in m.group(2).split()}
     return out
 
 

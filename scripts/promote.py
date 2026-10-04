@@ -54,9 +54,9 @@ def dump(p: Path, recs: list[dict]) -> None:
     tmp.replace(p)
 
 
-def module_of(lib_ns: str, corpus_prefix: str, source_path: str, lib_dir: Path) -> tuple[str, Path]:
+def module_of(lib_ns: str, roots: list[str], source_path: str, lib_dir: Path) -> tuple[str, Path]:
     rel = Path(source_path)
-    if rel.parts and rel.parts[0] == corpus_prefix:
+    if rel.parts and rel.parts[0] in roots:
         rel = Path(*rel.parts[1:])
     return f"Tengoku.{lib_ns}." + ".".join(rel.with_suffix("").parts), lib_dir / rel
 
@@ -74,7 +74,8 @@ def vacuity_check(cand_mod: str, recs: list[dict], out: Path) -> tuple[int, str]
     names = {r["name"].removeprefix("_root_.") for r in recs}  # full names only: `foo` in another namespace is not this record
     hit = [m.group(1) for m in re.finditer(r"^VACUOUS (\S+) (\S+) (\S+)$", o, re.M) if m.group(1).removeprefix("_root_.") in names]
     if hit:
-        return 1, f"vacuous (its hypotheses can never all hold): {', '.join(hit)}; a PR acknowledging it (Vacuous-Ack) is needed\n" + o
+        # the reason last: only the tail of an error is kept
+        return 1, o + f"\nvacuous (its hypotheses can never all hold): {', '.join(hit)}; a PR acknowledging it (Vacuous-Ack) is needed"
     return 0, ""
 
 
@@ -110,7 +111,11 @@ def main() -> int:
     out = Path(args.out).resolve()
     lib = args.library
     lib_ns = pascal(lib)
-    corpus_prefix = lib.replace("-", "_")
+    try:  # the corpus's module roots (schemas/sources.json corpora); `-` -> `_` of the name when unset
+        _spec = json.loads((out / "schemas" / "sources.json").read_text(encoding="utf-8")).get("corpora", {}).get(lib, {})
+    except (OSError, ValueError):
+        _spec = {}
+    roots = list(_spec.get("roots") or [lib.replace("-", "_")])
     lib_dir = out / "Tengoku" / lib_ns
     staging_p = out / "data" / "staging" / f"{lib}.jsonl"
     trusted_p = out / "data" / "trusted" / f"{lib}.jsonl"
@@ -161,7 +166,7 @@ def main() -> int:
             if args.quiescent and time.time() - newest_staged_at(recs) < args.quiescent:
                 skipped += 1
                 continue
-            mod, real_path = module_of(lib_ns, corpus_prefix, sp, lib_dir)
+            mod, real_path = module_of(lib_ns, roots, sp, lib_dir)
             cand_path = real_path.with_name("_candidate_" + real_path.name)
             head, leaf = mod.rsplit(".", 1)
             cand_mod = f"{head}._candidate_{leaf}"

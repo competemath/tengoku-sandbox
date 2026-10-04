@@ -28,8 +28,8 @@ CLASS = os.environ.get("PR_CLASS", "") or "unclassified"
 # The ruleset requires every review conversation to be resolved before a merge. GitHub's banner only says
 # "A conversation must be resolved", which newcomers don't connect to the AI reviewers' comments.
 CONVERSATIONS = (
-    "**Before it can merge:** every review conversation must be resolved, including the AI reviewers' "
-    "(CodeRabbit, Greptile). Read each one, fix what applies or reply saying why not, then press "
+    "**Before it can merge:** every review conversation must be resolved, including the AI reviewer's "
+    "(CodeRabbit). Read each one, fix what applies or reply saying why not, then press "
     "**Resolve conversation** under it. As the PR's author you can resolve them yourself."
 )
 

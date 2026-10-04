@@ -58,6 +58,16 @@ jobs:
       complete: ${{ steps.build.outputs.complete }}
       stale: ${{ steps.guard.outputs.stale }}
     steps:
+      # The two counters bound the build's own re-dispatches (the relaunch job compares them numerically), so a
+      # manual dispatch must pass whole numbers inside the limits: -100 would otherwise allow 105 more builds.
+      - name: Reject out-of-range continuation counters
+        env:
+          RESUMED: ${{ github.event.inputs.resumed || '0' }}
+          RETRIED: ${{ github.event.inputs.retried || '0' }}
+        run: |
+          [[ "$RESUMED" =~ ^[0-9]+$ && "$RETRIED" =~ ^[0-9]+$ ]] || { echo "::error::resumed and retried must be whole numbers"; exit 1; }
+          (( 10#$RESUMED <= 5 && 10#$RETRIED <= 2 )) || { echo "::error::resumed is at most 5 and retried at most 2"; exit 1; }
+
       # Full history, no file contents: `cache.sh get` picks the newest cache that is an ANCESTOR of this
       # commit and `put` keeps a top-up that is AHEAD of it; a depth-1 clone can answer neither once main
       # has moved since the last cache (the seed step silently fell back to the Actions cache for days).
@@ -66,11 +76,7 @@ jobs:
 
       - name: Install elan (toolchain pinned by lean-toolchain)
         run: |
-          # elan at a fixed version, checked against its published sha256 (a moving `latest` would run whatever it is today)
-          elan_tgz=elan-x86_64-unknown-linux-gnu.tar.gz
-          curl -sSfL --proto '=https' --tlsv1.2 -o "$elan_tgz" "https://github.com/leanprover/elan/releases/download/v4.2.4/$elan_tgz"
-          echo "42b94d4244e8353142c456ec0e4ca6528fd898a6c604d4059f494e706e431f63  $elan_tgz" | sha256sum -c -
-          tar xzf "$elan_tgz"
+          curl -sSfL https://github.com/leanprover/elan/releases/latest/download/elan-x86_64-unknown-linux-gnu.tar.gz | tar xz
           ./elan-init -y --default-toolchain none
           echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
 
@@ -155,7 +161,7 @@ jobs:
         run: TENGOKU_ROOT="$GITHUB_WORKSPACE" bash "$RUNNER_TEMP/cache.sh" pack cache-out
 
       - if: steps.build.outputs.complete == 'true' && steps.guard.outputs.stale != 'true'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with: { name: cache-parts, path: cache-out, retention-days: 1, compression-level: 0 }
 
   # Publishes what the build packed: it runs no Lean, so it is the one job that may write releases and sign.
@@ -175,7 +181,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { fetch-depth: 0, filter: "blob:none", persist-credentials: false }
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with: { name: cache-parts, path: cache-out }
       - name: Publish cache to releases
         id: publish
@@ -192,7 +198,11 @@ jobs:
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: cache-out/tengoku-cache.tar.zst.part-*
-      # The same attestation as a file of the release (mirror of the library PR).
+
+      # The same attestation as a file of the release: the signed Sigstore bundle of the parts' SLSA build
+      # provenance (one JSON line). It serves whoever downloads the release without GitHub's attestation API:
+      # `gh attestation verify <part> -R competemath/tengoku --bundle tengoku-cache.intoto.jsonl` checks a part
+      # against it. Consumers download only the parts (cache.sh, pin.sh), so the extra file changes nothing for them.
       - name: The provenance, as a file of the release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -201,8 +211,10 @@ jobs:
         run: |
           cp "$BUNDLE" tengoku-cache.intoto.jsonl
           gh release upload "$TAG" tengoku-cache.intoto.jsonl -R "$TENGOKU_REPO" --clobber
-      # The licence files travel with the compiled code (mirror of the library change): on the new cache release and
-      # on the standing top-up release, whose gc leaves anything that is not a top-up alone.
+
+      # The licence texts and notices travel with the compiled code: Apache-2.0, MIT and BSD-3-Clause ask that whoever
+      # receives a copy also receives them. They go on the new cache release and on the standing top-up release (whose
+      # superseded assets `cache.sh topup-gc` retracts; it leaves anything that is not a top-up alone).
       - name: The licence files, with the release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -214,8 +226,12 @@ jobs:
           if ! out="$(gh release view cache-topups -R "$TENGOKU_REPO" 2>&1)"; then
             case "$out" in
               *"release not found"*)
-                gh release create cache-topups -R "$TENGOKU_REPO" --title "cache top-ups" --prerelease --target main \
-                  --notes "The small per-merge differences from the nightly cache. cache-latest.json names the one in force; everything else here is provisional or about to be collected." ;;
+                # the queue (or topup-put) may create it at the same moment: that failure is fine if the release
+                # exists now; any other failure of the create is not
+                if ! cout="$(gh release create cache-topups -R "$TENGOKU_REPO" --title "cache top-ups" --prerelease --target main \
+                  --notes "The small per-merge differences from the nightly cache. cache-latest.json names the one in force; everything else here is provisional or about to be collected." 2>&1)"; then
+                  gh release view cache-topups -R "$TENGOKU_REPO" >/dev/null 2>&1 || { echo "$cout" >&2; exit 1; }
+                fi ;;
               *) echo "$out" >&2; exit 1 ;;
             esac
           fi
@@ -264,14 +280,14 @@ jobs:
           for space in $SPACES; do
             host="$(echo "$space" | tr '/A-Z' '-a-z').hf.space"
             if [ -n "$HF_TOKEN" ]; then
-              if curl --proto '=https' --tlsv1.2 -fsS -o /dev/null -X POST -H "Authorization: Bearer $HF_TOKEN" \
+              if curl -fsS -o /dev/null -X POST -H "Authorization: Bearer $HF_TOKEN" \
                    "https://huggingface.co/api/spaces/$space/restart?factory=true"; then
                 echo "$space: factory rebuild requested (bakes the new cache into the image)"
               else
                 echo "::warning::$space: rebuild request failed; it refreshes itself on its next start"
               fi
             else
-              if out="$(curl --proto '=https' --tlsv1.2 -fsS -m 30 -X POST "https://$host/refresh" 2>/dev/null)"; then
+              if out="$(curl -fsS -m 30 -X POST "https://$host/refresh" 2>/dev/null)"; then
                 echo "$space: $out"
               else
                 echo "$space: not reachable (asleep?) — it refreshes itself on its next start"

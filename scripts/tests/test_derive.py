@@ -90,5 +90,27 @@ class Graph(unittest.TestCase):
         self.assertEqual({t["token"]: t["df"] for t in tokens}, {"nat": 2, "add": 2, "comm": 1, "zero": 1})
 
 
+class SeedLayoutTopics(unittest.TestCase):
+    def test_the_seed_folder_is_not_a_topic(self):
+        self.assertEqual(
+            derive.topics("Tengoku.Seed.Analysis.SpecialFunctions.Trigonometric.Basic"), ["analysis", "special functions", "trigonometric"]
+        )
+        self.assertEqual(derive.topics("Tengoku.Seed.Std.Data.List"), derive.topics("Tengoku.Std.Data.List"))
+        self.assertEqual(derive.topics("Tengoku.Seed"), [])
+
+    def test_the_earlier_layout_and_other_modules_are_as_before(self):
+        self.assertEqual(derive.topics("Tengoku.Analysis.Basic"), ["analysis"])
+        self.assertEqual(derive.topics("Tengoku.LibX.Deps.Basic"), ["lib x", "deps"])
+        self.assertEqual(derive.topics("Mathlib.Seed.X"), ["mathlib", "seed", "x"])  # only a Tengoku.Seed prefix is the folder
+        self.assertEqual(derive.topics("Tengoku"), [])
+        self.assertEqual(derive.topics(""), [])
+
+    def test_the_declarations_of_the_seed_layout_get_the_same_topics(self):
+        decl = {"name": "Nat.add_comm", "kind": "theorem", "statement": "∀ (n m : ℕ), n + m = m + n", "binders": [], "constants_type": []}
+        old, new = ({**decl, "module": m} for m in ("Tengoku.Algebra.Group.Basic", "Tengoku.Seed.Algebra.Group.Basic"))
+        got = [derive.derive([d], {})[0][0]["topics"] for d in (old, new)]
+        self.assertEqual(got, [["algebra", "group"]] * 2)
+
+
 if __name__ == "__main__":
     unittest.main()
