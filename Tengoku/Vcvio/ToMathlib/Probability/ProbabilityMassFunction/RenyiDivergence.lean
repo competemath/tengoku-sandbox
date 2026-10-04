@@ -57,6 +57,8 @@ is used because:
 -/
 
 @[expose] public section
+attribute [local instance] PMF.instMetricSpace
+
 
 noncomputable section
 

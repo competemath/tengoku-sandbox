@@ -57,13 +57,13 @@ protected def mapM {m : Type u → Type v} {n : Type u → Type w}
 
 end mapM
 
-@[simp]
+@[local simp]
 lemma mk_bind {α β} (m : Type u → Type v) [Monad m] [LawfulMonad m]
     (mx : m α) (my : α → m (Option β)) :
     OptionT.mk (mx >>= my) = liftM mx >>= fun x => OptionT.mk (my x) := by
   simp [OptionT.ext_iff]
 
-@[simp, grind =]
+@[local simp, grind =]
 lemma liftM_elimM {m} [Monad m] {α β}
     (x : m (Option α)) (y : m β) (z : α → m β)
     {n} [Monad n] [MonadLiftT m n] [LawfulMonadLiftT m n] :
@@ -99,3 +99,4 @@ lemma map_mk_bind_eq_of_body {m : Type u → Type v} [Monad m] [LawfulMonad m]
   rfl
 
 end OptionT
+-- Tengoku: 2 registration(s) of this module made local so they do not change other libraries (generated)

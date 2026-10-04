@@ -57,7 +57,7 @@ theorem List.mem_sym {α : Type u} :
         · exact ha'
 
 /-- `Bool` enumerated as `[true, false]`. -/
-instance : FinEnum Bool := .ofList [true, false] (by decide)
+local instance : FinEnum Bool := .ofList [true, false] (by decide)
 
 /-- Computable enumeration of size-`n` multisets over a `FinEnum` type, drawn from `List.sym` of
 the canonical enumeration. Every `z : Sym α n` qualifies since all its members lie in
@@ -82,3 +82,4 @@ is decidable for functions out of a finite domain, so this subtype is itself `Fi
     FinEnum (β ↪ α) :=
   FinEnum.ofEquiv { f : β → α // Function.Injective f }
     (Equiv.subtypeInjectiveEquivEmbedding β α).symm
+-- Tengoku: 1 registration(s) of this module made local so they do not change other libraries (generated)

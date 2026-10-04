@@ -43,11 +43,11 @@ lemma PMF.ext_forall_ne {α} {p q : PMF α} (x : α)
     simp_all only [ne_eq, not_false_eq_true]
   · refine h y hy
 
-@[simp]
+@[local simp]
 lemma PMF.monad_pure_eq_pure {α : Type u} (x : α) :
     (Pure.pure x : PMF α) = PMF.pure x := rfl
 
-@[simp]
+@[local simp]
 lemma PMF.monad_bind_eq_bind {α β : Type u}
       (p : PMF α) (q : α → PMF β) : p >>= q = p.bind q := rfl
 
@@ -62,5 +62,6 @@ lemma PMF.uniformOfFintype_map_of_bijective {α β : Type*} [Fintype α] [Fintyp
 
 open Classical in
 /-- This doesn't get applied properly without `Classical` so add with high priority. -/
-@[simp high] lemma PMF.some_map_apply_some {α} (p : PMF α) (x : α) :
+@[local simp high] lemma PMF.some_map_apply_some {α} (p : PMF α) (x : α) :
     (p.map Option.some) (some x) = p x := by simp
+-- Tengoku: 3 registration(s) of this module made local so they do not change other libraries (generated)

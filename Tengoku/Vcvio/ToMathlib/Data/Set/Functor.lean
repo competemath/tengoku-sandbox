@@ -31,22 +31,23 @@ namespace SetM
 @[simp]
 lemma run_ofSet {α : Type u} (s : Set α) : SetM.run (SetM.ofSet s) = s := rfl
 
-@[simp]
+@[local simp]
 lemma liftM_self {α : Type u} (s : SetM α) : (liftM s : SetM α) = s :=
   monadLift_self s
 
-@[simp]
+@[local simp]
 lemma run_pure {α : Type u} (x : α) : SetM.run (pure x : SetM α) = {x} :=
   Set.pure_def x
 
-@[simp]
+@[local simp]
 lemma run_bind {α β : Type u} (s : SetM α) (f : α → SetM β) :
     SetM.run (s >>= f) = ⋃ x ∈ SetM.run s, SetM.run (f x) :=
   Set.bind_def
 
-@[simp]
+@[local simp]
 lemma run_map {α β : Type u} (f : α → β) (s : SetM α) :
     SetM.run (f <$> s) = f '' SetM.run s :=
   Set.fmap_eq_image f
 
 end SetM
+-- Tengoku: 4 registration(s) of this module made local so they do not change other libraries (generated)

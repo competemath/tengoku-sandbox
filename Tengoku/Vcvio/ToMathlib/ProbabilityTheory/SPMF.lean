@@ -20,10 +20,12 @@ The probability of failure is the missing mass to make the `PMF` sum to `1`.
 -/
 
 @[expose] public section
+attribute [local simp] PMF.monad_bind_eq_bind PMF.monad_pure_eq_pure PMF.some_map_apply_some
+
 
 open ENNReal
 
-attribute [simp] PMF.coe_le_one PMF.apply_ne_top
+attribute [local simp] PMF.coe_le_one PMF.apply_ne_top
 
 universe u v w
 
@@ -68,7 +70,7 @@ protected def SPMF.toPMF (p : SPMF α) : PMF (Option α) := OptionT.run p
 
 namespace SPMF
 
-@[simp] lemma run_eq_toPMF (p : SPMF α) : p.run = p.toPMF := rfl
+@[local simp] lemma run_eq_toPMF (p : SPMF α) : p.run = p.toPMF := rfl
 
 @[simp] lemma toPMF_mk (p : PMF (Option α)) : (SPMF.mk p).toPMF = p := rfl
 
@@ -87,7 +89,7 @@ noncomputable instance : MonadLift PMF SPMF where monadLift := OptionT.lift
 instance : LawfulMonadLift PMF SPMF := OptionT.instLawfulMonadLift
 
 /-- `OptionT.lift` and the public `MonadLift` operation agree at the `SPMF` boundary. -/
-@[simp]
+@[local simp]
 lemma optionTLift_eq_liftM (p : PMF α) :
     (OptionT.lift p : SPMF α) = liftM p := rfl
 
@@ -290,7 +292,7 @@ theorem bind_eq_pmf_bind {p : SPMF α} {f : α → SPMF β} :
   simp [bind, OptionT.bind, OptionT.mk]
   rfl
 
-@[simp] lemma PMF.map_some_apply_some (p : PMF α) (x : α) : (some <$> p) (some x) = p x := by
+@[local simp] lemma PMF.map_some_apply_some (p : PMF α) (x : α) : (some <$> p) (some x) = p x := by
   simp [PMF.monad_map_eq_map]
 
 /-- `pure a` in `SPMF` equals `PMF.pure (some a)` as a PMF on `Option α`. -/
@@ -307,3 +309,4 @@ protected lemma fmap_eq_map (f : α → β) (c : SPMF α) :
   by rw [← SPMF.toPMF_inj, SPMF.toPMF_map, SPMF.toPMF_mk, PMF.monad_map_eq_map]
 
 end SPMF
+-- Tengoku: 4 registration(s) of this module made local so they do not change other libraries (generated)

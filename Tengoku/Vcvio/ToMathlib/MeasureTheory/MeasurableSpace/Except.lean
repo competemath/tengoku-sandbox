@@ -27,7 +27,7 @@ namespace Except
 variable {ε α β : Type*}
 
 /-- The coproduct measurable space on `Except ε α`. -/
-instance instMeasurableSpace [mε : MeasurableSpace ε] [mα : MeasurableSpace α] :
+local instance instMeasurableSpace [mε : MeasurableSpace ε] [mα : MeasurableSpace α] :
     MeasurableSpace (Except ε α) :=
   mε.map error ⊓ mα.map ok
 
@@ -56,3 +56,4 @@ theorem measurable_map [MeasurableSpace ε] [MeasurableSpace α] [MeasurableSpac
   measurable_elim measurable_error (measurable_ok.comp hf)
 
 end Except
+-- Tengoku: 1 registration(s) of this module made local so they do not change other libraries (generated)

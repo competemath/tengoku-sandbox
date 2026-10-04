@@ -25,6 +25,8 @@ quotient ring `R[X] / (X^n + 1)`. The proof decomposes into:
 -/
 
 @[expose] public section
+attribute [local simp] LatticeCrypto.Poly.get_map LatticeCrypto.Poly.get_zipWith
+
 
 open Polynomial
 

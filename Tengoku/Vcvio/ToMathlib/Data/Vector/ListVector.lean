@@ -32,7 +32,7 @@ lemma Vector.injective2_cons {α : Type*} {n : ℕ} :
     Function.Injective2 (Vector.cons : α → List.Vector α n → List.Vector α (n + 1)) := by
   simp [Function.Injective2, Vector.eq_cons_iff]
 
-@[simp]
+@[local simp]
 lemma Vector.getElem_eq_get {α n} (xs : List.Vector α n) (i : ℕ) (h : i < n) :
   xs[i]'h = xs.get ⟨i, h⟩ := rfl
 
@@ -47,6 +47,7 @@ lemma List.Vector.toList_eq_ofFn_get {α : Type} {n : ℕ}
     simp [List.getElem_ofFn (f := xs.get) (i := i) hi2]
 
 end List.Vector
+attribute [local simp] Vector.getElem_eq_get
 
 section ListVectorCounting
 
@@ -80,3 +81,4 @@ lemma List.Vector.card_eq_count {α : Type} [DecidableEq α] {n : ℕ}
   exact h.trans hcount.symm
 
 end ListVectorCounting
+-- Tengoku: 1 registration(s) of this module made local so they do not change other libraries (generated)

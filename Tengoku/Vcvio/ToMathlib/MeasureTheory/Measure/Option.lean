@@ -24,6 +24,8 @@ case split measurable without requiring `α` itself to be discrete.
 -/
 
 @[expose] public section
+attribute [local instance] Option.instMeasurableSpace
+
 
 open MeasureTheory
 

@@ -21,6 +21,9 @@ extraction lemmas for sequencing `Option`-valued vectors.
 -/
 
 @[expose] public section
+attribute [local instance] instInhabitedSubtypeForallBijective
+attribute [local simp] Vector.getElem_eq_get Vector.heq_of_toArray_eq_of_size_eq
+
 
 universe u v
 
