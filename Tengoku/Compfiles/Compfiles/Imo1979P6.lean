@@ -34,7 +34,7 @@ def isTerminalWalk {V : Type} {G : SimpleGraph V} {u v : V} (w : G.Walk u v) := 
 
 noncomputable def a (n : ℕ) := Set.ncard {w : Octagon.Walk A E | isTerminalWalk w ∧ w.length = n}
 
-instance instFintypeAnd {α : Type} [DecidableEq α] (p q : α → Prop) [inst : Fintype (Subtype p)] [DecidablePred q] : Fintype (Subtype (fun x => q x ∧ p x)) := {
+local instance instFintypeAnd {α : Type} [DecidableEq α] (p q : α → Prop) [inst : Fintype (Subtype p)] [DecidablePred q] : Fintype (Subtype (fun x => q x ∧ p x)) := {
   elems := (inst.elems.filter (fun x => q x.val)).attach.image (fun x => ⟨x.val.val, by grind⟩)
   complete := by
     simp only [Finset.mem_image, Finset.mem_attach, true_and, Subtype.exists, Finset.mem_filter,
@@ -46,7 +46,7 @@ instance instFintypeAnd {α : Type} [DecidableEq α] (p q : α → Prop) [inst :
     · exact h1
 }
 
-instance Set.instFintypeElemOfSubtype {α : Type} (p: α → Prop) [inst : Fintype {x // p x}] : Fintype ({x | p x}) := {
+local instance Set.instFintypeElemOfSubtype {α : Type} (p: α → Prop) [inst : Fintype {x // p x}] : Fintype ({x | p x}) := {
   elems := inst.elems
   complete := by
     simp only [Set.coe_ofPred, Subtype.forall]
@@ -54,12 +54,12 @@ instance Set.instFintypeElemOfSubtype {α : Type} (p: α → Prop) [inst : Finty
     apply Fintype.complete
 }
 
-@[simp]
+@[local simp]
 theorem Walk.append_getVert {V : Type} {G : SimpleGraph V} {u v w : V}
   (w1 : G.Walk u v) (w2 : G.Walk v w) : (w1.append w2).getVert w1.length = v
     := by simp [Walk.getVert_append]
 
-@[simp]
+@[local simp]
 theorem Walk.take_append {V : Type} {G : SimpleGraph V} {u v w : V}
   (w1 : G.Walk u v) (w2 : G.Walk v w) :
   (w1.append w2).take w1.length = w1.copy rfl (by simp) := by
@@ -67,7 +67,7 @@ theorem Walk.take_append {V : Type} {G : SimpleGraph V} {u v w : V}
     rw [Walk.support_take, Walk.support_append]
     simp
 
-@[simp]
+@[local simp]
 theorem Walk.drop_append_of_length_eq {V : Type} {G : SimpleGraph V} {u v w : V}
   (w1 : G.Walk u v) (w2 : G.Walk v w) :
   (w1.append w2).drop w1.length = w2.copy (by simp) rfl := by
@@ -304,3 +304,4 @@ theorem a_odd (n : ℕ) (npos : 0 < n) : a (2*n-1) = 0 := by
   grind only [= Nat.even_iff, = Set.mem_toFinset, usr Set.mem_ofPred_eq]
 
 end Imo1979P6
+-- Tengoku: 5 registration(s) of this module made local so they do not change other libraries (generated)
