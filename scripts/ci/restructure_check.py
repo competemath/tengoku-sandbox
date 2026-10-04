@@ -20,7 +20,7 @@ import tarfile
 import tempfile
 from pathlib import Path
 
-from _git import ROOT, changed_files, fail, run
+from _git import ROOT, changed_files, fail, run, run_bytes
 
 OWNED = ("Tengoku.lean", "SEED.md", "LICENSE-THIRD-PARTY.md")  # besides everything under Tengoku/, the files the script may write
 NEEDED = (*OWNED, "Tengoku", "NOTICE", "widget")  # what the script and its verify step read from the base tree
@@ -42,8 +42,7 @@ def owned(path: str) -> bool:
 
 def extract_base(base: str, dest: Path) -> None:
     present = set(run("ls-tree", "--name-only", base).split("\n"))
-    paths = [p for p in NEEDED if p in present]
-    archive = subprocess.run(["git", "archive", base, *paths], cwd=ROOT, capture_output=True, check=True).stdout
+    archive = run_bytes("archive", base, *[p for p in NEEDED if p in present])
     with tarfile.open(fileobj=io.BytesIO(archive)) as tar:
         tar.extractall(
             dest, **({"filter": "data"} if hasattr(tarfile, "data_filter") else {})
@@ -52,15 +51,20 @@ def extract_base(base: str, dest: Path) -> None:
 
 def head_state(head: str) -> dict[str, tuple[str, str]]:
     """path -> (mode, blob) of everything the script owns, as the PR has it."""
-    out = subprocess.run(
-        ["git", "ls-tree", "-r", "-z", head, "--", "Tengoku", *OWNED], cwd=ROOT, capture_output=True, text=True, check=True
-    ).stdout
     state = {}
-    for entry in filter(None, out.split("\0")):
+    for entry in filter(None, run("ls-tree", "-r", "-z", head, "--", "Tengoku", *OWNED).split("\0")):
         meta, path = entry.split("\t", 1)
         mode, _kind, blob = meta.split()
         state[path] = (mode, blob)
     return state
+
+
+def commit_of(rev: str) -> str:
+    """The commit a revision names, as a full hash: what the git commands below are given, never the argument itself."""
+    sha = run("rev-parse", "--verify", "--end-of-options", f"{rev}^{{commit}}", check=False).strip()
+    if not sha:
+        fail(f"{rev!r} names no commit")
+    return sha
 
 
 def blob_ids(paths: list[Path]) -> list[str]:
@@ -94,6 +98,7 @@ def main(base: str, head: str) -> None:
     sys.path.insert(0, str(ROOT / "scripts"))
     import restructure
 
+    base, head = commit_of(base), commit_of(head)
     if not is_restructure(base, head):
         fail("not a restructure: the base already has Tengoku/Seed, or the head has none")
     stray = [p for _, p in changed_files(base, head) if not owned(p)]
@@ -102,7 +107,7 @@ def main(base: str, head: str) -> None:
     with tempfile.TemporaryDirectory() as tmp:
         tree = Path(tmp)
         extract_base(base, tree)
-        done = restructure.apply(tree, restructure.libs_from_git(base, ROOT))
+        done = restructure.apply(tree, restructure.libs_from_paths(run("ls-tree", "-r", "--name-only", base, "data").splitlines()))
         errors = restructure.verify(tree) + differences(expected_state(tree), head_state(head))
     if errors:
         fail("restructure PR: " + "; ".join(errors[:10]) + (f"; and {len(errors) - 10} more" if len(errors) > 10 else ""))

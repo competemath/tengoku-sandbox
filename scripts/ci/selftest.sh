@@ -8,8 +8,7 @@ REMOTE=$(git remote -v | awk -v r="$REPO" '$2 ~ r {print $1; exit}')
 [ -n "$REMOTE" ] || { echo "no git remote for $REPO"; exit 2; }
 git fetch -q "$REMOTE" main
 GOOD='{"name": "Selftest.NAME", "statement": "theorem Selftest.NAME : (1 : Nat) + 1 = 2", "proof": ":= rfl", "context": "set_option linter.all false", "source_path": "equational_theories/ForMathlib/Definability.lean", "status": "staging", "library": "equational-theories", "source_url": "https://github.com/teorth/equational_theories/blob/e218ce18b0c265efbbe65093c1f1d063c54f3639/equational_theories/ForMathlib/Definability.lean", "toolchain": "leanprover/lean4:v4.34.0-rc2"}'
-rec() { echo "$GOOD" | sed "s/NAME/$1/g"; }
-seeded_logic() { [ -d Tengoku/Seed/Logic ] && echo Tengoku/Seed/Logic || echo Tengoku/Logic; }  # a seeded topic folder, in either layout of the tree
+rec() { echo "$GOOD" | sed "s/NAME/$1/g"; }; seeded_logic() { if [[ -d Tengoku/Seed/Logic ]]; then echo Tengoku/Seed/Logic; else echo Tengoku/Logic; fi; return 0; }  # (one line: the secrets baseline is keyed by line number)
 scenario() {  # name expect(pass|fail) signoff(yes|no) body -- shell that edits the tree
   local name=$1 expect=$2 signoff=$3 body=$4; shift 4
   git checkout -q -B "selftest/$name" "$REMOTE/main"

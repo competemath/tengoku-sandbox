@@ -11,9 +11,8 @@ the origin of a module is visible from its path, and rewrites what names the mov
     `Tengoku` re-exports are dropped, any other seeded import is renamed as above;
   - the root aggregator Tengoku.lean, and the two documents that list the seed's paths (SEED.md, LICENSE-THIRD-PARTY.md).
 
-A library is a name in data/: data/<tier>/<library>.jsonl or folder, or data/intake/<library>/. `--libs-from REF` reads
-the names from a git ref, `--libs a,b` takes them, and without either the working tree's data/ is read. Nothing else
-is guessed. The change is a pure function of the tree: the merge gate (scripts/ci/restructure_check.py) runs it on the
+A library is a name in data/: data/<tier>/<library>.jsonl or folder, or data/intake/<library>/. `--libs a,b` takes them,
+and without it the working tree's data/ is read. Nothing else is guessed. The change is a pure function of the tree: the merge gate (scripts/ci/restructure_check.py) runs it on the
 base commit and accepts only a PR equal to its output, and anyone can repeat it in a clean checkout:
 
     python3 scripts/restructure.py apply     # idempotent: a tree that has Tengoku/Seed is left alone
@@ -24,13 +23,14 @@ from __future__ import annotations
 
 import argparse
 import re
-import subprocess
 import sys
 from collections import Counter
 from pathlib import Path
 from typing import Callable, Iterable
 
 SEED = "Seed"
+ROOT_FILE = "Tengoku.lean"
+LEAN_GLOB = "*.lean"
 RESERVED = {"Seed", "Native"}  # folders of the tree that no library may be named after
 # What the root `Tengoku` re-exports (the root file imports each of them publicly): a library module that imports the
 # root needs none of these lines.
@@ -39,7 +39,19 @@ UMBRELLAS = frozenset(
     for m in ("Std", "Tactic.Aesop", "Meta.Qq", "Widgets", "Testing.Random", "Search.LeanSearchClient", "Meta.ImportGraph", "Meta.Cli")
 )
 KEYWORD = re.compile(r"(module|prelude)\b")  # `module  -- shake: keep-all` is a header line too
-IMPORT = re.compile(r"^(?P<pre>[ \t]*(?:(?:public|private|meta)[ \t]+)*import[ \t]+(?:all[ \t]+)?)(?P<mod>\S+)(?P<post>[ \t]*(?:--.*)?)$")
+IMPORT_PREFIX = re.compile(r"[ \t]*(?:(?:public|private|meta)[ \t]+)*import[ \t]+(?:all[ \t]+)?")
+
+
+def parse_import(line: str) -> tuple[str, str, str] | None:
+    """(everything before the module name, the module name, the rest of the line) of an import line, else None."""
+    m = IMPORT_PREFIX.match(line)
+    if not m or not line[m.end() :].strip():
+        return None
+    rest = line[m.end() :]
+    mod = rest.split(None, 1)[0]
+    return line[: m.end()], mod, rest[len(mod) :]
+
+
 INCLUDE_STR = re.compile(r'include_str(?P<ws>\s+)(?P<path>"[^"\n]*"(?:\s*/\s*"[^"\n]*")*)')
 DOC_SEED_ROW = re.compile(r"`Tengoku((?:\.[A-Za-z]+)*)`")
 DOC_PATH = re.compile(r"`Tengoku/(?P<top>[A-Za-z]+)(?P<rest>[/.][^`\s]*)?`")
@@ -62,11 +74,6 @@ def libs_from_paths(paths: Iterable[str]) -> set[str]:
         elif parts[1] == "intake":
             libs.add(parts[2])
     return libs
-
-
-def libs_from_git(ref: str, cwd: Path) -> set[str]:
-    out = subprocess.run(["git", "ls-tree", "-r", "--name-only", ref, "data"], cwd=cwd, capture_output=True, text=True, check=True).stdout
-    return libs_from_paths(out.splitlines())
 
 
 def libs_from_tree(root: Path) -> set[str]:
@@ -93,7 +100,7 @@ def header_scan(lines: list[str]) -> tuple[int, list[bool]]:
         inside = depth > 0 or s.startswith("/-")
         if inside:
             depth = max(0, depth + s.count("/-") - s.count("-/"))
-        elif s and not s.startswith("--") and not KEYWORD.match(s) and not IMPORT.match(s):
+        elif s and not s.startswith("--") and not KEYWORD.match(s) and not parse_import(s):
             return i, code
         code.append(not inside)
     return len(lines), code
@@ -105,7 +112,7 @@ def header_end(lines: list[str]) -> int:
 
 def header_imports(lines: list[str]) -> list[str]:
     end, code = header_scan(lines)
-    return [m.group("mod") for ln, ok in zip(lines[:end], code) if ok and (m := IMPORT.match(ln.rstrip("\r")))]
+    return [m[1] for ln, ok in zip(lines[:end], code) if ok and (m := parse_import(ln.rstrip("\r")))]
 
 
 def rename_import(mod: str, roots: set[str]) -> str:
@@ -123,13 +130,13 @@ def rewrite_header(text: str, new_name: Callable[[str, list[str]], str | None]) 
     out = []
     for i, ln in enumerate(lines):
         cr = "\r" if ln.endswith("\r") else ""
-        m = IMPORT.match(ln[: len(ln) - len(cr)]) if i < end and code[i] else None
+        m = parse_import(ln[: len(ln) - len(cr)]) if i < end and code[i] else None
         if not m:
             out.append(ln)
             continue
-        mod = new_name(m.group("mod"), imports)
+        mod = new_name(m[1], imports)
         if mod is not None:
-            out.append(m.group("pre") + mod + m.group("post") + cr)
+            out.append(m[0] + mod + m[2] + cr)
     return "\n".join(out)
 
 
@@ -222,8 +229,13 @@ def library_files(tree: Path, namespaces: set[str]) -> list[Path]:
         if (tree / f"{ns}.lean").is_file():
             files.append(tree / f"{ns}.lean")
         if (tree / ns).is_dir():
-            files += sorted((tree / ns).rglob("*.lean"))
+            files += sorted((tree / ns).rglob(LEAN_GLOB))
     return files
+
+
+def rewrite_seeded(path: Path, seed: Path, roots: set[str]) -> bool:
+    depth = len(path.relative_to(seed).parts) - 1  # the directories between Tengoku/Seed/ and the file
+    return rewrite_file(path, lambda t: fix_include_str(rewrite_header(t, seeded_name(roots)), depth))
 
 
 def apply(root: Path, libs: set[str]) -> Counter:
@@ -239,20 +251,19 @@ def apply(root: Path, libs: set[str]) -> Counter:
     roots = {stem(e) for e in entries}
     move_seed(tree, entries)
     done["moved top-level entries"] = len(entries)
-    for f in sorted((tree / SEED).rglob("*.lean")):
-        depth = len(f.relative_to(tree / SEED).parts) - 1
-        done["seeded modules rewritten"] += rewrite_file(f, lambda t: fix_include_str(rewrite_header(t, seeded_name(roots)), depth))
+    for f in sorted((tree / SEED).rglob(LEAN_GLOB)):
+        done["seeded modules rewritten"] += rewrite_seeded(f, tree / SEED, roots)
     for f in library_files(tree, namespaces):
         done["library modules rewritten"] += rewrite_file(f, lambda t: rewrite_header(t, library_name(roots)))
-    if (root / "Tengoku.lean").is_file():
+    if (root / ROOT_FILE).is_file():
         done["root rewritten"] += rewrite_file(root / "Tengoku.lean", lambda t: rewrite_header(t, seeded_name(roots)))
     done["documents rewritten"] = rewrite_docs(root, roots)
     return done
 
 
 def module_index(root: Path) -> dict[str, Path]:
-    mods = {".".join(p.relative_to(root).with_suffix("").parts): p for p in (root / "Tengoku").rglob("*.lean")}
-    if (root / "Tengoku.lean").is_file():
+    mods = {".".join(p.relative_to(root).with_suffix("").parts): p for p in (root / "Tengoku").rglob(LEAN_GLOB)}
+    if (root / ROOT_FILE).is_file():
         mods["Tengoku"] = root / "Tengoku.lean"
     return mods
 
@@ -288,8 +299,6 @@ def verify(root: Path) -> list[str]:
 
 
 def libs_for(args: argparse.Namespace, root: Path) -> set[str]:
-    if args.libs_from:
-        return libs_from_git(args.libs_from, root)
     return {x for x in args.libs.split(",") if x} if args.libs is not None else libs_from_tree(root)
 
 
@@ -297,7 +306,6 @@ def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("command", choices=["apply", "verify"])
     ap.add_argument("--root", default=".", help="the tengoku checkout (default: the current directory)")
-    ap.add_argument("--libs-from", help="read the library names from this git ref (default: the working tree's data/)")
     ap.add_argument("--libs", help="comma-separated library names (overrides data/)")
     args = ap.parse_args(argv)
     root = Path(args.root).resolve()

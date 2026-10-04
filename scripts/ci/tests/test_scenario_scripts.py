@@ -3,6 +3,7 @@ Tengoku/Logic (the earlier one) the tree has."""
 
 from __future__ import annotations
 
+import re
 import subprocess
 import tempfile
 import unittest
@@ -12,12 +13,15 @@ CI = Path(__file__).resolve().parents[1]
 SCRIPTS = ("selftest.sh", "campaign/gate.sh")
 
 
+HELPER = re.compile(r"seeded_logic\(\) \{.*?\}")
+
+
 def helper(script: str) -> tuple[str, list[str]]:
-    """The `seeded_logic` definition of a script, and the script's other lines."""
-    lines = (CI / script).read_text().splitlines()
-    fn = [ln for ln in lines if ln.startswith("seeded_logic()")]
-    assert len(fn) == 1, script
-    return fn[0], [ln for ln in lines if ln != fn[0]]
+    """The `seeded_logic` definition of a script (it may share a line with another definition), and the script's lines without it."""
+    text = (CI / script).read_text()
+    found = HELPER.findall(text)
+    assert len(found) == 1, script
+    return found[0], HELPER.sub("", text).splitlines()
 
 
 def pick(fn: str, *folders: str) -> str:

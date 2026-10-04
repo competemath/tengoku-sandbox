@@ -80,6 +80,11 @@ def run(*args: str, check: bool = True) -> str:
     return subprocess.run(["git", *args], cwd=ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace", check=check).stdout
 
 
+def run_bytes(*args: str) -> bytes:
+    """`run` for output that is not text (git archive)."""
+    return subprocess.run(["git", *args], cwd=ROOT, capture_output=True, check=True).stdout
+
+
 def match(path: str, patterns: list[str]) -> bool:
     for p in patterns:
         if fnmatch.fnmatch(path, p):

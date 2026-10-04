@@ -7,7 +7,7 @@ TRUSTED_NAME=$(head -1 data/trusted/equational-theories.jsonl | python3 -c "impo
 STAGING_FLAT=data/staging/equational-theories.jsonl
 D=data/staging/equational-theories
 sc() { scenario "$@"; }
-seeded_logic() { [ -d Tengoku/Seed/Logic ] && echo Tengoku/Seed/Logic || echo Tengoku/Logic; }  # a seeded topic folder, in either layout of the tree
+seeded_logic() { if [[ -d Tengoku/Seed/Logic ]]; then echo Tengoku/Seed/Logic; else echo Tengoku/Logic; fi; return 0; }  # a seeded topic folder, in either layout of the tree
 # --- the original eleven, per-PR files where the scenario is content
 sc clean-append pass - yes queue "One good record in a per-PR staging file." "mkdir -p $D; rec good1 > $D/clean.jsonl"
 sc two-purposes fail classify yes gate "Content and tooling in one PR." "mkdir -p $D; rec good2 > $D/two.jsonl; echo '# touched' >> scripts/stats.py"
