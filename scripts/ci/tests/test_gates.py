@@ -263,6 +263,91 @@ class Gates(unittest.TestCase):
         self.assertIn("What to do", out)
 
 
+class ScopeFix(unittest.TestCase):
+    """A scope-fix PR: existing modules of an intake library, a registration made local, nothing else (scope_fix_check.py judges every line)."""
+
+    BASIC = "import Tengoku\n\nnamespace Fx\n\ninstance : Coe (ℕ × ℕ) (ℤ × ℤ) := ⟨fun p => p⟩\n\n@[simp] theorem s : 1 + 1 = 2 := rfl\n\ntheorem good : 1 + 1 = 2 := rfl\n\nend Fx\n"
+    USE = "import Tengoku\nimport Tengoku.FxLib.Fx.Basic\n\ntheorem use : 1 + 1 = 2 := by simp\n"
+    BOT = {"PR_ACTOR": "tengoku-bot", "TENGOKU_BOT": "tengoku-bot"}
+
+    def repo(self):
+        r = Repo()
+        r.write("Tengoku/FxLib/Fx/Basic.lean", self.BASIC)
+        r.write("Tengoku/FxLib/Fx/Use.lean", self.USE)
+        r.write("Tengoku/FxLib.lean", "import Tengoku.FxLib.Fx.Basic\nimport Tengoku.FxLib.Fx.Use\n")
+        r.write("data/intake/fx-lib/manifest.jsonl", json.dumps({"name": "Fx.good", "library": "fx-lib"}) + "\n")
+        r.commit("an intake library")
+        r.git("checkout", "-q", "main")
+        r.git("merge", "-q", "--ff-only", "pr")
+        r.git("checkout", "-q", "pr")
+        return r
+
+    def edit(self, r, basic=None, use=None, extra=()):
+        if basic is not None:
+            r.write("Tengoku/FxLib/Fx/Basic.lean", basic)
+        if use is not None:
+            r.write("Tengoku/FxLib/Fx/Use.lean", use)
+        for path, text in extra:
+            r.write(path, text)
+        r.commit("scope fix")
+
+    def judge(self, r):
+        rc, out = r.gate("classify.py", env=self.BOT)
+        if rc != 0:
+            return rc, out
+        self.assertIn("class=scope-fix", out)
+        return r.gate("scope_fix_check.py")
+
+    def test_the_exact_transformation_passes(self):
+        r = self.repo()
+        basic = self.BASIC.replace("instance :", "local instance :").replace("@[simp]", "@[local simp]") + "-- Tengoku: 2 registration(s) of this module made local so they do not change other libraries (generated)\n"
+        use = self.USE.replace("\ntheorem use", "\nattribute [local instance] Fx.instCoeProdNatInt\nattribute [local simp] Fx.s\n\ntheorem use")
+        self.edit(r, basic, use)
+        rc, out = self.judge(r)
+        self.assertEqual(rc, 0, out)
+        self.assertIn("scope-fix ok: 2 modules", out)
+
+    def test_only_the_factory_may_send_one(self):
+        r = self.repo()
+        self.edit(r, self.BASIC.replace("instance :", "local instance :"))
+        rc, out = r.gate("classify.py", env={"PR_ACTOR": "someone", "TENGOKU_BOT": "tengoku-bot"})
+        self.assertNotEqual(rc, 0)
+        self.assertIn("factory's account", out)
+
+    def test_a_changed_statement_or_a_new_declaration_is_refused(self):
+        for basic in (
+            self.BASIC.replace("1 + 1 = 2 := rfl\n\nend", "2 + 2 = 4 := rfl\n\nend"),
+            self.BASIC.replace("end Fx", "theorem extra : True := trivial\n\nend Fx"),
+            self.BASIC.replace("theorem good", "local theorem good"),
+            self.BASIC.replace("instance :", "local instance :").replace("\n\nend Fx", "\nend Fx"),
+        ):
+            r = self.repo()
+            self.edit(r, basic)
+            rc, out = self.judge(r)
+            self.assertNotEqual(rc, 0, basic)
+
+    def test_a_local_in_a_comment_or_a_string_is_refused(self):
+        r = self.repo()
+        self.edit(r, self.BASIC.replace("namespace Fx", "-- an instance of the thing\nnamespace Fx").replace("-- an instance", "-- an local instance"))
+        self.assertNotEqual(self.judge(r)[0], 0)
+
+    def test_an_added_attribute_must_repeat_a_registration_of_the_library(self):
+        r = self.repo()
+        self.edit(r, None, self.USE.replace("\ntheorem use", "\nattribute [local instance] Matrix.linftyOpNormedAddCommGroup\n\ntheorem use"))
+        rc, out = self.judge(r)
+        self.assertNotEqual(rc, 0)
+        self.assertIn("is not a name this library registers", out)
+
+    def test_other_files_and_other_libraries_are_not_a_scope_fix(self):
+        r = self.repo()
+        self.edit(r, self.BASIC.replace("instance :", "local instance :"), extra=[("Tengoku/All.lean", "import Tengoku.FxLib\n")])
+        rc, out = r.gate("classify.py", env=self.BOT)
+        self.assertNotIn("class=scope-fix", out)
+        r2 = self.repo()
+        self.edit(r2, None, None, extra=[("Tengoku/Lib/Basic.lean", "/-\nAuthors: Someone\n-/\nlocal instance : Foo := x\n")])
+        self.assertNotIn("class=scope-fix", r2.gate("classify.py", env=self.BOT)[1])
+
+
 if __name__ == "__main__":
     unittest.main()
 

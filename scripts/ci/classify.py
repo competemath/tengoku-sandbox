@@ -10,7 +10,7 @@ import os
 import re
 import sys
 
-from _git import changed_files, fail, gh_output, pascal, tier_of
+from _git import changed_files, fail, gh_output, pascal, run, tier_of
 
 base, head = sys.argv[1], sys.argv[2]
 files = changed_files(base, head)
@@ -32,6 +32,21 @@ def tier(p: str) -> str:
     return tier_of(p)
 
 
+# A SCOPE-FIX PR makes what a merged intake library registered for the whole tree local to its modules (scripts/ci/scope_fix_check.py judges the
+# diff line by line): existing modules `Tengoku/<Library>/….lean` of a library that arrived as an intake bundle, modified in place, nothing else.
+intake_at_base = {
+    pascal(m.group(1))
+    for p in run("ls-tree", "-r", "--name-only", base, "data/intake").split("\n")
+    if (m := re.fullmatch(r"data/intake/([^/]+)/manifest\.jsonl", p))
+}
+if files and all(st == "M" and (m := re.fullmatch(r"Tengoku/([^/]+)/.+\.lean", p)) and m.group(1) in intake_at_base for st, p in files):
+    bot_ = os.environ.get("TENGOKU_BOT", "tengoku-bot")
+    if not (os.environ.get("PR_ACTOR", "") == bot_ or os.environ.get("TENGOKU_ACTOR_CHECKED") == "1"):
+        fail(f"a scope-fix PR comes from the factory's account ({bot_}), not from {os.environ.get('PR_ACTOR') or 'nobody'}")
+    print(f"class=scope-fix ({len(files)} modules)")
+    gh_output("class", "scope-fix")
+    gh_output("files", " ".join(p for _, p in files))
+    sys.exit(0)
 by = {}
 for st, p in files:
     by.setdefault(tier(p), []).append(p)
