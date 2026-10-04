@@ -10,6 +10,7 @@ import Tengoku.Primenumbertheoremand
 import Tengoku.Imoshortlist
 import Tengoku.Aperiodicmonotiles
 import Tengoku.Tautology
+import Tengoku.LerayHopf
 import Tengoku.Flt
 import Tengoku.EquationalTheories
 import Tengoku.AddCombi
