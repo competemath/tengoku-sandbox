@@ -91,7 +91,7 @@ include hc
 
 protected lemma pos (n : ℕ) : 0 < a n := hc.1 n
 
-@[simp] lemma apply_ne_zero (n : ℕ) : a n ≠ 0 :=
+@[local simp] lemma apply_ne_zero (n : ℕ) : a n ≠ 0 :=
   (hc.pos _).ne'
 
 lemma one_le_apply (n : ℕ) : 1 ≤ a n :=
@@ -105,7 +105,7 @@ lemma apply_add_one_eq_card {n : ℕ} (h : N ≤ n) :
   rw [hc.apply_eq_card (Nat.lt_add_one_of_le h)]
   simp
 
-@[simp] lemma nth_apply_eq_zero (n : ℕ) : Nat.nth (a · = 0) n = 0 := by
+@[local simp] lemma nth_apply_eq_zero (n : ℕ) : Nat.nth (a · = 0) n = 0 := by
   convert Nat.nth_false _ with i
   simp only [(hc.pos i).ne']
 
@@ -945,5 +945,7 @@ lemma exists_a_apply_add_eq : ∃ b c, 0 < c ∧ ∀ n, b < n →
 variable {a N}
 
 end Condition
+attribute [local simp] Imo2024P3.Condition.apply_ne_zero Imo2024P3.Condition.nth_apply_eq_zero
 
 end Imo2024P3
+-- Tengoku: 2 registration(s) of this module made local so they do not change other libraries (generated)

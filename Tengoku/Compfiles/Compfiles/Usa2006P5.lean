@@ -62,7 +62,7 @@ def filt (e : ℕ) (c : ℤ) : ℤ → List ℕ → List ℕ
     if (2 : ℤ) ^ (e + 1) ∣ (s : ℤ) ∧ c < y + (s : ℤ) then filt e c y ss
     else s :: filt e c (y + (s : ℤ)) ss
 
-@[simp] lemma natAbs_two_pow (n : ℕ) : ((2 : ℤ) ^ n).natAbs = 2 ^ n := by
+@[local simp] lemma natAbs_two_pow (n : ℕ) : ((2 : ℤ) ^ n).natAbs = 2 ^ n := by
   rw [Int.natAbs_pow]
   norm_num
 
@@ -559,3 +559,4 @@ lemma reachable_all_ones {m : ℤ} (hm : 1 ≤ m) : Reachable m (m - 1).toNat :=
 
 lemma minJumps_mem {m : ℤ} (hm : 1 ≤ m) : minJumps m ∈ { j | Reachable m j } :=
   Nat.sInf_mem ⟨(m - 1).toNat, reachable_all_ones hm⟩
+-- Tengoku: 1 registration(s) of this module made local so they do not change other libraries (generated)

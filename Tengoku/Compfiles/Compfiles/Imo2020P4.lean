@@ -73,7 +73,7 @@ universe u
 -- of the vertex type (as still happens for `SetLike` types such as `ConnectedComponent`).
 -- Recent mathlib only provides a computable instance requiring `[DecidableRel G.Adj]`, so we
 -- supply the noncomputable instance locally.
-noncomputable instance instFintypeEdgeSetOfFinite {V : Type*} [Finite V] (G : SimpleGraph V) :
+noncomputable local instance instFintypeEdgeSetOfFinite {V : Type*} [Finite V] (G : SimpleGraph V) :
     Fintype G.edgeSet := Fintype.ofFinite _
 
 lemma Sym2.exists_mk {α : Type u} (z : Sym2 α) : ∃ x y : α, z = s(x, y) := by
@@ -763,3 +763,4 @@ lemma Company.linked_of_subCompany_linked {n k : ℕ} (c : Company n k) {k' : �
 abbrev answer : (Set.Ioi 1) → ℕ := fun n ↦ n * n - n + 1
 
 end Imo2020P4
+-- Tengoku: 1 registration(s) of this module made local so they do not change other libraries (generated)

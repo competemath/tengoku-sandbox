@@ -46,9 +46,9 @@ instance (c : ℝ) : FunLike (labelling c) (ℤ × ℤ) ℕ :=
 
 attribute [local simp] DFunLike.coe
 
-instance (n : ℕ) : CoeOut (Finset.range (2 ^ n) × Finset.range (2 ^ n)) (ℤ × ℤ) := ⟨fun ⟨x, y⟩ => ⟨x, y⟩⟩
+local instance (n : ℕ) : CoeOut (Finset.range (2 ^ n) × Finset.range (2 ^ n)) (ℤ × ℤ) := ⟨fun ⟨x, y⟩ => ⟨x, y⟩⟩
 
-instance : Coe (ℕ × ℕ) (ℤ × ℤ) := ⟨fun ⟨x, y⟩ => ⟨x, y⟩⟩
+local instance : Coe (ℕ × ℕ) (ℤ × ℤ) := ⟨fun ⟨x, y⟩ => ⟨x, y⟩⟩
 
 abbrev transpose (p : ℤ × ℤ) {c : ℝ} (l : labelling c) : labelling c := by
   let f (q : ℤ × ℤ) := p + q
@@ -425,3 +425,4 @@ lemma label_dist_max {p₁ p₂ : ℤ × ℤ} (h : p₁ ≠ p₂) {limit : ℕ}
       lia
 
 end Usa2017P5
+-- Tengoku: 2 registration(s) of this module made local so they do not change other libraries (generated)

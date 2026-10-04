@@ -42,7 +42,7 @@ instance checkerboardFintype (n : ℕ) : Fintype (checkerboard n) :=
 instance checkerboardDecidableEq (n : ℕ) : DecidableEq (checkerboard n) :=
   inferInstanceAs (DecidableEq (Fin n × Fin n))
 
-instance pathGraphDecidableRel (n : ℕ) : DecidableRel (SimpleGraph.pathGraph n).Adj := by
+local instance pathGraphDecidableRel (n : ℕ) : DecidableRel (SimpleGraph.pathGraph n).Adj := by
   intro x y
   rw [SimpleGraph.pathGraph_adj]
   infer_instance
@@ -223,3 +223,4 @@ lemma emptySquares_card_add_checker_card {n : ℕ} (c : Finset (checkerboard n))
   rw [Fintype.card_prod, Fintype.card_fin, pow_two]
 
 end Usa1999P1
+-- Tengoku: 1 registration(s) of this module made local so they do not change other libraries (generated)
