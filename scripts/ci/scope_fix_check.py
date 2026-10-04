@@ -25,43 +25,40 @@ import sys
 
 from _git import blob, changed_files, fail, pascal, run
 
-base, head = sys.argv[1], sys.argv[2]
 NAME = r"[\w.'«»!?]+"
 ATTR_LINE = re.compile(rf"attribute \[local (?:instance(?: \d+)?|simp)\]( {NAME})+")
 NOTE = re.compile(r"-- Tengoku: \d+ registration\(s\) of this module made local so they do not change other libraries \(generated\)")
 KEYWORD = re.compile(r"(?:instance|simp)(?![\w'.])")
+INSTANCE_DECL = re.compile(rf"(?<![\w.])instance\s+(?:\(priority\s*:=[^)]*\)\s*)?({NAME})")
+SIMP_DECL = re.compile(
+    rf"@\[[^\]]*(?<![\w.])simp\b[^\]]*\]\s*(?:(?:private|protected|noncomputable|nonrec|partial|unsafe)\s+)*(?:theorem|lemma|def|abbrev)\s+({NAME})"
+)
+ATTRIBUTE_CMD = re.compile(rf"attribute\s*\[([^\]]*)\]((?:[ \t\n]+{NAME})+)")
+IN_CODE = re.compile(r"--[^\n]*|/-|\"(?:\\.|[^\"\\])*\"")  # a line comment, the start of a block comment, a string literal
+
+
+def _block_end(text: str, i: int) -> int:
+    """the index just past the `-/` that closes the (nested) block comment opened at i; the end of the text if it never closes"""
+    depth, j = 1, i + 2
+    while j < len(text) and depth:
+        if text.startswith("/-", j):
+            depth, j = depth + 1, j + 2
+        elif text.startswith("-/", j):
+            depth, j = depth - 1, j + 2
+        else:
+            j += 1
+    return j
 
 
 def mask(text: str) -> str:
     """the text with comments and string literals blanked to spaces: same length, same columns (a word found in it is code)"""
-    out, i, n = [], 0, len(text)
-    while i < n:
-        if text.startswith("--", i):
-            j = text.find("\n", i)
-            j = n if j < 0 else j
-            out.append(" " * (j - i))
-            i = j
-        elif text.startswith("/-", i):
-            depth, j = 1, i + 2
-            while j < n and depth:
-                if text.startswith("/-", j):
-                    depth, j = depth + 1, j + 2
-                elif text.startswith("-/", j):
-                    depth, j = depth - 1, j + 2
-                else:
-                    j += 1
-            out.append("".join("\n" if ch == "\n" else " " for ch in text[i:j]))
-            i = j
-        elif text[i] == '"':
-            j = i + 1
-            while j < n and text[j] != '"':
-                j += 2 if text[j] == "\\" else 1
-            j = min(j + 1, n)
-            out.append("".join("\n" if ch == "\n" else " " for ch in text[i:j]))
-            i = j
-        else:
-            out.append(text[i])
-            i += 1
+    out, i = list(text), 0
+    while m := IN_CODE.search(text, i):
+        j = _block_end(text, m.start()) if m.group() == "/-" else m.end()
+        for k in range(m.start(), j):
+            if out[k] != "\n":
+                out[k] = " "
+        i = j
     return "".join(out)
 
 
@@ -82,78 +79,90 @@ def registered(ns: str) -> set[str]:
     out: set[str] = set()
     for p in run("ls-tree", "-r", "--name-only", base, f"Tengoku/{ns}").split("\n"):
         b = blob(base, p) if p.endswith(".lean") else None
-        if b is None:
-            continue
-        text = mask(b.decode("utf-8", "replace"))
-        out |= {last(m.group(1)) for m in re.finditer(rf"(?<![\w.])instance\s+(?:\(priority\s*:=[^)]*\)\s*)?({NAME})", text)}
-        out |= {
-            last(m.group(1))
-            for m in re.finditer(
-                rf"@\[[^\]]*(?<![\w.])simp\b[^\]]*\]\s*(?:(?:private|protected|noncomputable|nonrec|partial|unsafe)\s+)*(?:theorem|lemma|def|abbrev)\s+({NAME})",
-                text,
-            )
-        }
-        for m in re.finditer(rf"attribute\s*\[([^\]]*)\]((?:[ \t\n]+{NAME})+)", text):
-            if re.search(r"(?<![\w.])(?:instance|simp)\b", m.group(1)):
-                out |= {last(n) for n in m.group(2).split()}
+        if b is not None:
+            out |= registrations(mask(b.decode("utf-8", "replace")))
     return out
 
 
+def registrations(text: str) -> set[str]:
+    """the (last components of the) names an instance or simp registration of this masked module text mentions"""
+    out = {last(m.group(1)) for m in INSTANCE_DECL.finditer(text)} | {last(m.group(1)) for m in SIMP_DECL.finditer(text)}
+    for m in ATTRIBUTE_CMD.finditer(text):
+        if re.search(r"(?<![\w.])(?:instance|simp)\b", m.group(1)):
+            out |= {last(n) for n in m.group(2).split()}
+    return out
+
+
+def added_line_errors(path: str, lineno: int, line: str, known: set[str]) -> list[str]:
+    if not line or NOTE.fullmatch(line):
+        return []
+    if not ATTR_LINE.fullmatch(line):
+        return [
+            f"{path}:{lineno}: an added line must be `attribute [local instance|simp] names`, a blank line or the note, not `{line[:80]}`"
+        ]
+    return [
+        f"{path}:{lineno}: `{name}` is not a name this library registers (the line may only repeat the library's own registrations)"
+        for name in line.split("]", 1)[1].split()
+        if last(name) not in known and not re.match(r"inst[A-Z_]", last(name))
+    ]
+
+
+def opcode_errors(path: str, o: list[str], n: list[str], op: tuple, known: set[str]) -> list[str]:
+    """the problems with one edit of a file (an `equal` stretch has none)"""
+    tag, i1, i2, j1, j2 = op
+    if tag == "equal":
+        return []
+    if tag == "insert":
+        return [e for k in range(j1, j2) for e in added_line_errors(path, k + 1, n[k], known)]
+    if tag == "replace" and i2 - i1 == j2 - j1:
+        return [
+            f"{path}:{b + 1}: a changed line may only gain `local ` before `instance`/`simp`: `{o[a][:60]}` -> `{n[b][:60]}`"
+            for a, b in zip(range(i1, i2), range(j1, j2))
+            if not local_insertion(o[a], n[b])
+        ]
+    return [f"{path}:{j1 + 1}: lines were removed or replaced by a different number of lines ({tag}: {i2 - i1} -> {j2 - j1})"]
+
+
 def check_file(path: str, old: str, new: str, known: set[str]) -> list[str]:
-    errors = []
     o, n = old.split("\n"), new.split("\n")
-    for tag, i1, i2, j1, j2 in difflib.SequenceMatcher(None, o, n, autojunk=False).get_opcodes():
-        if tag == "equal":
-            continue
-        if tag == "insert":
-            for k in range(j1, j2):
-                if n[k] and not ATTR_LINE.fullmatch(n[k]) and not NOTE.fullmatch(n[k]):
-                    errors.append(
-                        f"{path}:{k + 1}: an added line must be `attribute [local instance|simp] names`, a blank line or the note, not `{n[k][:80]}`"
-                    )
-                elif ATTR_LINE.fullmatch(n[k]):
-                    for name in n[k].split("]", 1)[1].split():
-                        if last(name) not in known and not re.match(r"inst[A-Z_]", last(name)):
-                            errors.append(
-                                f"{path}:{k + 1}: `{name}` is not a name this library registers (the line may only repeat the library's own registrations)"
-                            )
-        elif tag == "replace" and i2 - i1 == j2 - j1:
-            for a, b in zip(range(i1, i2), range(j1, j2)):
-                if not local_insertion(o[a], n[b]):
-                    errors.append(
-                        f"{path}:{b + 1}: a changed line may only gain `local ` before `instance`/`simp`: `{o[a][:60]}` -> `{n[b][:60]}`"
-                    )
-        else:
-            errors.append(f"{path}:{j1 + 1}: lines were removed or replaced by a different number of lines ({tag}: {i2 - i1} -> {j2 - j1})")
-    return errors
+    ops = difflib.SequenceMatcher(None, o, n, autojunk=False).get_opcodes()
+    return [e for op in ops for e in opcode_errors(path, o, n, op, known)]
 
 
-files = changed_files(base, head)
-intake = {
-    pascal(m.group(1))
-    for p in run("ls-tree", "-r", "--name-only", base, "data/intake").split()
-    if (m := re.fullmatch(r"data/intake/([^/]+)/manifest\.jsonl", p))
-}
-errors: list[str] = []
-known_by_ns: dict[str, set[str]] = {}
-for st, p in files:
+def intake_namespaces() -> set[str]:
+    """the libraries that arrived as intake bundles (data/intake/<library>/manifest.jsonl at the base), as module namespaces"""
+    return {
+        pascal(m.group(1))
+        for p in run("ls-tree", "-r", "--name-only", base, "data/intake").split()
+        if (m := re.fullmatch(r"data/intake/([^/]+)/manifest\.jsonl", p))
+    }
+
+
+def file_errors(st: str, p: str, intake: set[str], known_by_ns: dict[str, set[str]]) -> list[str]:
     m = re.fullmatch(r"Tengoku/([^/]+)/.+\.lean", p)
     if st != "M" or not m or m.group(1) not in intake:
-        errors.append(f"{p}: a scope-fix PR only modifies existing modules of libraries that arrived as intake bundles (status {st})")
-        continue
+        return [f"{p}: a scope-fix PR only modifies existing modules of libraries that arrived as intake bundles (status {st})"]
     ob, nb = blob(base, p), blob(head, p)
     if ob is None or nb is None:
-        errors.append(f"{p}: not readable at {base if ob is None else head}")
-        continue
+        return [f"{p}: not readable at {base if ob is None else head}"]
     try:
         known = known_by_ns.setdefault(m.group(1), registered(m.group(1)))
-        errors += check_file(p, ob.decode("utf-8"), nb.decode("utf-8"), known)
+        return check_file(p, ob.decode("utf-8"), nb.decode("utf-8"), known)
     except UnicodeDecodeError:
-        errors.append(f"{p}: not valid UTF-8")
-if not files:
-    errors.append("an empty diff")
-if errors:
-    fail("scope-fix PR: " + "; ".join(errors[:10]) + (f"; and {len(errors) - 10} more" if len(errors) > 10 else ""))
-print(
-    f"scope-fix ok: {len(files)} modules of {len({re.match(r'Tengoku/([^/]+)/', p).group(1) for _, p in files})} libraries, only `local` registrations"
-)
+        return [f"{p}: not valid UTF-8"]
+
+
+def main() -> None:
+    files = changed_files(base, head)
+    intake, known_by_ns = intake_namespaces(), {}
+    errors = [e for st, p in files for e in file_errors(st, p, intake, known_by_ns)]
+    if not files:
+        errors.append("an empty diff")
+    if errors:
+        fail("scope-fix PR: " + "; ".join(errors[:10]) + (f"; and {len(errors) - 10} more" if len(errors) > 10 else ""))
+    libraries = {re.match(r"Tengoku/([^/]+)/", p).group(1) for _, p in files}
+    print(f"scope-fix ok: {len(files)} modules of {len(libraries)} libraries, only `local` registrations")
+
+
+base, head = sys.argv[1], sys.argv[2]
+main()
