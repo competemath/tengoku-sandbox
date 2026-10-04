@@ -7,6 +7,7 @@ import Tengoku.FormalMathfin
 import Tengoku.Leanmodularforms
 import Tengoku
 import Tengoku.Primenumbertheoremand
+import Tengoku.SpherePackingOrig
 import Tengoku.Imoshortlist
 import Tengoku.Aperiodicmonotiles
 import Tengoku.Tautology
