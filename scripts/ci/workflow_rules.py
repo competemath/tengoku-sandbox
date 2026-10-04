@@ -18,6 +18,13 @@ read from the PR's commit as data. The rules:
                command puts the PR's files in the tree or runs them, and local actions use `$/<path>`: a `./` action is loaded from the workspace, which may hold
                the PR's files. The one exception is `git checkout <pr> -- data…`: the PR's records, as data.
 
+  write-and-pr a job of a pull_request_target, workflow_run or merge_group workflow that holds a write permission never reads the PR's
+               (or the queue entry's) commits: no `git fetch`/`checkout`/`merge`/... of a name that can carry them (a ref, `$HEAD`, any
+               env var built from a context outside the base side), no actions/checkout of them, and in a merge_group workflow an
+               actions/checkout always names its `ref` (the default is the queue entry). Reading untrusted data and holding a token that
+               can write are split over two jobs, and the one that writes takes only validated outputs. Without this, a later step that
+               ever ran a file of the PR would hold the token.
+
   --online     genuine pins: the tag named in the comment contains the commit. A repository shares commits with
                all its forks, so a pin can name a commit that exists only in an attacker's fork (an impostor commit).
 
@@ -59,6 +66,9 @@ FIXED = re.compile(
 )
 SELF = "scripts/ci/workflow_rules.py"
 PRIVILEGED = {"pull_request_target", "workflow_run"}
+UNTRUSTED_REF = re.compile(
+    r"PR_REF|refs/pull|head_ref|pull_request\.head|merge_group\.head"
+)  # what names the PR's or the queue entry's commits
 # what a checkout in a privileged workflow may name: the base side only
 BASE_SIDE = {
     "github.event.pull_request.base.sha",
@@ -70,6 +80,45 @@ BASE_SIDE = {
     "github.workflow_sha",  # the commit of the workflow file itself: the base branch's
     "github.event.repository.default_branch",
 }
+# What reads a commit into the workspace or out of it. In a job that can write, none of it may touch the PR's or the queue entry's commits.
+GIT_VERBS = (
+    *("fetch", "pull", "clone", "checkout", "switch", "merge", "cherry-pick", "worktree", "read-tree", "restore", "archive", "apply", "am"),
+    *("show", "cat-file", "ls-tree", "log", "diff", "rev-list", "checkout-index", "submodule"),
+)
+GIT_READS = re.compile(r"\bgit(?:\s+-[Cc]\s+\S+)*\s+(?:" + "|".join(GIT_VERBS) + r")\b")
+# In a merge_group event the workflow's own commit and ref are the queue entry (the PR merged onto the base), not the base side.
+ENTRY_CONTEXTS = {"github.sha", "github.ref", "github.ref_name", "github.workflow_sha"}
+ENTRY_VARS = re.compile(r"\$\{?(?:GITHUB_SHA|GITHUB_REF|GITHUB_REF_NAME|GITHUB_WORKFLOW_SHA)\b")
+HEAD_VARS = re.compile(r"\$\{?GITHUB_HEAD_REF\b")  # the PR's branch, for any trigger
+
+
+def base_side(on: set[str]) -> set[str]:
+    """The contexts that name the base of the change under this workflow's triggers."""
+    return BASE_SIDE - ENTRY_CONTEXTS if "merge_group" in on else BASE_SIDE
+
+
+def untrusted_names(allowed: set[str], *envs: object) -> set[str]:
+    """The env names whose value can name the PR's or the queue entry's commits: any context outside the base side."""
+    return {
+        str(k) for env in envs for k, v in items(env) if any(c not in allowed for m in EXPR.finditer(str(v)) for c in contexts(m.group(1)))
+    }
+
+
+def untrusted_text(text: str, envs: tuple, on: set[str]) -> bool:
+    """Can this ref or script name the PR's or the queue entry's commits? By a literal marker, by a context outside the base side
+    (for a merge_group event that excludes github.sha and github.ref), or through an env var built from one (`$HEAD`, `$PR_REF`,
+    `$GITHUB_SHA` in the queue, whatever a workflow calls it)."""
+    resolved = resolve_env(text, *envs)
+    allowed = base_side(on)
+    if UNTRUSTED_REF.search(resolved) or PR_MARK.search(resolved) or HEAD_VARS.search(resolved):
+        return True
+    if "merge_group" in on and ENTRY_VARS.search(resolved):
+        return True
+    if any(c not in allowed for m in EXPR.finditer(resolved) for c in contexts(m.group(1))):
+        return True
+    return any(re.search(r"\$\{?" + re.escape(n) + r"\b", resolved) for n in untrusted_names(allowed, *envs))
+
+
 GIT_WRITE = re.compile(
     r"\bgit(?:\s+-[Cc]\s+\S+)*\s+(?:checkout|switch|restore|reset|read-tree|worktree\s+add|merge|pull|cherry-pick|rebase|archive|apply|am|stash)\b"
 )
@@ -184,7 +233,53 @@ class Checker:
             if isinstance(job.get("uses"), str):
                 self.pinned(job["uses"], line)
             self.steps(job.get("steps") or [], job.get("env") or {}, doc.get("env") or {}, on)
+            self.write_and_pr(name, job, on, doc.get("env") or {})
         return self
+
+    def write_and_pr(self, name: str, job: dict, on: set[str], wf_env: object) -> None:
+        """A job that can write never reads the commits of the PR or of the queue entry."""
+        writes = [k for k, v in items(job.get("permissions")) if str(v).lower() == "write"]
+        if not writes or not on & (PRIVILEGED | {"merge_group"}):
+            return
+        for step in job.get("steps") or []:
+            if not isinstance(step, dict):
+                continue
+            what = self.reads_untrusted(step, on, (step.get("env") or {}, job.get("env") or {}, wf_env))
+            if what:
+                self.add(
+                    step.get(LINE, 1),
+                    "write-and-pr",
+                    f"job `{name}` holds `{writes[0]}: write` and {what}: read them in a job without a write permission "
+                    "and pass only validated outputs to this one",
+                )
+
+    def reads_untrusted(self, step: dict, on: set[str], envs: tuple) -> str:
+        """What a step does with the PR's or the queue entry's commits, in words; '' when it does nothing of the kind."""
+        uses = step.get("uses") if isinstance(step.get("uses"), str) else ""
+        if uses.lower().startswith("actions/checkout@"):
+            return self.checkout_reads(step, on, envs)
+        run = step.get("run")
+        if not isinstance(run, str):
+            return ""
+        if GH_CHECKOUT.search(run):
+            return "runs `gh pr checkout`"
+        if APPLY.search(run):
+            return "applies a patch"
+        if GIT_READS.search(run) and untrusted_text(run, envs, on):
+            return "runs git on a name that can carry the PR's commits"
+        return ""
+
+    def checkout_reads(self, step: dict, on: set[str], envs: tuple) -> str:
+        with_ = {str(k).lower(): v for k, v in items(step.get("with"))}
+        ref = resolve_env(str(with_["ref"]), *envs).strip() if with_.get("ref") is not None else ""
+        if "merge_group" in on and not ref:  # omitted, empty or an env var that is empty: the default is the queue entry
+            return "checks out the queue entry (an actions/checkout without a `ref`, or with an empty one, in a merge_group workflow)"
+        if ref and untrusted_text(ref, envs, on):
+            return f"checks out `ref: {with_['ref']}`"
+        repo = resolve_env(str(with_.get("repository", "")), *envs)
+        if any(c != "github.repository" for m in EXPR.finditer(repo) for c in contexts(m.group(1))):
+            return f"checks out `repository: {with_['repository']}`"
+        return ""
 
     def steps(self, steps: list, job_env: dict, wf_env: dict, on: set[str]) -> None:
         for step in steps if isinstance(steps, list) else []:  # `steps: 5` used to end the check in a traceback (scripts/ci/fuzz)

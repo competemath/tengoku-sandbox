@@ -7,6 +7,9 @@ looks for and what to do, and for the checks that are complex enough to be wrong
 themselves adds a prefilled "Report a gate bug" issue link. The comment is
 upserted (one per PR, found by a marker) and the same text goes to the job
 summary. Without a PR number (merge groups) only the job summary is written.
+
+This is the one job that writes to the PR, and everything it quotes comes from other jobs' logs and annotations: text a PR
+author influences. It is data here, quoted inside a code fence that the quoted text cannot close, never interpreted.
 """
 
 from __future__ import annotations
@@ -136,6 +139,41 @@ def excerpt(job_id: int) -> str:
     return "\n".join(lines[:6])
 
 
+def fenced(text: str) -> str:
+    """Text for a code fence that the text itself cannot close."""
+    return text.replace("```", "'''")
+
+
+def log_lines(log: str) -> list[str]:
+    """A job log without gh's prefixes, timestamps and colour codes."""
+    out = []
+    for raw in log.splitlines():
+        line = re.sub(r"^[^\t]*\t[^\t]*\t", "", raw)
+        line = re.sub(r"^\S+Z ", "", line)
+        out.append(re.sub(r"\x1b\[[0-9;]*m", "", line))
+    return out
+
+
+def advisory_hits(lines: list[str], limit: int = 20) -> list[str]:
+    """The `- path:line — name` lines sorry_scan.py prints under its heading: at most `limit`, each cut to 200 characters."""
+    hits, seen = [], False
+    for line in lines:
+        if line.startswith("### sorry / admit"):
+            seen = True
+        elif seen and line.startswith("- "):
+            hits.append(line[:200])
+    return hits[:limit]
+
+
+def advisory(all_jobs: list[dict]) -> str:
+    """What the advisory job found, for the comment. It holds no token to say it itself, so this job reads it from the log."""
+    job = next((j for j in all_jobs if j.get("name") == "sorry-advisory" and j.get("conclusion") == "success"), None)
+    hits = advisory_hits(log_lines(gh("api", f"repos/{REPO}/actions/jobs/{job['databaseId']}/logs"))) if job else []
+    if not hits:
+        return ""
+    return "### sorry / admit in this PR (advisory: the merge queue's build decides)\n\n```text\n" + fenced("\n".join(hits)) + "\n```"
+
+
 def issue_link(job: str, step: str, text: str) -> str:
     title = f"gate bug? {job}/{step} on PR #{PR or '?'}"
     body = f"PR: {SERVER}/{REPO}/pull/{PR}\nRun: {SERVER}/{REPO}/actions/runs/{RUN}\nCheck: {job} / {step}\n\nWhat it said:\n```\n{text[:800]}\n```\n\nWhy I think the check is wrong:\n"
@@ -143,31 +181,39 @@ def issue_link(job: str, step: str, text: str) -> str:
     return f"{SERVER}/{REPO}/issues/new?{q}"
 
 
-def render(all_jobs: list[dict]) -> tuple[str, bool]:
-    failed = [j for j in all_jobs if j.get("conclusion") == "failure" and j.get("name") != "pr-gate"]
+def failed_section(j: dict) -> list[str]:
+    """The comment's lines for one failed job: its step, what the check looks for, what it said (fenced), what to do."""
+    out: list[str] = []
+    steps = [s["name"] for s in j.get("steps", []) if s.get("conclusion") == "failure"]
+    step = steps[0] if steps else "?"
+    key = step if step in ADVICE else j["name"]
+    fragility, checks, todo = ADVICE.get(key, ("medium", "see the job log", "open the run and read the failing step"))
+    text = excerpt(j["databaseId"])
+    out += [f"**{j['name']}** → step *{step}*", "", f"Checks: {checks}.", ""]
+    if text:
+        out += ["```text", fenced(text), "```", ""]
+    out += [f"**What to do:** {todo}.", ""]
+    if fragility in ("high", "medium"):
+        out += [
+            f"This check reasons about {'paths' if key == 'classify' else 'text patterns or other services'} and can be wrong. If your change is right and the check is not: **[Report a gate bug]({issue_link(j['name'], step, text)})** — a maintainer looks at every one.",
+            "",
+        ]
+    return out
+
+
+def render(all_jobs: list[dict], extra: str = "") -> tuple[str, bool]:
+    failed = [j for j in all_jobs if j.get("conclusion") == "failure" and j.get("name") not in ("pr-gate", "sorry-advisory")]
+    tail = f"\n\n{extra}" if extra else ""
     if not failed:
         return (
-            f"{MARK}\n### Gate: all checks passed for a `{CLASS}` PR at `{HEAD}`\n\nThe merge queue builds only what this PR changes; see CONTRIBUTING.md for what it does.\n\n{CONVERSATIONS}",
+            f"{MARK}\n### Gate: all checks passed for a `{CLASS}` PR at `{HEAD}`\n\nThe merge queue builds only what this PR changes; see CONTRIBUTING.md for what it does.\n\n{CONVERSATIONS}{tail}",
             False,
         )
     out = [MARK, f"### Gate: {len(failed)} check{'s' if len(failed) != 1 else ''} failed for a `{CLASS}` PR at `{HEAD}`", ""]
     for j in failed:
-        steps = [s["name"] for s in j.get("steps", []) if s.get("conclusion") == "failure"]
-        step = steps[0] if steps else "?"
-        key = step if step in ADVICE else j["name"]
-        fragility, checks, todo = ADVICE.get(key, ("medium", "see the job log", "open the run and read the failing step"))
-        text = excerpt(j["databaseId"])
-        out += [f"**{j['name']}** → step *{step}*", "", f"Checks: {checks}.", ""]
-        if text:
-            out += ["```text", text, "```", ""]
-        out += [f"**What to do:** {todo}.", ""]
-        if fragility in ("high", "medium"):
-            out += [
-                f"This check reasons about {'paths' if key == 'classify' else 'text patterns or other services'} and can be wrong. If your change is right and the check is not: **[Report a gate bug]({issue_link(j['name'], step, text)})** — a maintainer looks at every one.",
-                "",
-            ]
+        out += failed_section(j)
     out += [f"Run: {SERVER}/{REPO}/actions/runs/{RUN} · after fixing, push and the gate re-runs.", "", CONVERSATIONS]
-    return "\n".join(out), True
+    return "\n".join(out) + tail, True
 
 
 def upsert_comment(body: str) -> None:
@@ -192,7 +238,8 @@ def main() -> int:
         body, _ = render(json.load(sys.stdin))
         print(body)
         return 0
-    body, failed = render(jobs())
+    all_jobs = jobs()
+    body, _ = render(all_jobs, advisory(all_jobs))
     summary = os.environ.get("GITHUB_STEP_SUMMARY")
     if summary:
         with open(summary, "a", encoding="utf-8") as f:
