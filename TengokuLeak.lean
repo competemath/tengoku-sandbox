@@ -25,6 +25,8 @@ structure Leak where
   /-- where it is declared, when that is a module of the library (an `attribute` command registers a declaration of ANOTHER library) -/
   line : Option Nat
   declaredIn : Option Name
+  /-- an instance's priority when it is not the default (1000): a local re-registration must keep it -/
+  prio : Option Nat := none
 
 structure Counts where
   inst : Nat := 0
@@ -68,7 +70,8 @@ def scan (pfxs : List Name) : CoreM (Array Leak × Counts) := do
           let r ← findDeclarationRanges? n
           let dm := (env.getModuleIdxFor? n).bind fun m => env.header.moduleNames[m]?
           leaks := leaks.push { kind := "instance", name := n, registeredIn := modName, declaredIn := dm,
-                                line := if dm == some modName then r.map (·.range.pos.line) else none }
+                                line := if dm == some modName then r.map (·.range.pos.line) else none,
+                                prio := if ie.priority == 1000 then none else some ie.priority }
     for e in simpExtension.ext.getModuleEntries env i do
       match e with
       | .scoped _ _ => counts := { counts with simpScoped := counts.simpScoped + 1 }
@@ -91,6 +94,7 @@ def scan (pfxs : List Name) : CoreM (Array Leak × Counts) := do
 def report (treePrefix : Name) (leaks : Array Leak) (c : Counts) : List String :=
   let rows := leaks.toList.map fun l =>
     s!"leak: {l.kind} {l.name} registered in {treePrefix ++ l.registeredIn}" ++
+      (match l.prio with | some p => s!" (priority {p})" | none => "") ++
       (match l.line, l.declaredIn with
        | some n, _ => s!" (declared at line {n})"
        | none, some m => s!" (declared in {m}: an `attribute` command of the library turns it on)"
