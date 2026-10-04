@@ -12,6 +12,7 @@ import Tengoku.Aperiodicmonotiles
 import Tengoku.Tautology
 import Tengoku.Flt
 import Tengoku.EquationalTheories
+import Tengoku.Apap
 import Tengoku.AddCombi
 import Tengoku.Pfr
 import Tengoku.Vcvio
