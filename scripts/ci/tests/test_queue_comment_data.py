@@ -101,11 +101,31 @@ class TwoSteps(unittest.TestCase):
         d = Path(tempfile.mkdtemp())
         f = d / "facts.json"
         f.write_text(json.dumps(HOSTILE))
-        r = run_cli("--post", str(f), env={"TENGOKU_COMMENT_DRY": "1", "GITHUB_REF": ""})
-        self.assertIn("would comment on: #10, #30", r.stdout)
+        r = run_cli("--post", str(f), env={"TENGOKU_COMMENT_DRY": "1", "GITHUB_REF": "refs/heads/gh-readonly-queue/main/pr-10-" + "a" * 40})
+        self.assertIn("would comment on: #10\n", r.stdout)
         self.assertNotIn("\n```\n[click here]", r.stdout)
         self.assertNotIn("2; rm", r.stdout)
         self.assertNotIn("javascript:", r.stdout)
+
+    def test_the_recipient_is_the_queue_entry_and_never_a_pr_the_facts_name(self):
+        d = Path(tempfile.mkdtemp())
+        f = d / "facts.json"
+        f.write_text(json.dumps({"kind": "log", "err": "error: x", "prs": ["99"], "run_url": "https://x.example/r"}))
+        ref = "refs/heads/gh-readonly-queue/main/pr-11-" + "b" * 40
+        r = run_cli("--post", str(f), env={"TENGOKU_COMMENT_DRY": "1", "GITHUB_REF": ref})
+        self.assertIn("would comment on: #11\n", r.stdout)  # not in the facts at all, and the one the facts name is not told
+        self.assertNotIn("#99\n", r.stdout.split("Removed from")[0])
+        r = run_cli("--post", str(f), env={"TENGOKU_COMMENT_DRY": "1", "GITHUB_REF": ""})
+        self.assertNotIn("would comment", r.stdout)  # no queue ref, no recipient: nothing is posted
+
+    def test_a_path_outside_the_working_and_temporary_directories_is_refused(self):
+        r = run_cli("--post", "/etc/hosts", cwd=Path(tempfile.mkdtemp()))
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("outside the working directory", r.stdout + r.stderr)
+
+    def test_a_log_cannot_make_extraction_read_outside_the_tree(self):
+        self.assertEqual(qc.source_of("../../../../etc/hosts", 1), ("", "?"))
+        self.assertEqual(qc.source_of("/etc/hosts", 1), ("", "?"))
 
     def test_facts_without_any_pr_post_nothing(self):
         d = Path(tempfile.mkdtemp())

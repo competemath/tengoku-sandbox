@@ -18,12 +18,15 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 import urllib.parse
 from pathlib import Path
 
-from _git import ROOT, run
+from _git import ROOT, fail, run
 
-PR_NUMBER = re.compile(r"[0-9]{1,9}")
+PR_NUMBER = re.compile(r"\d{1,9}", re.ASCII)  # ASCII only: \d alone also matches other scripts' digits
+DECL = re.compile(r"\s*(?:theorem|lemma|def|abbrev|instance)\s+(\S+)")
+REQUEUE = "{requeue}"  # filled in when the comment is posted
 RECORD_NAME = re.compile(r"[\w.'«»!?]{1,200}")
 LIMITS = {"msg": 1500, "src": 300, "where": 200, "err": 300, "file": 200}
 
@@ -91,20 +94,13 @@ def message_with_tail(log: str, m: re.Match) -> str:
 
 
 def source_of(path: str, line: int) -> tuple[str, str]:
-    """The source line of the error and the declaration it sits in, read from the working tree."""
-    p = ROOT / path
-    if not p.exists():
+    """The source line of the error and the declaration it sits in, read from the working tree (only from inside it)."""
+    p = (ROOT / path).resolve()
+    if not p.is_relative_to(ROOT.resolve()) or not p.is_file():
         return "", "?"
     lines = p.read_text(errors="replace").splitlines()
     src = lines[line - 1].strip() if line - 1 < len(lines) else ""
-    decl = next(
-        (
-            re.sub(r"^.*?(theorem|lemma|def|abbrev|instance)\s+(\S+).*$", r"\2", ln)
-            for ln in reversed(lines[:line])
-            if re.match(r"^\s*(theorem|lemma|def|abbrev|instance)\s", ln)
-        ),
-        "?",
-    )
+    decl = next((m.group(1) for ln in reversed(lines[:line]) if (m := DECL.match(ln))), "?")
     return src, decl
 
 
@@ -112,7 +108,7 @@ def group_prs(base_sha: str) -> list[str]:
     subjects = (
         run("log", "--format=%s", f"{base_sha}..HEAD", check=False) if base_sha else run("log", "--format=%s", "-n", "50", check=False)
     )
-    return sorted({n for n in re.findall(r"(?:Merge pull request #|\(#)(\d+)\)?\s*$", subjects, re.M)}, key=int)
+    return sorted(set(re.findall(r"(?:Merge pull request #|\(#)(\d+)\)?\s*$", subjects, re.M)), key=int)
 
 
 def extract(log: str, run_url: str, base_sha: str) -> dict:
@@ -170,8 +166,8 @@ def describe(f: dict) -> tuple[str, str, str]:
     return where, detail, f["err"]
 
 
-def render(f: dict) -> tuple[str, list[str]]:
-    """(the comment, with {requeue} left to fill; the PRs to tell)"""
+def render(f: dict, strict: bool = False) -> tuple[str, list[str]]:
+    """(the comment, with {requeue} left to fill; the PRs to tell). Strict: the PR to tell comes only from the queue ref, never from the facts."""
     where, detail, msg = describe(f)
     hint = next(
         (h for pat, h in HINTS if re.search(pat, msg, re.I)), "Reproduce locally with the commands in CONTRIBUTING.md, fix, and push."
@@ -180,7 +176,10 @@ def render(f: dict) -> tuple[str, list[str]]:
     # The entry's own PR is the one GitHub removed (the ref is gh-readonly-queue/<branch>/pr-<N>-<base>); the others
     # named in the group are retried, so only it is labelled and told.
     own = re.search(r"/pr-(\d+)-[0-9a-f]+$", os.environ.get("GITHUB_REF", ""))
-    targets = [own.group(1)] if own and own.group(1) in prs else prs
+    if strict:
+        targets = [own.group(1)] if own else []
+    else:
+        targets = [own.group(1)] if own and own.group(1) in prs else prs
     group_note = (
         f" This group also contained {', '.join('#' + n for n in prs)}; GitHub removes the newest PR and retries the rest, so if the error is not in your files, wait for the retry."
         if len(prs) > 1
@@ -238,7 +237,7 @@ def post(body: str, targets: list[str]) -> None:
             rearm and subprocess.run(["gh", "pr", "edit", n, "--add-label", "ejected"], check=False, capture_output=True).returncode == 0
         )
         r = subprocess.run(
-            ["gh", "pr", "comment", n, "--body", body.replace("{requeue}", AUTO if labelled else MANUAL)],
+            ["gh", "pr", "comment", n, "--body", body.replace(REQUEUE, AUTO if labelled else MANUAL)],
             check=False,
             capture_output=True,
             text=True,
@@ -251,32 +250,41 @@ def post(body: str, targets: list[str]) -> None:
         print(f"commented on #{n}" + ("" if labelled else " (no ejected label: asked to re-queue by hand)"))
 
 
-def announce(facts: dict) -> int:
-    body, targets = render(valid(facts))
+def announce(facts: dict, strict: bool = False) -> None:
+    body, targets = render(valid(facts), strict)
     # A squash merge group carries one commit per PR, subject "<title> (#N)"; a merge-commit group says "Merge pull request #N".
-    if not valid(facts)["prs"]:
-        print(body.replace("{requeue}", ""))
-        return 0
+    if not targets:
+        print(body.replace(REQUEUE, ""))
+        return
     if os.environ.get("TENGOKU_COMMENT_DRY"):  # tests: show what would be posted, post nothing
         print("would comment on:", ", ".join("#" + n for n in targets))
-        print(body.replace("{requeue}", "AUTO re-queue" if os.environ.get("TENGOKU_REARM") == "1" else "MANUAL re-queue"))
-        return 0
+        print(body.replace(REQUEUE, "AUTO re-queue" if os.environ.get("TENGOKU_REARM") == "1" else "MANUAL re-queue"))
+        return
     post(body, targets)
-    return 0
+
+
+def checked_path(arg: str) -> Path:
+    """A file given on the command line: it must lie in the working directory or the temporary directory."""
+    p = Path(arg).resolve()
+    if not any(p.is_relative_to(root.resolve()) for root in (Path.cwd(), Path(tempfile.gettempdir()))):
+        fail(f"{arg} is outside the working directory and the temporary directory")
+    return p
 
 
 def main(argv: list[str]) -> int:
     if argv[:1] == ["--post"]:
-        return announce(json.loads(Path(argv[1]).read_text(errors="replace")))
+        announce(json.loads(checked_path(argv[1]).read_text(errors="replace")), strict=True)
+        return 0
     out = None
     if argv[:1] == ["--facts"]:
-        out, argv = argv[1], argv[2:]
-    log = Path(argv[0]).read_text(errors="replace") if Path(argv[0]).exists() else ""
-    facts = extract(log, argv[1], argv[2] if len(argv) > 2 else "")
+        out, argv = checked_path(argv[1]), argv[2:]
+    log_path = checked_path(argv[0])
+    facts = extract(log_path.read_text(errors="replace") if log_path.exists() else "", argv[1], argv[2] if len(argv) > 2 else "")
     if out:
-        Path(out).write_text(json.dumps(facts, ensure_ascii=False))
-        return 0
-    return announce(facts)
+        out.write_text(json.dumps(facts, ensure_ascii=False))
+    else:
+        announce(facts)
+    return 0
 
 
 if __name__ == "__main__":

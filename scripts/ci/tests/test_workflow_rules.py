@@ -428,3 +428,40 @@ jobs:
     def test_a_read_only_job_may_do_all_of_it(self):
         steps = f'      - uses: {CO}\n        with: {{ persist-credentials: false }}\n      - run: git fetch origin "$HEAD"'
         self.assertEqual(rules(self.custom("merge_group", self.ALIASES, steps, perms="{ contents: read }")), [])
+
+    # The second review round: github.sha / github.ref are the queue entry in a merge_group workflow, an empty ref is the default ref,
+    # `gh pr checkout` and a patch load the PR just as a fetch does, and `repository:` can name a fork.
+    def test_sha_and_ref_are_the_queue_entry_under_merge_group_and_the_base_otherwise(self):
+        for ref in ("github.sha", "github.ref", "github.workflow_sha"):
+            steps = f'      - uses: {CO}\n        with: {{ ref: "${{{{ {ref} }}}}", persist-credentials: false }}'
+            self.assertEqual(rules(self.custom("merge_group", "  X: 1", steps)), ["write-and-pr"], ref)
+            self.assertEqual(rules(self.custom("pull_request_target", "  X: 1", steps)), [], ref)  # the base branch's commit there
+
+    def test_the_default_environment_variables_are_the_queue_entry_under_merge_group(self):
+        for var in ("$GITHUB_SHA", "${GITHUB_REF}", "$GITHUB_WORKFLOW_SHA"):
+            self.assertEqual(rules(self.custom("merge_group", "  X: 1", f'      - run: git fetch origin "{var}"')), ["write-and-pr"], var)
+        self.assertEqual(
+            rules(self.custom("pull_request_target", "  X: 1", '      - run: git fetch origin "$GITHUB_HEAD_REF"')), ["write-and-pr"]
+        )
+        self.assertEqual(rules(self.custom("pull_request_target", "  X: 1", '      - run: git fetch origin "$GITHUB_SHA"')), [])
+
+    def test_an_empty_ref_is_the_default_ref(self):
+        for ref in ('""', '" "', '"${{ env.EMPTY }}"'):
+            steps = f"      - uses: {CO}\n        with: {{ ref: {ref}, persist-credentials: false }}"
+            self.assertEqual(rules(self.custom("merge_group", "  EMPTY: ''", steps)), ["write-and-pr"], ref)
+
+    def test_gh_pr_checkout_and_patches_load_the_pr_after_an_explicit_base_checkout(self):
+        base = f'      - uses: {CO}\n        with: {{ ref: "${{{{ env.BASE }}}}", persist-credentials: false }}\n'
+        for run in ("gh pr checkout 123", "git apply x.patch", "git am < x.mbox", "patch -p1 < x.diff"):
+            self.assertEqual(rules(self.custom("merge_group", self.ALIASES, base + f"      - run: {run}")), ["write-and-pr"], run)
+
+    def test_reading_the_base_is_still_fine_and_a_log_of_the_prs_commits_is_not(self):
+        base = f'      - uses: {CO}\n        with: {{ ref: "${{{{ env.BASE }}}}", persist-credentials: false }}\n'
+        self.assertEqual(rules(self.custom("merge_group", self.ALIASES, base + '      - run: git show "$BASE:README.md"')), [])
+        self.assertEqual(rules(self.custom("merge_group", self.ALIASES, base + '      - run: git log "$BASE..$HEAD"')), ["write-and-pr"])
+
+    def test_a_checkout_of_another_repository_is_refused(self):
+        steps = f'      - uses: {CO}\n        with: {{ ref: "${{{{ env.BASE }}}}", repository: "${{{{ github.event.pull_request.head.repo.full_name }}}}", persist-credentials: false }}'
+        self.assertEqual(rules(self.custom("merge_group", self.ALIASES, steps)), ["write-and-pr"])
+        ok = f'      - uses: {CO}\n        with: {{ ref: "${{{{ env.BASE }}}}", repository: "${{{{ github.repository }}}}", persist-credentials: false }}'
+        self.assertEqual(rules(self.custom("merge_group", self.ALIASES, ok)), [])
