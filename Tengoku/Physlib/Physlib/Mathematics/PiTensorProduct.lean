@@ -85,7 +85,7 @@ lemma induction_mod_tmul
 
 /-- Given two maps `s1` and `s2` whose targets carry an instance of an additive commutative
   monoid, the target of the sum of these two maps also carry an instance thereof. -/
-instance : (i : ι1 ⊕ ι2) → AddCommMonoid ((fun i => Sum.elim s1 s2 i) i) := fun i =>
+local instance : (i : ι1 ⊕ ι2) → AddCommMonoid ((fun i => Sum.elim s1 s2 i) i) := fun i =>
   match i with
   | Sum.inl i => inst1 i
   | Sum.inr i => inst2 i
@@ -309,3 +309,4 @@ lemma tmulEquiv_tmul_tprod (p : (i : ι1) → s1 i) (q : (i : ι2) → s2 i) :
 
 end tmulEquiv
 end Physlib.PiTensorProduct
+-- Tengoku: 1 registration(s) of this module made local so they do not change other libraries (generated)

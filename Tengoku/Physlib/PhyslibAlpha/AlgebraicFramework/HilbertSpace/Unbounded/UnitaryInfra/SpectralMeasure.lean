@@ -21,6 +21,8 @@ spectral measure of a bounded normal operator — together with its reconstructi
 -/
 
 @[expose] public section
+attribute [local instance] QuantumMechanics.instIsAddTorsionFreeContinuousLinearMapWOTComplexIdOfCompleteSpace
+
 
 noncomputable section
 

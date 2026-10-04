@@ -19,6 +19,8 @@ Basic properties related to whether a field, or list of fields, is bosonic or fe
 -/
 
 @[expose] public section
+attribute [local simp] Physlib.List.insertIdx_length_fin
+
 
 /-- The type `FieldStatistic` is the type containing two elements `bosonic` and `fermionic`.
   This type is used to specify if a field or operator obeys bosonic or fermionic statistics. -/

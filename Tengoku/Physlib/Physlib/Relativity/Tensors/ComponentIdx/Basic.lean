@@ -37,6 +37,8 @@ component indices induced by tensor products and contractions live in sibling fi
 -/
 
 @[expose] public section
+attribute [local instance] Physlib.PiTensorProduct.instAddCommMonoidElim
+
 
 namespace TensorSpecies
 
