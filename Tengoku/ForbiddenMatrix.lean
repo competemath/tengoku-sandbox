@@ -1,0 +1,5 @@
+import Tengoku.ForbiddenMatrix.ForbiddenMatrix.Containment
+import Tengoku.ForbiddenMatrix.ForbiddenMatrix.ExtremalFunction
+import Tengoku.ForbiddenMatrix.ForbiddenMatrix.Mathlib.Data.ZMod.Basic
+import Tengoku.ForbiddenMatrix.ForbiddenMatrix.MatrixOperations
+import Tengoku.ForbiddenMatrix.ForbiddenMatrix.SmallPatterns
