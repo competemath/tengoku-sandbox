@@ -1,0 +1,1 @@
+-- SpherePackingOrig: a factory bundle (data/intake/sphere-packing-orig). This file only marks the library for Tengoku/All.lean.
