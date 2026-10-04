@@ -246,19 +246,32 @@ def _attribute_names(block: str) -> list[str]:
     return names
 
 
-def _pattern_violations(code: str) -> list[str]:
-    """What a pattern finds anywhere in the code: running code, trusting the compiler, `#` commands, IO."""
-    out = [f"`{m.group(1)}` runs code while the tree compiles (or trusts the compiler)" for m in _WORD.finditer(code)]
-    out += ["`eval%` runs code while the tree compiles" for _ in _EVAL_TERM.finditer(code)]
-    out += [f"`{m.group(1)}` trusts the compiler" for m in _TRUST.finditer(code)]
-    out += [f"`{m.group(1) or m.group(2)}` declarations are not for records" for m in _UNSAFE_DECL.finditer(code)]
-    out += [f"`{m.group(0).strip()}`: no # commands in a record" for m in _HASH.finditer(code)]
-    out += [f"`{m.group(0)}`: IO and System are not for records" for m in _IO.finditer(code)]
+# Commands the tree itself defines that run elaborator code of the tree's own (not the record's). An indented line is read as a continuation of the
+# command above it, so a command written indented would skip the command-start check below: these are refused wherever they start a line.
+_TREE_COMMANDS = re.compile(r"^[ \t]*(theorem_wanted|proof_wanted|def_wanted|instance_wanted)\b", re.M)
+
+
+def _token_violations(code: str) -> list[str]:
+    out: list[str] = []
+    for m in _WORD.finditer(code):
+        out.append(f"`{m.group(1)}` runs code while the tree compiles (or trusts the compiler)")
+    for _ in _EVAL_TERM.finditer(code):
+        out.append("`eval%` runs code while the tree compiles")
+    for m in _TRUST.finditer(code):
+        out.append(f"`{m.group(1)}` trusts the compiler")
+    for m in _UNSAFE_DECL.finditer(code):
+        out.append(f"`{m.group(1) or m.group(2)}` declarations are not for records")
+    for m in _HASH.finditer(code):
+        out.append(f"`{m.group(0).strip()}`: no # commands in a record")
+    for m in _IO.finditer(code):
+        out.append(f"`{m.group(0)}`: IO and System are not for records")
+    for m in _TREE_COMMANDS.finditer(code):
+        out.append(f"`{m.group(1)}` does not start an allowed command")
     return out
 
 
 def _attribute_violations(code: str) -> tuple[list[str], str]:
-    """The attributes that are not on the allow-list, and the code with every attribute block blanked."""
+    """The attributes that are not on the allow-list, and the code with every attribute block blanked (the command-start check reads the rest)."""
     out: list[str] = []
     stripped = code
     for block, start, end in _attribute_blocks(code):
@@ -271,27 +284,28 @@ def _attribute_violations(code: str) -> tuple[list[str], str]:
     return out, stripped
 
 
-def _command_violation(line: str) -> str | None:
-    """Why the line, if it starts at column 0, does not start an allowed command."""
-    if not line.strip() or line[0].isspace():
-        return None
-    m = _LEAD.match(line)
-    if not m or not re.match(r"[A-Za-z_]", m.group(0)):
-        return None  # a symbol at column 0 continues the command above (`| 0 => …`, `⟨…⟩`)
-    words = line.split()
-    while words and words[0] in MODIFIERS:
-        words = words[1:]
-    lead = _LEAD.match(words[0]).group(0) if words else ""
-    if lead and lead not in COMMANDS:
-        return f"`{lead}` does not start an allowed command"
-    return None
+def _command_start_violations(stripped: str) -> list[str]:
+    out: list[str] = []
+    for line in stripped.split("\n"):
+        if not line.strip() or line[0].isspace():
+            continue
+        m = _LEAD.match(line)
+        if not m or not re.match(r"[A-Za-z_]", m.group(0)):
+            continue  # a symbol at column 0 continues the command above (`| 0 => …`, `⟨…⟩`)
+        words = line.split()
+        while words and words[0] in MODIFIERS:
+            words = words[1:]
+        lead = _LEAD.match(words[0]).group(0) if words else ""
+        if lead and lead not in COMMANDS:
+            out.append(f"`{lead}` does not start an allowed command")
+    return out
 
 
 def violations(text: str, allowed_options: set[str]) -> list[str]:
     code = code_only(text)
-    out = _pattern_violations(code)
+    out = _token_violations(code)
     attribute_out, stripped = _attribute_violations(code)
     out += attribute_out
     out += [f"set_option {opt} is not on the allowlist" for opt in _SET_OPTION.findall(code) if opt not in allowed_options]
-    out += [v for v in map(_command_violation, stripped.split("\n")) if v]
+    out += _command_start_violations(stripped)
     return list(dict.fromkeys(out))

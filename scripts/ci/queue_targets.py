@@ -26,12 +26,19 @@ from _git import (
     load_schema,
     match,
     pascal,
+    plain,
     run,
     unplaced,
 )
+from restructure_check import is_restructure
 
 base, head = sys.argv[1], sys.argv[2]
 regenerate = "--regenerate" in sys.argv
+if is_restructure(
+    base, head
+):  # the move of the seed (scripts/restructure.py): the PR gate recomputed it; the cache build compiles it, not the queue
+    print("restructure group: nothing for the queue to build or regenerate", file=sys.stderr)
+    sys.exit(0)
 corpora = load_schema("sources.json").get("corpora", {})
 
 
@@ -45,13 +52,13 @@ def corpus_dir(lib: str) -> Path:
         subprocess.run(["git", "clone", "-q", "--filter=blob:none", spec["repo"], str(d)], check=True)
         subprocess.run(["git", "-C", str(d), "checkout", "-q", spec["commit"]], check=True)
         print(f"corpus {lib}: {spec['repo']} @ {spec['commit'][:12]}", file=sys.stderr)
-    return d
+    return d / spec.get("path", "")  # `path`: the Lake project inside a repository of several (anthropics/formal-math: zeta23/)
 
 
 def generate(lib: str, extra: list[str]) -> None:
     cmd = [sys.executable, "scripts/generate.py", "--corpus", str(corpus_dir(lib)), "--libraries", lib, *extra]
     r = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True)
-    sys.stderr.write(r.stdout[-2000:] + r.stderr[-2000:])
+    sys.stderr.write(plain(r.stdout[-2000:] + r.stderr[-2000:]))  # the generator prints record names from the PR
     if r.returncode != 0:
         fail(f"generate.py failed for {lib}: {' '.join(extra)}")
 

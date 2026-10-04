@@ -23,6 +23,7 @@ from __future__ import annotations
 import os
 import re
 import shlex
+import signal
 import subprocess
 import sys
 import threading
@@ -46,15 +47,29 @@ runs = 0
 def run(mods: list[str]) -> tuple[int, str]:
     global runs
     with slots:
+        # its own process group: `lake env` starts the checker as a child, and a timeout must stop both (killing only
+        # lake leaves the checker running, holding the pipes and the runner's memory)
+        p = subprocess.Popen(
+            TOOL + [a for m in mods for a in ("--module", m)],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            start_new_session=True,
+        )
         try:
-            p = subprocess.run(TOOL + [a for m in mods for a in ("--module", m)], capture_output=True, text=True, timeout=RUN_TIMEOUT)
-        except subprocess.TimeoutExpired as e:
-            out = (e.stdout or b"").decode(errors="replace") if isinstance(e.stdout, bytes) else (e.stdout or "")
-            return 124, f"{out}error: the axiom check of {len(mods)} module(s) did not finish in {RUN_TIMEOUT} s\n"
+            out, _ = p.communicate(timeout=RUN_TIMEOUT)
+            rc = p.returncode
+        except subprocess.TimeoutExpired:
+            try:
+                os.killpg(p.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            out, _ = p.communicate()
+            rc, out = 124, f"{out or ''}error: the axiom check of {len(mods)} module(s) did not finish in {RUN_TIMEOUT} s\n"
         finally:
             with lock:
                 runs += 1
-    return p.returncode, p.stdout + p.stderr
+    return rc, out or ""
 
 
 def check(mods: list[str]) -> bool:

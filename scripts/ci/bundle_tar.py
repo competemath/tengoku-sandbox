@@ -10,19 +10,32 @@ from __future__ import annotations
 
 import hashlib
 import io
+import os
 import sys
 import tarfile
+import tempfile
 from pathlib import Path
 
 
+def checked_output(out: str) -> str:
+    """The archive is written inside the working directory or a temporary directory (the runner's too), never anywhere a `..` or a symlink
+    could lead: the real path of the destination must be under one of them."""
+    real = os.path.realpath(out)
+    roots = [os.path.realpath(r) for r in (os.getcwd(), tempfile.gettempdir(), os.environ.get("RUNNER_TEMP", "")) if r]
+    if not any(real.startswith(r + os.sep) for r in roots):
+        raise ValueError(f"{out}: the archive is written inside the working directory or a temporary directory only")
+    return real
+
+
 def write_tar(files: dict[str, bytes], out: str) -> str:
-    with open(out, "wb") as f:
+    dest = checked_output(out)
+    with open(dest, "wb") as f:
         with tarfile.open(fileobj=f, mode="w", format=tarfile.GNU_FORMAT) as tf:
             for name in sorted(files):
                 ti = tarfile.TarInfo(name)
                 ti.size, ti.mtime, ti.mode, ti.uid, ti.gid, ti.uname, ti.gname = len(files[name]), 0, 0o644, 0, 0, "", ""
                 tf.addfile(ti, io.BytesIO(files[name]))
-    return hashlib.sha256(Path(out).read_bytes()).hexdigest()
+    return hashlib.sha256(Path(dest).read_bytes()).hexdigest()
 
 
 def read_dir(d: str) -> dict[str, bytes]:

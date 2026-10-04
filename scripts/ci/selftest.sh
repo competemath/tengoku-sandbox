@@ -8,7 +8,7 @@ REMOTE=$(git remote -v | awk -v r="$REPO" '$2 ~ r {print $1; exit}')
 [ -n "$REMOTE" ] || { echo "no git remote for $REPO"; exit 2; }
 git fetch -q "$REMOTE" main
 GOOD='{"name": "Selftest.NAME", "statement": "theorem Selftest.NAME : (1 : Nat) + 1 = 2", "proof": ":= rfl", "context": "set_option linter.all false", "source_path": "equational_theories/ForMathlib/Definability.lean", "status": "staging", "library": "equational-theories", "source_url": "https://github.com/teorth/equational_theories/blob/e218ce18b0c265efbbe65093c1f1d063c54f3639/equational_theories/ForMathlib/Definability.lean", "toolchain": "leanprover/lean4:v4.34.0-rc2"}'
-rec() { echo "$GOOD" | sed "s/NAME/$1/g"; }
+rec() { echo "$GOOD" | sed "s/NAME/$1/g"; }; seeded_logic() { if [[ -d Tengoku/Seed/Logic ]]; then echo Tengoku/Seed/Logic; else echo Tengoku/Logic; fi; return 0; }  # (one line: the secrets baseline is keyed by line number)
 scenario() {  # name expect(pass|fail) signoff(yes|no) body -- shell that edits the tree
   local name=$1 expect=$2 signoff=$3 body=$4; shift 4
   git checkout -q -B "selftest/$name" "$REMOTE/main"
@@ -25,7 +25,7 @@ if [ "$MODE" = "open" ]; then
   scenario two-purposes fail yes "Content and tooling in one PR." 'mkdir -p data/staging/equational-theories; rec good2 >> data/staging/equational-theories/selftest-two.jsonl; echo "# touched" >> scripts/stats.py'
   scenario delete-in-staging fail yes "Deletes a staging line." 'sed -i "" -e "1d" data/staging/equational-theories.jsonl 2>/dev/null || sed -i -e "1d" data/staging/equational-theories.jsonl'
   scenario eval-in-record fail yes "Record whose context runs code." 'rec bad3 | python3 -c "import sys,json; r=json.loads(sys.stdin.read()); r[\"context\"]=\"#eval IO.println 1\"; print(json.dumps(r))" >> data/staging/equational-theories.jsonl'
-  scenario credit-removed fail yes "Removes an Authors line from a seeded module." 'f=$(grep -rl "^Authors:" Tengoku/Logic | head -1); sed -i "" -e "/^Authors:/d" "$f" 2>/dev/null || sed -i -e "/^Authors:/d" "$f"'
+  scenario credit-removed fail yes "Removes an Authors line from a seeded module." 'f=$(grep -rl "^Authors:" "$(seeded_logic)" | head -1); sed -i "" -e "/^Authors:/d" "$f" 2>/dev/null || sed -i -e "/^Authors:/d" "$f"'
   scenario fake-secret fail yes "Contains a credential-shaped string." 'printf "AWS_KEY=AKIAIOSFODNN7EXAMPLE\nAWS_SECRET=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY\n" > docs-secret.txt'
   scenario unsigned fail no "Commit without Signed-off-by." 'mkdir -p data/staging/equational-theories; rec good4 >> data/staging/equational-theories/selftest-unsigned.jsonl'
   scenario derived-edit fail yes "Hand edit of a generated module." 'f=$(ls Tengoku/EquationalTheories/*.lean | head -1); echo "-- hand edit" >> "$f"'

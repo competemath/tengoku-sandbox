@@ -3,7 +3,7 @@
 
 pr-tests.yml runs it on a pull request and queue-gate.yml on a merge group, so a change to a covered gate script
 waits for its targets. Each target (fuzz_<name>.py in this directory) runs under atheris for its RUNS inputs from
-a fixed seed (-seed=1, PYTHONHASHSEED=0), starting from its corpus: the same change gives the same result. A
+a fixed seed (-seed=1, PYTHONHASHSEED=0), starting from its corpus: a run is reproducible on the same Python. A
 target runs when a file in its COVERS changed, or its own file or corpus; a change to run.py, _harness.py or the
 fuzz requirements runs them all. A change that covers none runs nothing.
 

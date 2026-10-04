@@ -1,24 +1,1127 @@
 {
-  "$comment": "source_url must start with one of these. Add a source with its licence in the same PR as the first record from it (a tooling PR). `corpora` names the source checkout the generator reads for a library (repo + commit); a library without one has data-only records that are never compiled.",
+  "$comment": "source_url must start with one of these. Add a source with its licence in the same PR as the first record from it (a tooling PR). `corpora` names the source checkout the generator reads for a library (repo + commit, `path` when the Lake project is a subdirectory of it) and its `roots`, the lean_lib module roots its records come from (`equational_theories`; `Carleson`, `Solution`); a library without one has data-only records that are never compiled.",
   "allowed": [
     "https://github.com/leanprover-community/mathlib4",
     "https://github.com/teorth/equational_theories",
-    "https://competemath.com/practice/problems"
+    "https://competemath.com/practice/problems",
+    "https://github.com/fpvandoorn/Carleson",
+    "https://github.com/AlexKontorovich/PrimeNumberTheoremAnd",
+    "https://github.com/teorth/pfr",
+    "https://github.com/ImperialCollegeLondon/FLT",
+    "https://github.com/leanprover-community/flt-regular",
+    "https://github.com/leanprover-community/con-nf",
+    "https://github.com/dwrensha/compfiles",
+    "https://github.com/mortarsanjaya/IMOSLLean4",
+    "https://github.com/google-deepmind/formal-conjectures",
+    "https://github.com/YaelDillies/toric",
+    "https://github.com/thefundamentaltheor3m/Sphere-Packing-Lean",
+    "https://github.com/Ivan-Sergeyev/seymour",
+    "https://github.com/kim-em/erdos-unit-distance",
+    "https://github.com/b-mehta/ABC-Exceptions",
+    "https://github.com/leanprover-community/add-combi",
+    "https://github.com/CBirkbeck/AINTLIB",
+    "https://github.com/mbrcic/ai-safety-formalization-atlas",
+    "https://github.com/Shreyas4991/Algolean",
+    "https://github.com/frenzymath/Anderson-Conjecture",
+    "https://github.com/YaelDillies/apap",
+    "https://github.com/jsm28/AperiodicMonotilesLean",
+    "https://github.com/frenzymath/Archon-FirstProof-problem6-augmentation",
+    "https://github.com/frenzymath/Archon-FirstProof-Results",
+    "https://github.com/Verified-zkEVM/ArkLib",
+    "https://github.com/ctchou/AutomataTheory",
+    "https://github.com/shetzl/autth",
+    "https://github.com/RemyDegenne/brownian-motion",
+    "https://github.com/ProofOfKeags/btc-verified",
+    "https://github.com/CBirkbeck/CertifyingInvariantsNF",
+    "https://github.com/YaelDillies/chandra-furst-lipton",
+    "https://github.com/CBirkbeck/chebotarev-density",
+    "https://github.com/YaelDillies/ClassFieldTheory",
+    "https://github.com/Verified-zkEVM/CompPoly",
+    "https://github.com/verified-optimization/CvxLean",
+    "https://github.com/scottnarmstrong/DeGiorgi",
+    "https://github.com/CBirkbeck/DirichletNonvanishing",
+    "https://github.com/math-inc/Erdos1196",
+    "https://github.com/Verified-zkEVM/evm-asm",
+    "https://github.com/teorth/expdb",
+    "https://github.com/anthropics/fermats-last-theorem",
+    "https://github.com/anthropics/formal-math",
+    "https://github.com/openai/NavierStokesAndEuler",
+    "https://github.com/TauCetiProject/TauCeti",
+    "https://github.com/Vilin97/lean-pool",
+    "https://github.com/merely-true/merely-true",
+    "https://github.com/openai/ten-proofs",
+    "https://github.com/openai/PrimeGaps186",
+    "https://github.com/openai/LongGapsBetweenPrimes",
+    "https://github.com/YaelDillies/forbidden-matrix",
+    "https://github.com/formal-applied-math/formal-mathfin",
+    "https://github.com/mo271/FormalBook",
+    "https://github.com/ImperialCollegeLondon/formalising-mathematics-2024",
+    "https://github.com/Robby955/FormalSLT",
+    "https://github.com/FormalizedFormalLogic/Foundation",
+    "https://github.com/frenzymath/reap",
+    "https://github.com/math-inc/FrontierMathOpen-Hypergraphs",
+    "https://github.com/YaelDillies/gibbs-measure",
+    "https://github.com/lengyijun/goldbach_tm",
+    "https://github.com/WuProver/groebner_proj",
+    "https://github.com/WuProver/GroebnerTactic",
+    "https://github.com/fpvandoorn/HausdorffSchoolLean",
+    "https://github.com/sinhp/HoTTLean",
+    "https://github.com/djvelleman/HTPILeanPackage",
+    "https://github.com/teorth/IEANTN",
+    "https://github.com/jsm28/IMOShortlist2024Lean",
+    "https://github.com/emilyriehl/infinity-cosmos",
+    "https://github.com/WuProver/lean_characteristic_set",
+    "https://github.com/a2435191/lean-logic-formalization",
+    "https://github.com/vltanh/lean4-analysis-tao",
+    "https://github.com/CBirkbeck/LeanBridge",
+    "https://github.com/YaelDillies/LeanCamCombi",
+    "https://github.com/fpvandoorn/LeanCourse24",
+    "https://github.com/loganrjmurphy/LeanEuclid",
+    "https://github.com/AnandGokhale/LeanForControl",
+    "https://github.com/project-numina/LeanGeo",
+    "https://github.com/CBirkbeck/LeanModularForms",
+    "https://github.com/YuanheZ/lean-stat-learning-theory",
+    "https://github.com/uda-lab/leray-hopf",
+    "https://github.com/YaelDillies/mean-fourier",
+    "https://github.com/hanwenzhu/miller-rabin",
+    "https://github.com/YaelDillies/misc-yd",
+    "https://github.com/CBirkbeck/ModFormDims",
+    "https://github.com/WuProver/MonomialOrderedPolynomial",
+    "https://github.com/CBirkbeck/padic-L-functions",
+    "https://github.com/leanprover-community/physlib",
+    "https://github.com/Verified-zkEVM/PolyFun",
+    "https://github.com/lenianiva/Prismriver",
+    "https://github.com/frenzymath/qrcp-bounded-coherence-obstruction",
+    "https://github.com/urikol/QuantumOptimization",
+    "https://github.com/lecopivo/SciLean",
+    "https://github.com/teorth/sendov",
+    "https://github.com/leanprover-community/sphere-eversion",
+    "https://github.com/math-inc/Sphere-Packing-Lean",
+    "https://github.com/Lean-MoDS/StatsMLlib",
+    "https://github.com/teorth/analysis",
+    "https://github.com/CBirkbeck/TauCeti",
+    "https://github.com/siqiliu-tsinghua/tautology",
+    "https://github.com/LionSR/TNLean",
+    "https://github.com/keilambda/ttfpi",
+    "https://github.com/CBirkbeck/uniform-sheafy-tate-domains-lean",
+    "https://github.com/Verified-zkEVM/VCVio",
+    "https://github.com/schildep/verified-3d-mesh-intersection",
+    "https://github.com/schildep/verified-polygon-intersection",
+    "https://github.com/VTrelat/ZFLean",
+    "https://github.com/Verified-zkEVM/clean",
+    "https://github.com/Verified-zkEVM/zkLean"
   ],
   "licences": {
     "https://github.com/leanprover-community/mathlib4": "Apache-2.0",
     "https://github.com/teorth/equational_theories": "Apache-2.0",
-    "https://competemath.com/practice/problems": "CompeteMath contributor terms"
+    "https://competemath.com/practice/problems": "Apache-2.0",
+    "https://github.com/fpvandoorn/Carleson": "Apache-2.0",
+    "https://github.com/AlexKontorovich/PrimeNumberTheoremAnd": "Apache-2.0",
+    "https://github.com/teorth/pfr": "Apache-2.0",
+    "https://github.com/ImperialCollegeLondon/FLT": "Apache-2.0",
+    "https://github.com/leanprover-community/flt-regular": "Apache-2.0",
+    "https://github.com/leanprover-community/con-nf": "Apache-2.0",
+    "https://github.com/dwrensha/compfiles": "Apache-2.0",
+    "https://github.com/mortarsanjaya/IMOSLLean4": "Apache-2.0",
+    "https://github.com/google-deepmind/formal-conjectures": "Apache-2.0",
+    "https://github.com/YaelDillies/toric": "Apache-2.0",
+    "https://github.com/thefundamentaltheor3m/Sphere-Packing-Lean": "Apache-2.0",
+    "https://github.com/Ivan-Sergeyev/seymour": "Apache-2.0",
+    "https://github.com/kim-em/erdos-unit-distance": "Apache-2.0",
+    "https://github.com/b-mehta/ABC-Exceptions": "Apache-2.0",
+    "https://github.com/leanprover-community/add-combi": "Apache-2.0",
+    "https://github.com/CBirkbeck/AINTLIB": "Apache-2.0",
+    "https://github.com/mbrcic/ai-safety-formalization-atlas": "Apache-2.0",
+    "https://github.com/Shreyas4991/Algolean": "Apache-2.0",
+    "https://github.com/frenzymath/Anderson-Conjecture": "Apache-2.0",
+    "https://github.com/YaelDillies/apap": "Apache-2.0",
+    "https://github.com/jsm28/AperiodicMonotilesLean": "Apache-2.0",
+    "https://github.com/frenzymath/Archon-FirstProof-problem6-augmentation": "Apache-2.0",
+    "https://github.com/frenzymath/Archon-FirstProof-Results": "Apache-2.0",
+    "https://github.com/Verified-zkEVM/ArkLib": "Apache-2.0",
+    "https://github.com/ctchou/AutomataTheory": "Apache-2.0",
+    "https://github.com/shetzl/autth": "Apache-2.0",
+    "https://github.com/RemyDegenne/brownian-motion": "Apache-2.0",
+    "https://github.com/ProofOfKeags/btc-verified": "Apache-2.0",
+    "https://github.com/CBirkbeck/CertifyingInvariantsNF": "Apache-2.0",
+    "https://github.com/YaelDillies/chandra-furst-lipton": "Apache-2.0",
+    "https://github.com/CBirkbeck/chebotarev-density": "Apache-2.0",
+    "https://github.com/YaelDillies/ClassFieldTheory": "Apache-2.0",
+    "https://github.com/Verified-zkEVM/CompPoly": "Apache-2.0",
+    "https://github.com/verified-optimization/CvxLean": "Apache-2.0",
+    "https://github.com/scottnarmstrong/DeGiorgi": "Apache-2.0",
+    "https://github.com/CBirkbeck/DirichletNonvanishing": "Apache-2.0",
+    "https://github.com/math-inc/Erdos1196": "Apache-2.0",
+    "https://github.com/Verified-zkEVM/evm-asm": "MIT",
+    "https://github.com/teorth/expdb": "Apache-2.0",
+    "https://github.com/anthropics/fermats-last-theorem": "Apache-2.0",
+    "https://github.com/anthropics/formal-math": "Apache-2.0",
+    "https://github.com/openai/NavierStokesAndEuler": "Apache-2.0",
+    "https://github.com/TauCetiProject/TauCeti": "Apache-2.0",
+    "https://github.com/Vilin97/lean-pool": "Apache-2.0",
+    "https://github.com/merely-true/merely-true": "Apache-2.0",
+    "https://github.com/openai/ten-proofs": "Apache-2.0",
+    "https://github.com/openai/PrimeGaps186": "Apache-2.0",
+    "https://github.com/openai/LongGapsBetweenPrimes": "Apache-2.0",
+    "https://github.com/YaelDillies/forbidden-matrix": "Apache-2.0",
+    "https://github.com/formal-applied-math/formal-mathfin": "Apache-2.0",
+    "https://github.com/mo271/FormalBook": "Apache-2.0",
+    "https://github.com/ImperialCollegeLondon/formalising-mathematics-2024": "Apache-2.0",
+    "https://github.com/Robby955/FormalSLT": "MIT",
+    "https://github.com/FormalizedFormalLogic/Foundation": "Apache-2.0",
+    "https://github.com/frenzymath/reap": "Apache-2.0",
+    "https://github.com/math-inc/FrontierMathOpen-Hypergraphs": "Apache-2.0",
+    "https://github.com/YaelDillies/gibbs-measure": "Apache-2.0",
+    "https://github.com/lengyijun/goldbach_tm": "Apache-2.0",
+    "https://github.com/WuProver/groebner_proj": "Apache-2.0",
+    "https://github.com/WuProver/GroebnerTactic": "Apache-2.0",
+    "https://github.com/fpvandoorn/HausdorffSchoolLean": "Apache-2.0",
+    "https://github.com/sinhp/HoTTLean": "Apache-2.0",
+    "https://github.com/djvelleman/HTPILeanPackage": "Apache-2.0",
+    "https://github.com/teorth/IEANTN": "Apache-2.0",
+    "https://github.com/jsm28/IMOShortlist2024Lean": "Apache-2.0",
+    "https://github.com/emilyriehl/infinity-cosmos": "Apache-2.0",
+    "https://github.com/WuProver/lean_characteristic_set": "Apache-2.0",
+    "https://github.com/a2435191/lean-logic-formalization": "MIT",
+    "https://github.com/vltanh/lean4-analysis-tao": "MIT",
+    "https://github.com/CBirkbeck/LeanBridge": "Apache-2.0",
+    "https://github.com/YaelDillies/LeanCamCombi": "Apache-2.0",
+    "https://github.com/fpvandoorn/LeanCourse24": "Apache-2.0",
+    "https://github.com/loganrjmurphy/LeanEuclid": "MIT",
+    "https://github.com/AnandGokhale/LeanForControl": "Apache-2.0",
+    "https://github.com/project-numina/LeanGeo": "MIT",
+    "https://github.com/CBirkbeck/LeanModularForms": "Apache-2.0",
+    "https://github.com/YuanheZ/lean-stat-learning-theory": "Apache-2.0",
+    "https://github.com/uda-lab/leray-hopf": "Apache-2.0",
+    "https://github.com/YaelDillies/mean-fourier": "Apache-2.0",
+    "https://github.com/hanwenzhu/miller-rabin": "Apache-2.0",
+    "https://github.com/YaelDillies/misc-yd": "Apache-2.0",
+    "https://github.com/CBirkbeck/ModFormDims": "Apache-2.0",
+    "https://github.com/WuProver/MonomialOrderedPolynomial": "Apache-2.0",
+    "https://github.com/CBirkbeck/padic-L-functions": "Apache-2.0",
+    "https://github.com/leanprover-community/physlib": "Apache-2.0",
+    "https://github.com/Verified-zkEVM/PolyFun": "Apache-2.0",
+    "https://github.com/lenianiva/Prismriver": "Apache-2.0",
+    "https://github.com/frenzymath/qrcp-bounded-coherence-obstruction": "Apache-2.0",
+    "https://github.com/urikol/QuantumOptimization": "Apache-2.0",
+    "https://github.com/lecopivo/SciLean": "Apache-2.0",
+    "https://github.com/teorth/sendov": "Apache-2.0",
+    "https://github.com/leanprover-community/sphere-eversion": "Apache-2.0",
+    "https://github.com/math-inc/Sphere-Packing-Lean": "Apache-2.0",
+    "https://github.com/Lean-MoDS/StatsMLlib": "Apache-2.0",
+    "https://github.com/teorth/analysis": "Apache-2.0",
+    "https://github.com/CBirkbeck/TauCeti": "Apache-2.0",
+    "https://github.com/siqiliu-tsinghua/tautology": "MIT",
+    "https://github.com/LionSR/TNLean": "Apache-2.0",
+    "https://github.com/keilambda/ttfpi": "BSD-3-Clause",
+    "https://github.com/CBirkbeck/uniform-sheafy-tate-domains-lean": "Apache-2.0",
+    "https://github.com/Verified-zkEVM/VCVio": "Apache-2.0",
+    "https://github.com/schildep/verified-3d-mesh-intersection": "MIT",
+    "https://github.com/schildep/verified-polygon-intersection": "MIT",
+    "https://github.com/VTrelat/ZFLean": "Apache-2.0",
+    "https://github.com/Verified-zkEVM/clean": "MIT",
+    "https://github.com/Verified-zkEVM/zkLean": "BSD-3-Clause"
   },
   "corpora": {
     "equational-theories": {
+      "generator": "legacy",
       "repo": "https://github.com/teorth/equational_theories",
-      "commit": "e218ce18b0c265efbbe65093c1f1d063c54f3639"
+      "commit": "e218ce18b0c265efbbe65093c1f1d063c54f3639",
+      "roots": [
+        "equational_theories"
+      ]
+    },
+    "carleson": {
+      "repo": "https://github.com/fpvandoorn/Carleson",
+      "commit": "6e7b18b655ead52b9a4eb46906f7d99bc6bc241c",
+      "roots": [
+        "Carleson",
+        "Solution"
+      ]
+    },
+    "pfr": {
+      "repo": "https://github.com/teorth/pfr",
+      "commit": "3d7898164ebff70a809dce618f9082a7b39e7850",
+      "roots": [
+        "PFR",
+        "PFRPalomar"
+      ]
+    },
+    "flt": {
+      "repo": "https://github.com/ImperialCollegeLondon/FLT",
+      "commit": "81d8bee0f708ac41cb975da76ed3c43ad99fae72",
+      "roots": [
+        "FLT"
+      ]
+    },
+    "flt-regular": {
+      "repo": "https://github.com/leanprover-community/flt-regular",
+      "commit": "faae830a27a7b39748b61487a9f2aa81a6d14450",
+      "roots": [
+        "FltRegular"
+      ]
+    },
+    "imoshortlist": {
+      "repo": "https://github.com/mortarsanjaya/IMOSLLean4",
+      "commit": "49e7596ffb3e88d357eba3e450c29ad9f85f3cc5",
+      "roots": [
+        "IMOSLLean4"
+      ]
+    },
+    "toric": {
+      "repo": "https://github.com/YaelDillies/toric",
+      "commit": "85451213e92b35500738b91424032e2c63044c90",
+      "roots": [
+        "Toric"
+      ]
+    },
+    "compfiles": {
+      "repo": "https://github.com/dwrensha/compfiles",
+      "commit": "51c8803ed93c0a350d110fffe4c3804b473bba78",
+      "roots": [
+        "Compfiles"
+      ]
+    },
+    "formal-conjectures": {
+      "repo": "https://github.com/google-deepmind/formal-conjectures",
+      "commit": "71a0744be944b9d26864cef6f970c291c8e79a2d",
+      "roots": [
+        "FormalConjectures",
+        "FormalConjecturesForMathlib",
+        "FormalConjecturesTest",
+        "FormalConjecturesUtil"
+      ]
+    },
+    "primenumbertheoremand": {
+      "repo": "https://github.com/AlexKontorovich/PrimeNumberTheoremAnd",
+      "commit": "a5154676af9aa3095150ee410cdda80555aa0642",
+      "roots": [
+        "PrimeNumberTheoremAnd"
+      ]
+    },
+    "erdos-unit-distance-1": {
+      "repo": "https://github.com/kim-em/erdos-unit-distance",
+      "commit": "d748fd08b40a72f61e982325f2f0599228ca08b3",
+      "roots": [
+        "ErdosUnitDistance"
+      ]
+    },
+    "sphere-packing-orig": {
+      "repo": "https://github.com/thefundamentaltheor3m/Sphere-Packing-Lean",
+      "commit": "9b2ddfc66330f9da18cc8feb0dca2dc01bfa0a85",
+      "roots": [
+        "SpherePacking"
+      ]
+    },
+    "con-nf": {
+      "repo": "https://github.com/leanprover-community/con-nf",
+      "commit": "55b939a3acf947793e252ff330800bfe968cc172",
+      "roots": [
+        "ConNF"
+      ]
+    },
+    "seymour": {
+      "repo": "https://github.com/Ivan-Sergeyev/seymour",
+      "commit": "2769b10cb73fda17bafc0f13890dc057a2f4ff2a",
+      "roots": [
+        "Seymour"
+      ]
+    },
+    "abc-exceptions": {
+      "repo": "https://github.com/b-mehta/ABC-Exceptions",
+      "commit": "d8ace7bbaa232b2b3df40f1cbd8ff4b45eed16d3",
+      "roots": [
+        "ABCExceptions"
+      ]
+    },
+    "add-combi": {
+      "repo": "https://github.com/leanprover-community/add-combi",
+      "commit": "2d061f437c1ba00ba9b16d7cba1c7603ba4807a4",
+      "roots": [
+        "AddCombi"
+      ]
+    },
+    "aintlib": {
+      "repo": "https://github.com/CBirkbeck/AINTLIB",
+      "commit": "160e446617a2168c34c95bbe7a76c4105b392434",
+      "roots": [
+        "Common"
+      ]
+    },
+    "aisafety-atlas": {
+      "repo": "https://github.com/mbrcic/ai-safety-formalization-atlas",
+      "commit": "a65e32f8047584686320a3013720624b5efa39ee",
+      "roots": [
+        "AISafetyAtlas"
+      ]
+    },
+    "algolean": {
+      "repo": "https://github.com/Shreyas4991/Algolean",
+      "commit": "f64556d69fd625f083f86304cb7b97a16852b657",
+      "roots": [
+        "Algolean",
+        "AlgoleanTests"
+      ]
+    },
+    "anderson-conjecture": {
+      "repo": "https://github.com/frenzymath/Anderson-Conjecture",
+      "commit": "b8bd37b72ced46bb2d52fef583b8656a29019d3c",
+      "roots": [
+        "Anderson"
+      ]
+    },
+    "apap": {
+      "repo": "https://github.com/YaelDillies/apap",
+      "commit": "ce27f3d432cf35d19c442223cbddceaa7e91c688",
+      "roots": [
+        "APAP"
+      ]
+    },
+    "aperiodicmonotiles": {
+      "repo": "https://github.com/jsm28/AperiodicMonotilesLean",
+      "commit": "4f3ca4044650f0c1b62dafdddc27217252ecb8e1",
+      "roots": [
+        "AM"
+      ]
+    },
+    "archon-firstproof-p6": {
+      "repo": "https://github.com/frenzymath/Archon-FirstProof-problem6-augmentation",
+      "commit": "8070ba0088146093e5bb57cbddade9b55bf84e67",
+      "roots": [
+        "FirstProof"
+      ]
+    },
+    "archon-firstproof-results": {
+      "repo": "https://github.com/frenzymath/Archon-FirstProof-Results",
+      "commit": "35550f2bc0a58289bbe2342a64f10a46ada0f52f",
+      "roots": [
+        "FirstProof"
+      ]
+    },
+    "arklib": {
+      "repo": "https://github.com/Verified-zkEVM/ArkLib",
+      "commit": "dca90385fb40dd5eb8da9145da6348ed17f5cd8b",
+      "roots": [
+        "ArkLib",
+        "ArkLibTest"
+      ]
+    },
+    "automatatheory": {
+      "repo": "https://github.com/ctchou/AutomataTheory",
+      "commit": "f196548710ce1ba8e7d4aa73b1cf846248ecfcb8",
+      "roots": [
+        "AutomataTheory"
+      ]
+    },
+    "autth": {
+      "repo": "https://github.com/shetzl/autth",
+      "commit": "80d0a7f054b35c3dc687418f306982988e6fbf7f",
+      "roots": [
+        "autth"
+      ]
+    },
+    "brownian-motion": {
+      "repo": "https://github.com/RemyDegenne/brownian-motion",
+      "commit": "314f04a34ff75e18fd383917ae7fe7d77beb1b6f",
+      "roots": [
+        "BrownianMotion"
+      ]
+    },
+    "btc-verified": {
+      "repo": "https://github.com/ProofOfKeags/btc-verified",
+      "commit": "653d27e118ab4bdf4de3df09f0c398f35a7410ba",
+      "roots": [
+        "BtcVerified"
+      ]
+    },
+    "certifyinginvariantsnf": {
+      "repo": "https://github.com/CBirkbeck/CertifyingInvariantsNF",
+      "commit": "f1392cbb63a41b51581e225951dd6f915ca4afbd",
+      "roots": [
+        "IdealArithmetic"
+      ]
+    },
+    "chandra-furst-lipton": {
+      "repo": "https://github.com/YaelDillies/chandra-furst-lipton",
+      "commit": "7e89eb02cb3adeab5c70f84067d1463a5a1cbc98",
+      "roots": [
+        "ChandraFurstLipton"
+      ]
+    },
+    "chebotarev-density": {
+      "repo": "https://github.com/CBirkbeck/chebotarev-density",
+      "commit": "c64095e6cc6483b401849c7fd9182d983d3bf261",
+      "roots": [
+        "CebotarevDensity"
+      ]
+    },
+    "classfieldtheory": {
+      "repo": "https://github.com/YaelDillies/ClassFieldTheory",
+      "commit": "4262a7330f831441f157948562d35ccda32d3533",
+      "roots": [
+        "ClassFieldTheory"
+      ]
+    },
+    "compply": {
+      "repo": "https://github.com/Verified-zkEVM/CompPoly",
+      "commit": "4ce69b905b618ad147e4d3a27ee0a841263d49a0",
+      "roots": [
+        "CompPoly"
+      ]
+    },
+    "cvxlean": {
+      "repo": "https://github.com/verified-optimization/CvxLean",
+      "commit": "c62c2f292c6420f31a12e738ebebdfed50f6f840",
+      "roots": [
+        "CvxLean"
+      ]
+    },
+    "degiorgi": {
+      "repo": "https://github.com/scottnarmstrong/DeGiorgi",
+      "commit": "4c1b3077d3782b24065184df4ba59501b2e56fc7",
+      "roots": [
+        "DeGiorgi"
+      ]
+    },
+    "dirichletnonvanishing": {
+      "repo": "https://github.com/CBirkbeck/DirichletNonvanishing",
+      "commit": "fb3e6ac7ca97c2dbb5ee796c87d667af360e41af",
+      "roots": [
+        "Project"
+      ]
+    },
+    "erdos1196": {
+      "repo": "https://github.com/math-inc/Erdos1196",
+      "commit": "02fba13be7487cc51315f68d8fa7ef277633d3c8",
+      "roots": [
+        "PrimitiveSetsAboveX"
+      ]
+    },
+    "evm-asm": {
+      "repo": "https://github.com/Verified-zkEVM/evm-asm",
+      "commit": "7e65e4d024718f704226cd795f3d03d4e9aafe13",
+      "roots": [
+        "EvmAsm"
+      ]
+    },
+    "expdb": {
+      "repo": "https://github.com/teorth/expdb",
+      "commit": "088040634e8300f87e80f431d8bdc38c42cc8e11",
+      "roots": [
+        "Expdb"
+      ]
+    },
+    "flt-anthropic": {
+      "repo": "https://github.com/anthropics/fermats-last-theorem",
+      "commit": "aa2d8b34692b16c70f699536de0d8e75b9a3e9ef",
+      "roots": [
+        "Theorems",
+        "Definitions"
+      ]
+    },
+    "formal-math": {
+      "repo": "https://github.com/anthropics/formal-math",
+      "commit": "fbdc36bbf17d20af3fd0447c6d1a8a02773c9844",
+      "path": "zeta23",
+      "roots": [
+        "Zeta23",
+        "ChallengeDeps",
+        "Challenge",
+        "Solution"
+      ]
+    },
+    "navier-stokes-euler": {
+      "repo": "https://github.com/openai/NavierStokesAndEuler",
+      "commit": "f9e8bc5b38b6e212696e8a30e3e91517af887bbd",
+      "roots": [
+        "NavierStokes",
+        "Euler",
+        "ComparatorChallenges"
+      ]
+    },
+    "lean-pool": {
+      "repo": "https://github.com/Vilin97/lean-pool",
+      "commit": "fdcf13c7cab6cd0eed22dc6b2f83672b6c4deb4d",
+      "roots": [
+        "LeanPool",
+        "Challenge",
+        "Solution"
+      ]
+    },
+    "merely-true": {
+      "repo": "https://github.com/merely-true/merely-true",
+      "commit": "f4ff319d4622f410e001ebab016c4e7d23f9cd97",
+      "roots": [
+        "MerelyTrue"
+      ]
+    },
+    "ten-proofs": {
+      "repo": "https://github.com/openai/ten-proofs",
+      "commit": "94bc0feb6a9ff12c7d31d6de640a725c9d43d2b6",
+      "roots": [
+        "CompactnessAndDegeneracy",
+        "MulticolorTriangleRamsey",
+        "QuantumParallelRepetition",
+        "SpherePacking",
+        "MetricCodes",
+        "ConnesRigidity",
+        "NonSoficGroup",
+        "GapCVP",
+        "EhrhartVolumeInequality",
+        "ComparatorChallenges",
+        "Permanent",
+        "All"
+      ]
+    },
+    "prime-gaps-186": {
+      "repo": "https://github.com/openai/PrimeGaps186",
+      "commit": "61340d0b74163003b32756bb16e91d9209a5e330",
+      "roots": [
+        "PrimeGaps186",
+        "Challenge"
+      ]
+    },
+    "long-gaps-between-primes": {
+      "repo": "https://github.com/openai/LongGapsBetweenPrimes",
+      "commit": "03a1190d0bc5502d9f54eeb60ad3e45e22b0df0b",
+      "roots": [
+        "LongGapsBetweenPrimes",
+        "Challenge"
+      ]
+    },
+    "forbidden-matrix": {
+      "repo": "https://github.com/YaelDillies/forbidden-matrix",
+      "commit": "a938c04974d145131c446e8d488b834797ab6ed0",
+      "roots": [
+        "ForbiddenMatrix"
+      ]
+    },
+    "formal-mathfin": {
+      "repo": "https://github.com/formal-applied-math/formal-mathfin",
+      "commit": "9f8ec70949d72af1358444ce8f9056f0e82db3f6",
+      "roots": [
+        "MathFin"
+      ]
+    },
+    "formalbook": {
+      "repo": "https://github.com/mo271/FormalBook",
+      "commit": "5f67ecf6b7dc2763b84bfc1d0111d4604410f49c",
+      "roots": [
+        "FormalBook"
+      ]
+    },
+    "formalising-math-2024": {
+      "repo": "https://github.com/ImperialCollegeLondon/formalising-mathematics-2024",
+      "commit": "c4cfdc64d59c12e07e0c88d702bfe654d518c0bd",
+      "roots": [
+        "FormalisingMathematics2024"
+      ]
+    },
+    "formalslt": {
+      "repo": "https://github.com/Robby955/FormalSLT",
+      "commit": "5e41e98ed3e1c270efe3089a4eb86ee6dd920995",
+      "roots": [
+        "FormalSLT"
+      ]
+    },
+    "foundation": {
+      "repo": "https://github.com/FormalizedFormalLogic/Foundation",
+      "commit": "81810b9f22c49fbb32bd89c1e9737059d83a37e6",
+      "roots": [
+        "Foundation"
+      ]
+    },
+    "frenzymath-reap": {
+      "repo": "https://github.com/frenzymath/reap",
+      "commit": "147743970d0061ae23783820b4723658064665b9",
+      "roots": [
+        "Reap"
+      ]
+    },
+    "frontiermath-hypergraphs": {
+      "repo": "https://github.com/math-inc/FrontierMathOpen-Hypergraphs",
+      "commit": "0f5a301e61492e0751a9ed8a04dc946f706941a5",
+      "roots": [
+        "FrontierMathOpenHypergraphs"
+      ]
+    },
+    "gibbs-measure": {
+      "repo": "https://github.com/YaelDillies/gibbs-measure",
+      "commit": "70012e298f6e57410c6b00e972273f4bab37a378",
+      "roots": [
+        "GibbsMeasure"
+      ]
+    },
+    "goldbach-tm": {
+      "repo": "https://github.com/lengyijun/goldbach_tm",
+      "commit": "6cd292062516a0a14ea1b34f2ab75154cae7ab1e",
+      "roots": [
+        "GoldbachTm"
+      ]
+    },
+    "groebner-proj": {
+      "repo": "https://github.com/WuProver/groebner_proj",
+      "commit": "fb6681985b9ebba0a74b2f57466ce2acba3f498e",
+      "roots": [
+        "Groebner"
+      ]
+    },
+    "groebner-tactic": {
+      "repo": "https://github.com/WuProver/GroebnerTactic",
+      "commit": "94c082b083d5c7995f3253be0c0ab61d59cabcc5",
+      "roots": [
+        "GroebnerTac"
+      ]
+    },
+    "hausdorffschoollean": {
+      "repo": "https://github.com/fpvandoorn/HausdorffSchoolLean",
+      "commit": "df1f295ee528dee88a26d22a6446c7cade7232f5",
+      "roots": [
+        "HausdorffSchool"
+      ]
+    },
+    "hottlean": {
+      "repo": "https://github.com/sinhp/HoTTLean",
+      "commit": "31133dd5b25226ea897f8aa5e2e43b61392459eb",
+      "roots": [
+        "HoTTLean",
+        "test"
+      ]
+    },
+    "htpi": {
+      "repo": "https://github.com/djvelleman/HTPILeanPackage",
+      "commit": "0df4435fb0be652b90821f81b1cda252970b996a",
+      "roots": [
+        "HTPILib"
+      ]
+    },
+    "ieantn": {
+      "repo": "https://github.com/teorth/IEANTN",
+      "commit": "0096280ba7440f268701abffe25ccf8f2c2389da",
+      "roots": [
+        "IEANTN"
+      ]
+    },
+    "imoshortlist2024": {
+      "repo": "https://github.com/jsm28/IMOShortlist2024Lean",
+      "commit": "f8ae6af40c0595563108a45da5c6f84ad007272f",
+      "roots": [
+        "IMO"
+      ]
+    },
+    "infinity-cosmos": {
+      "repo": "https://github.com/emilyriehl/infinity-cosmos",
+      "commit": "4e1d20ffded8cdcc7fb68ce8098996bbc27f4884",
+      "roots": [
+        "InfinityCosmos"
+      ]
+    },
+    "lean-characteristic-set": {
+      "repo": "https://github.com/WuProver/lean_characteristic_set",
+      "commit": "8631b1326942799529814c4d319aef6813ea6e32",
+      "roots": [
+        "CharacteristicSet"
+      ]
+    },
+    "lean-logic-formalization": {
+      "repo": "https://github.com/a2435191/lean-logic-formalization",
+      "commit": "52447ae389f594afa3ba82b9250c68ce300996bd",
+      "roots": [
+        "LogicFormalization"
+      ]
+    },
+    "lean4-analysis-tao": {
+      "repo": "https://github.com/vltanh/lean4-analysis-tao",
+      "commit": "bac39612b3745469e620212947a573eb91154166",
+      "roots": [
+        "Lean4AnalysisTao"
+      ]
+    },
+    "leanbridge": {
+      "repo": "https://github.com/CBirkbeck/LeanBridge",
+      "commit": "4dffaca404780f5ec439bda834fbc90a891174c2",
+      "roots": [
+        "LeanBridge"
+      ]
+    },
+    "leancamcombi": {
+      "repo": "https://github.com/YaelDillies/LeanCamCombi",
+      "commit": "bc161bb205d5ffb557dedce22290a0924771225a",
+      "roots": [
+        "CamCombi"
+      ]
+    },
+    "leancourse24": {
+      "repo": "https://github.com/fpvandoorn/LeanCourse24",
+      "commit": "db3b3f07a416cdea6730578dacda24921739d215",
+      "roots": [
+        "LeanCourse"
+      ]
+    },
+    "leaneuclid": {
+      "repo": "https://github.com/loganrjmurphy/LeanEuclid",
+      "commit": "413f52deb59cef981a2d6d92e0437d0eee30d56f",
+      "roots": [
+        "Book",
+        "UniGeo"
+      ]
+    },
+    "leanforcontrol": {
+      "repo": "https://github.com/AnandGokhale/LeanForControl",
+      "commit": "c5cedca904fe7b8168643c428b5cf5fd8b6ebf6d",
+      "roots": [
+        "LeanForControl"
+      ]
+    },
+    "leangeo": {
+      "repo": "https://github.com/project-numina/LeanGeo",
+      "commit": "9212b89ef0cb08adb049b32f6332a1f2b9e551ab",
+      "roots": [
+        "Book",
+        "LeanGeo"
+      ]
+    },
+    "leanmodularforms": {
+      "repo": "https://github.com/CBirkbeck/LeanModularForms",
+      "commit": "7c41b9b1747d47298f76bdb51f07031087702198",
+      "roots": [
+        "LeanModularForms"
+      ]
+    },
+    "leanslt": {
+      "repo": "https://github.com/YuanheZ/lean-stat-learning-theory",
+      "commit": "d0f506f0a695018265dccb33bcb05e2f5ca1c876",
+      "roots": [
+        "SLT"
+      ]
+    },
+    "leray-hopf": {
+      "repo": "https://github.com/uda-lab/leray-hopf",
+      "commit": "e704400f2fb2f26b2ee7f4372c3e1ecbbc82f3dc",
+      "roots": [
+        "LerayHopf"
+      ]
+    },
+    "mean-fourier": {
+      "repo": "https://github.com/YaelDillies/mean-fourier",
+      "commit": "36975c9b7f20dbfc051b6907668954716ce1999d",
+      "roots": [
+        "MeanFourier"
+      ]
+    },
+    "miller-rabin": {
+      "repo": "https://github.com/hanwenzhu/miller-rabin",
+      "commit": "4423f23973a42601a26185c4e8ce156d22596c85",
+      "roots": [
+        "MillerRabin"
+      ]
+    },
+    "misc-yd": {
+      "repo": "https://github.com/YaelDillies/misc-yd",
+      "commit": "338b7f4f07603fe386ec93c0b07cdd6fa23646a4",
+      "roots": [
+        "MiscYD"
+      ]
+    },
+    "modformdims": {
+      "repo": "https://github.com/CBirkbeck/ModFormDims",
+      "commit": "10bab4895a034174685b04543886a8b090f80687",
+      "roots": [
+        "ModFormDims"
+      ]
+    },
+    "monomial-ordered-polynomial": {
+      "repo": "https://github.com/WuProver/MonomialOrderedPolynomial",
+      "commit": "395c5f73357e6f8a377c97108ae8eb2123c4bfe1",
+      "roots": [
+        "MonomialOrderedPolynomial"
+      ]
+    },
+    "padic-l-functions": {
+      "repo": "https://github.com/CBirkbeck/padic-L-functions",
+      "commit": "45307015169791f1316f23a459c8e92ed5961c54",
+      "roots": [
+        "PadicLFunctions"
+      ]
+    },
+    "physlib": {
+      "repo": "https://github.com/leanprover-community/physlib",
+      "commit": "889c09c66fb5f3c4a27182a43cafbed9e00b9d0a",
+      "roots": [
+        "QuantumInfo",
+        "Physlib",
+        "PhyslibAlpha"
+      ]
+    },
+    "polyfun": {
+      "repo": "https://github.com/Verified-zkEVM/PolyFun",
+      "commit": "31773b17a2c4c9d884c43cd34eb9365b2bb4deb9",
+      "roots": [
+        "PolyFunCslib",
+        "PolyFunTest",
+        "PolyFun",
+        "ToCslib"
+      ]
+    },
+    "prismriver": {
+      "repo": "https://github.com/lenianiva/Prismriver",
+      "commit": "b54efbfaf259e9cf4d6186c8fb7998456821d568",
+      "roots": [
+        "Prismriver"
+      ]
+    },
+    "qrcp-bounded-coherence": {
+      "repo": "https://github.com/frenzymath/qrcp-bounded-coherence-obstruction",
+      "commit": "9a6a1fb96d97d1e3eb0f81f34915e7c332176828",
+      "roots": [
+        "QRCPProof"
+      ]
+    },
+    "quantumoptimization": {
+      "repo": "https://github.com/urikol/QuantumOptimization",
+      "commit": "2f92a179f796b36a89ccdf858a83f96a0e7ac7d0",
+      "roots": [
+        "QuantumOptimization"
+      ]
+    },
+    "scilean": {
+      "repo": "https://github.com/lecopivo/SciLean",
+      "commit": "95f8119a2884e9c41f82136523bd5568ea7075c5",
+      "roots": [
+        "Test",
+        "SciLean"
+      ]
+    },
+    "sendov": {
+      "repo": "https://github.com/teorth/sendov",
+      "commit": "1ddea92d89f951a0a7cbbffa6c267cf7e6640b1d",
+      "roots": [
+        "Sendov"
+      ]
+    },
+    "sphere-eversion": {
+      "repo": "https://github.com/leanprover-community/sphere-eversion",
+      "commit": "b914ed3c4c32d256747579d83a13342b0938fcd5",
+      "roots": [
+        "SphereEversion"
+      ]
+    },
+    "sphere-packing-ext": {
+      "repo": "https://github.com/math-inc/Sphere-Packing-Lean",
+      "commit": "1e98fb493088948ca7bbf47d7faed49cc5b39fc4",
+      "roots": [
+        "SpherePacking"
+      ]
+    },
+    "statsmllib": {
+      "repo": "https://github.com/Lean-MoDS/StatsMLlib",
+      "commit": "8e6661fe1d5abf0f56ed6b2b8ed0fda37cdc32a1",
+      "roots": [
+        "StatsMLlib"
+      ]
+    },
+    "tao-analysis": {
+      "repo": "https://github.com/teorth/analysis",
+      "commit": "245b2e16e2501170cd3d2c234edf74d298dbdc60",
+      "roots": [
+        "Analysis"
+      ]
+    },
+    "tauceti": {
+      "repo": "https://github.com/TauCetiProject/TauCeti",
+      "commit": "5e78744999f40e73287839f294c246a0c434d18e",
+      "roots": [
+        "TauCeti"
+      ]
+    },
+    "tautology": {
+      "repo": "https://github.com/siqiliu-tsinghua/tautology",
+      "commit": "261012c7540673d59a4015371b7618b7573d43da",
+      "roots": [
+        "Tautology"
+      ]
+    },
+    "tnlean": {
+      "repo": "https://github.com/LionSR/TNLean",
+      "commit": "6380bb1d39803d845c01d27c6c8eb3b01331ed6a",
+      "roots": [
+        "TNLean"
+      ]
+    },
+    "ttfpi": {
+      "repo": "https://github.com/keilambda/ttfpi",
+      "commit": "ff7de8287d80c9e2f439e546d1edbe9c72315bf4",
+      "roots": [
+        "TTFPI"
+      ]
+    },
+    "uniform-sheafy-tate-domains": {
+      "repo": "https://github.com/CBirkbeck/uniform-sheafy-tate-domains-lean",
+      "commit": "2f45865e87d20dd460cc5a14d04850bf03be4570",
+      "roots": [
+        "Palomar"
+      ]
+    },
+    "vcvio": {
+      "repo": "https://github.com/Verified-zkEVM/VCVio",
+      "commit": "6d5c7d502ad97f676293a84c3d364c518cbde117",
+      "roots": [
+        "VCVioTest",
+        "LatticeCrypto",
+        "Examples",
+        "VCVio",
+        "Extern",
+        "HashSig",
+        "Interop",
+        "HashSigTest",
+        "ToMathlib"
+      ]
+    },
+    "verified-3d-mesh-intersection": {
+      "repo": "https://github.com/schildep/verified-3d-mesh-intersection",
+      "commit": "c537025f69511110108acc9608dc1cdb19025057",
+      "roots": [
+        "CSG"
+      ]
+    },
+    "verified-polygon-intersection": {
+      "repo": "https://github.com/schildep/verified-polygon-intersection",
+      "commit": "26f5110a5b22cd1493d6a0ec5ce106f1e10cac1e",
+      "roots": [
+        "Polygons"
+      ]
+    },
+    "zflean": {
+      "repo": "https://github.com/VTrelat/ZFLean",
+      "commit": "ae928234e7ed6b26241344ef4ba6d7cf98c0ed91",
+      "roots": [
+        "ZFLean"
+      ]
+    },
+    "zkevm-clean": {
+      "repo": "https://github.com/Verified-zkEVM/clean",
+      "commit": "93c9d1ef45be9f687214625d7857889cf2485504",
+      "roots": [
+        "Clean"
+      ]
+    },
+    "zklean": {
+      "repo": "https://github.com/Verified-zkEVM/zkLean",
+      "commit": "eb17e501ba5b81ab77a20df52c590533e537657e",
+      "roots": [
+        "zkLean"
+      ]
     }
   },
   "$comment_translations": "Sources that are existing formal libraries: a record from one of these is a translation. Anything else is original work.",
   "translations": [
     "https://github.com/leanprover-community/mathlib4",
-    "https://github.com/teorth/equational_theories"
+    "https://github.com/teorth/equational_theories",
+    "https://github.com/fpvandoorn/Carleson",
+    "https://github.com/AlexKontorovich/PrimeNumberTheoremAnd",
+    "https://github.com/teorth/pfr",
+    "https://github.com/ImperialCollegeLondon/FLT",
+    "https://github.com/leanprover-community/flt-regular",
+    "https://github.com/leanprover-community/con-nf",
+    "https://github.com/dwrensha/compfiles",
+    "https://github.com/mortarsanjaya/IMOSLLean4",
+    "https://github.com/google-deepmind/formal-conjectures",
+    "https://github.com/YaelDillies/toric",
+    "https://github.com/thefundamentaltheor3m/Sphere-Packing-Lean",
+    "https://github.com/Ivan-Sergeyev/seymour",
+    "https://github.com/kim-em/erdos-unit-distance",
+    "https://github.com/b-mehta/ABC-Exceptions",
+    "https://github.com/leanprover-community/add-combi",
+    "https://github.com/CBirkbeck/AINTLIB",
+    "https://github.com/mbrcic/ai-safety-formalization-atlas",
+    "https://github.com/Shreyas4991/Algolean",
+    "https://github.com/frenzymath/Anderson-Conjecture",
+    "https://github.com/YaelDillies/apap",
+    "https://github.com/jsm28/AperiodicMonotilesLean",
+    "https://github.com/frenzymath/Archon-FirstProof-problem6-augmentation",
+    "https://github.com/frenzymath/Archon-FirstProof-Results",
+    "https://github.com/Verified-zkEVM/ArkLib",
+    "https://github.com/ctchou/AutomataTheory",
+    "https://github.com/shetzl/autth",
+    "https://github.com/RemyDegenne/brownian-motion",
+    "https://github.com/ProofOfKeags/btc-verified",
+    "https://github.com/CBirkbeck/CertifyingInvariantsNF",
+    "https://github.com/YaelDillies/chandra-furst-lipton",
+    "https://github.com/CBirkbeck/chebotarev-density",
+    "https://github.com/YaelDillies/ClassFieldTheory",
+    "https://github.com/Verified-zkEVM/CompPoly",
+    "https://github.com/verified-optimization/CvxLean",
+    "https://github.com/scottnarmstrong/DeGiorgi",
+    "https://github.com/CBirkbeck/DirichletNonvanishing",
+    "https://github.com/math-inc/Erdos1196",
+    "https://github.com/Verified-zkEVM/evm-asm",
+    "https://github.com/teorth/expdb",
+    "https://github.com/anthropics/fermats-last-theorem",
+    "https://github.com/anthropics/formal-math",
+    "https://github.com/openai/NavierStokesAndEuler",
+    "https://github.com/TauCetiProject/TauCeti",
+    "https://github.com/Vilin97/lean-pool",
+    "https://github.com/merely-true/merely-true",
+    "https://github.com/openai/ten-proofs",
+    "https://github.com/openai/PrimeGaps186",
+    "https://github.com/openai/LongGapsBetweenPrimes",
+    "https://github.com/YaelDillies/forbidden-matrix",
+    "https://github.com/formal-applied-math/formal-mathfin",
+    "https://github.com/mo271/FormalBook",
+    "https://github.com/ImperialCollegeLondon/formalising-mathematics-2024",
+    "https://github.com/Robby955/FormalSLT",
+    "https://github.com/FormalizedFormalLogic/Foundation",
+    "https://github.com/frenzymath/reap",
+    "https://github.com/math-inc/FrontierMathOpen-Hypergraphs",
+    "https://github.com/YaelDillies/gibbs-measure",
+    "https://github.com/lengyijun/goldbach_tm",
+    "https://github.com/WuProver/groebner_proj",
+    "https://github.com/WuProver/GroebnerTactic",
+    "https://github.com/fpvandoorn/HausdorffSchoolLean",
+    "https://github.com/sinhp/HoTTLean",
+    "https://github.com/djvelleman/HTPILeanPackage",
+    "https://github.com/teorth/IEANTN",
+    "https://github.com/jsm28/IMOShortlist2024Lean",
+    "https://github.com/emilyriehl/infinity-cosmos",
+    "https://github.com/WuProver/lean_characteristic_set",
+    "https://github.com/a2435191/lean-logic-formalization",
+    "https://github.com/vltanh/lean4-analysis-tao",
+    "https://github.com/CBirkbeck/LeanBridge",
+    "https://github.com/YaelDillies/LeanCamCombi",
+    "https://github.com/fpvandoorn/LeanCourse24",
+    "https://github.com/loganrjmurphy/LeanEuclid",
+    "https://github.com/AnandGokhale/LeanForControl",
+    "https://github.com/project-numina/LeanGeo",
+    "https://github.com/CBirkbeck/LeanModularForms",
+    "https://github.com/YuanheZ/lean-stat-learning-theory",
+    "https://github.com/uda-lab/leray-hopf",
+    "https://github.com/YaelDillies/mean-fourier",
+    "https://github.com/hanwenzhu/miller-rabin",
+    "https://github.com/YaelDillies/misc-yd",
+    "https://github.com/CBirkbeck/ModFormDims",
+    "https://github.com/WuProver/MonomialOrderedPolynomial",
+    "https://github.com/CBirkbeck/padic-L-functions",
+    "https://github.com/leanprover-community/physlib",
+    "https://github.com/Verified-zkEVM/PolyFun",
+    "https://github.com/lenianiva/Prismriver",
+    "https://github.com/frenzymath/qrcp-bounded-coherence-obstruction",
+    "https://github.com/urikol/QuantumOptimization",
+    "https://github.com/lecopivo/SciLean",
+    "https://github.com/teorth/sendov",
+    "https://github.com/leanprover-community/sphere-eversion",
+    "https://github.com/math-inc/Sphere-Packing-Lean",
+    "https://github.com/Lean-MoDS/StatsMLlib",
+    "https://github.com/teorth/analysis",
+    "https://github.com/CBirkbeck/TauCeti",
+    "https://github.com/siqiliu-tsinghua/tautology",
+    "https://github.com/LionSR/TNLean",
+    "https://github.com/keilambda/ttfpi",
+    "https://github.com/CBirkbeck/uniform-sheafy-tate-domains-lean",
+    "https://github.com/Verified-zkEVM/VCVio",
+    "https://github.com/schildep/verified-3d-mesh-intersection",
+    "https://github.com/schildep/verified-polygon-intersection",
+    "https://github.com/VTrelat/ZFLean",
+    "https://github.com/Verified-zkEVM/clean",
+    "https://github.com/Verified-zkEVM/zkLean"
   ]
 }

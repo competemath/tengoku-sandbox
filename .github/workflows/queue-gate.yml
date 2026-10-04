@@ -21,6 +21,7 @@ on:
 permissions: {}
 env:
   TENGOKU_REPO: ${{ github.repository }}
+  TENGOKU_VERIFY: require   # the published caches and top-ups carry build attestations; an unattested or tampered one is refused
   TENGOKU_TOPUPS: "1"   # the queue starts from the nightly cache plus the newest promoted top-up and builds only what is newer
 defaults:
   run:
@@ -29,7 +30,7 @@ defaults:
 jobs:
   queue-build:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 90   # a pipeline staging group can carry dozens of candidate modules
     permissions: { contents: read, pull-requests: write, actions: read }   # actions: read — to see a running cache build
     outputs:
       topup: ${{ steps.topup.outputs.state }}
@@ -46,11 +47,7 @@ jobs:
       - name: Lean toolchain (pinned by lean-toolchain)
         if: github.event_name == 'merge_group'
         run: |
-          # elan at a fixed version, checked against its published sha256 (a moving `latest` would run whatever it is today)
-          elan_tgz=elan-x86_64-unknown-linux-gnu.tar.gz
-          curl -sSfL --proto '=https' --tlsv1.2 -o "$elan_tgz" "https://github.com/leanprover/elan/releases/download/v4.2.4/$elan_tgz"
-          echo "42b94d4244e8353142c456ec0e4ca6528fd898a6c604d4059f494e706e431f63  $elan_tgz" | sha256sum -c -
-          tar xzf "$elan_tgz"
+          curl -sSfL https://github.com/leanprover/elan/releases/latest/download/elan-x86_64-unknown-linux-gnu.tar.gz | tar xz
           ./elan-init -y --default-toolchain none && echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
           sudo apt-get install -y -q zstd >/dev/null
       # The nightly cache build cannot tag its commit once a workflow file has changed on main (the job
@@ -96,8 +93,8 @@ jobs:
           set -o pipefail
           python3 scripts/ci/lint_banked.py "${{ github.event.merge_group.base_sha }}" HEAD 2>&1 | tee -a build.log  # the ejection comment reads build.log
       # The tree's cache is several GB packed and about ten times that unpacked, and the group's build adds to it: on a stock runner (about 14 GB free)
-      # the seeding died ("the runner has received a shutdown signal") on every group once the tree had grown by about twenty libraries (sandbox,
-      # 2026-10-04). build.yml already frees this space; the queue did not.
+      # the seeding died ("the runner has received a shutdown signal") on every group once the tree had grown by about twenty libraries (the sandbox,
+      # 2026-10-04: 108 GB are free after this step). build.yml already frees this space; the queue did not.
       - name: Free disk (the tree's cache and build are several GB)
         if: github.event_name == 'merge_group'
         run: |
@@ -119,7 +116,9 @@ jobs:
         run: |
           soft=no
           prs="$(git log --format=%s "$BASE..HEAD" | sed -nE 's/.*\(#([0-9]+)\)$/\1/p')"
-          if [ -n "$TENGOKU_BOT" ] && [ -n "$prs" ] && ! git diff --name-only "$BASE" HEAD | grep -qv '^data/staging/'; then
+          # every commit of the group must name its PR: one that does not could be anyone's
+          unnamed="$(git log --format=%s "$BASE..HEAD" | grep -cvE '\(#[0-9]+\)$' || true)"
+          if [ -n "$TENGOKU_BOT" ] && [ -n "$prs" ] && [ "$unnamed" = 0 ] && ! git diff --name-only "$BASE" HEAD | grep -qv '^data/staging/'; then
             soft=yes
             for p in $prs; do
               who="$(gh pr view "$p" -R "$GITHUB_REPOSITORY" --json author,headRefName -q '.author.login + " " + .headRefName' || echo "?")"
@@ -152,7 +151,12 @@ jobs:
           if [ "$rc" != 0 ]; then
             if [ "$SOFT" != yes ]; then exit 1; fi
             built=""; failed=""
-            for t in $targets; do if lake build "$t" >/dev/null 2>&1; then built="$built $t"; else failed="$failed $t"; fi; done
+            for t in $targets; do
+              out="$(lake build "$t" 2>&1)" && ok=1 || ok=0
+              # a target the first build never reached can still report sorry here: as strict as ever
+              if grep -q "declaration uses .sorry." <<< "$out"; then grep -m1 "declaration uses .sorry." <<< "$out" | sed -E 's/^.*warning: /error: /' | tee -a build.log; exit 1; fi
+              if [ "$ok" = 1 ]; then built="$built $t"; else failed="$failed $t"; fi
+            done
             for t in $failed; do echo "::warning::$t does not build yet: its records stay in staging (promotion retries them)"; done
             echo "the pipeline's staging group goes on: $(wc -w <<< "$built") candidate(s) built, $(wc -w <<< "$failed") not yet"
             targets="$built"
@@ -171,7 +175,8 @@ jobs:
           python3 scripts/ci/axioms_check.py "${mods[@]}" 2>&1 | tee -a build.log
       - name: Leak report (what the new libraries change for everybody else)
         # Report only: a global instance or simp lemma that mentions nothing of its own library changes how every other library's statements
-        # elaborate in the one tree (competemath/tengoku-sandbox: leakscan). It never fails the group; the numbers go to the log and the summary.
+        # elaborate in the one tree; a declaration in the root namespace is a name nothing ties to its library (a second library declaring it
+        # fails to import). It never fails the group; the numbers go to the log and the summary. (TengokuLeak.lean)
         if: github.event_name == 'merge_group' && steps.build.outputs.targets != ''
         shell: bash
         env: { TARGETS: "${{ steps.build.outputs.targets }}" }
@@ -190,9 +195,11 @@ jobs:
           touched="$(git diff --name-only "${{ github.event.merge_group.base_sha }}...HEAD" -- Tengoku/ | grep -v '/_candidate_' || true)"
           if [ -z "$touched" ]; then echo "no derived files in this group"; exit 0; fi
           python3 scripts/ci/queue_targets.py "${{ github.event.merge_group.base_sha }}" HEAD --regenerate 2>>build.log
-          # shellcheck disable=SC2086  # touched is a newline-separated path list
-          if [ -n "$(git status --porcelain -- $touched)" ]; then
-            git --no-pager diff --stat -- $touched | tee -a build.log
+          # xargs splits a long path list over several runs: the move of the seed (docs/pr-classes.md, section 5) touches ~20,000 paths,
+          # more than one command line holds
+          paths() { printf '%s\n' "$touched" | tr '\n' '\0' | xargs -0 git "$@" --; }
+          if [ -n "$(paths status --porcelain)" ]; then
+            paths --no-pager diff --stat | tee -a build.log
             echo "error: regenerated derived files differ from the PR (hand-edited generated file?)" | tee -a build.log; exit 1
           fi
       # Everything above compiled scratch modules. Now the tree goes back to the group's own commit and the

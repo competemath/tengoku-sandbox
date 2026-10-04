@@ -92,11 +92,55 @@ class Snapshot(unittest.TestCase):
 
     def run_snapshot(self, out: Path, previous: Path | None = None) -> dict | None:
         args = [sys.executable, str(ROOT / "scripts" / "snapshot.py"), "--out", str(out), "--root", str(self.root)]
+        args += ["--notes", str(out.parent / f"{out.name}.notes.md")]
         r = subprocess.run(args + (["--previous", str(previous)] if previous else []), capture_output=True, text=True)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         if (out / "unchanged").exists():
             return None
         return json.loads((out / "snapshot.json").read_text())
+
+    def notes(self, out: Path) -> str:
+        return (out.parent / f"{out.name}.notes.md").read_text()
+
+    def test_release_notes_say_what_changed_and_what_upgrading_means(self):
+        self.run_snapshot(self.root / "v1")
+        first = self.notes(self.root / "v1")
+        self.assertIn("The first release: 2 trusted theorems from 1 libraries (lib 2)", first)
+        self.assertIn("None: this is the first release.", first)
+
+        self.append(rec("Lib.c", "theorem Lib.c : True"))
+        self.run_snapshot(self.root / "v2", self.root / "v1")
+        minor = self.notes(self.root / "v2")
+        self.assertIn("## What changed since v1.0.0", minor)
+        self.assertIn("**Added:** 1 trusted theorems (lib 1).", minor)
+        self.assertIn("**Retracted:** 0.", minor)
+        self.assertIn("Minor version: 1 theorems were added; nothing is renamed", minor)
+        self.assertIn("upgrading is safe.", minor)
+
+        self.append({"tombstone": "Lib.c", "category": "incorrect", "reason": "r", "by": "x", "at": "2026-09-04"})
+        self.run_snapshot(self.root / "v3", self.root / "v2")
+        patch = self.notes(self.root / "v3")
+        self.assertIn("**Retracted:** 1: `Lib.c`.", patch)
+        self.assertIn("Patch: corrections only", patch)
+        self.assertIn("Check that you do not rely on the retracted theorems above.", patch)
+
+        self.append(
+            {
+                "credit_correction": "Lib.a",
+                "credit": "Author: Emmy Noether",
+                "evidence": "https://example.org/n",
+                "by": "x",
+                "at": "2026-09-05",
+            }
+        )
+        self.run_snapshot(self.root / "v4", self.root / "v3")
+        self.assertIn("**Corrected:** 1 existing theorems (a credit or another field changed), e.g. `Lib.a`.", self.notes(self.root / "v4"))
+
+        (self.root / "lean-toolchain").write_text("leanprover/lean4:v4.35.0\n")
+        self.run_snapshot(self.root / "v5", self.root / "v4")
+        major = self.notes(self.root / "v5")
+        self.assertIn("**Toolchain:** `leanprover/lean4:v4.34.0-rc2` → `leanprover/lean4:v4.35.0`.", major)
+        self.assertIn("Major version: the Lean toolchain changed", major)
 
     def append(self, *rows: dict) -> None:
         with (self.root / "data" / "trusted" / "lib.jsonl").open("a") as f:
@@ -136,6 +180,19 @@ class Snapshot(unittest.TestCase):
         (self.root / "lean-toolchain").write_text("leanprover/lean4:v4.35.0\n")  # a new toolchain: major
         bumped = self.run_snapshot(self.root / "v6", self.root / "v5")
         self.assertEqual(bumped["version"], "2.0.0")
+
+    def test_a_minor_release_that_only_adds_a_field_says_so(self):
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location("snapshot", ROOT / "scripts" / "snapshot.py")
+        snap = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(snap)
+        rows = [{"name": "Lib.a", "library": "lib"}]
+        old = {"version": "1.0.0", "toolchain": "t", "fields": ["library", "name"]}
+        notes = snap.release_notes("1.1.0", (old, {"Lib.a": dict(rows[0])}), rows, "t", ["library", "name", "extra"])
+        self.assertIn("**Added:** 0 trusted theorems.", notes)
+        self.assertIn("Minor version: records gained `extra`; nothing is renamed", notes)
+        self.assertNotIn("theorems were added", notes)
 
     def test_a_removed_field_is_major_and_a_new_field_minor(self):
         first = self.run_snapshot(self.root / "v1")

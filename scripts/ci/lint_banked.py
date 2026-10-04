@@ -19,13 +19,25 @@ from pathlib import Path
 from _git import added_lines, blob, changed_files, fail, load_schema, match, pascal
 from allowlist import violations
 from lean_lex import code_only
+from restructure_check import is_restructure
 
-# a line that starts (after its attributes and a scoped/local) a declaration of syntax: one message, two patterns
-_DECLARATION_PREFIX = r"^\s*(@\[[^\]]*\]\s*)*(scoped\s+|local\s+)?"
-_SYNTAX_DECLARATIONS = "syntax/macro/elab/notation declarations"
-NOTATION = _SYNTAX_DECLARATIONS
+IMPORT_START = r"^\s*import\b"
+NOTATION = "syntax/macro/elab/notation declarations"
+SYNTAX_COMMANDS = [
+    "macro",
+    "macro_rules",
+    "syntax",
+    "elab",
+    "elab_rules",
+    "declare_syntax_cat",
+    "notation3?",
+    "infixl?",
+    "infixr",
+    "prefix",
+    "postfix",
+]
 FORBIDDEN = [
-    (re.compile(r"^\s*import\b", re.M), "import (the generator supplies imports)"),
+    (re.compile(IMPORT_START, re.M), "import (the generator supplies imports)"),
     (re.compile(r"#eval\b"), "#eval"),
     (re.compile(r"#print\s+axioms"), "#print axioms (CI runs its own)"),
     (re.compile(r"\brun_cmd\b"), "run_cmd"),
@@ -37,8 +49,10 @@ FORBIDDEN = [
         "@[init]/@[extern]/@[implemented_by]/@[export]",
     ),
     (re.compile(r"^\s*(unsafe|partial)\s+(def|theorem|abbrev|instance|opaque)", re.M), "unsafe/partial definitions"),
-    (re.compile(_DECLARATION_PREFIX + r"(macro|macro_rules|syntax|elab|elab_rules|declare_syntax_cat)\b", re.M), _SYNTAX_DECLARATIONS),
-    (re.compile(_DECLARATION_PREFIX + r"(notation3?|infixl?|infixr|prefix|postfix)\b", re.M), _SYNTAX_DECLARATIONS),
+    (
+        re.compile(r"^\s*(@\[[^\]]*\]\s*)*(scoped\s+|local\s+)?(" + "|".join(SYNTAX_COMMANDS) + r")\b", re.M),
+        NOTATION,
+    ),
     (re.compile(r"\bnative_decide\b"), "native_decide (trusts the compiler)"),
     (re.compile(r"^\s*opaque\b", re.M), "opaque"),
     (re.compile(r"^\s*axiom\b", re.M), "axiom"),
@@ -56,10 +70,22 @@ def intake_modules(base: str, head: str) -> tuple[str, ...]:
     return tuple(x for lib in libs for x in (f"Tengoku/{pascal(lib)}/", f"Tengoku/{pascal(lib)}.lean"))
 
 
+def in_intake(p: str, intake: tuple[str, ...]) -> bool:
+    """Is `p` one of the bundle's own modules: its root file exactly, or a file under its directory (never a sibling that merely starts the same)."""
+    return p in intake or any(x.endswith("/") and p.startswith(x) for x in intake)
+
+
 def check_text(label: str, text: str, allowed: set[str], notation_ok: bool = False) -> list[str]:
-    out = [f"{label}: {why}" for re_, why in FORBIDDEN if not (why == NOTATION and notation_ok) and re_.search(text)]
-    out += [f"{label}: set_option {opt} is not on the allowlist" for opt in SET_OPTION.findall(text) if opt not in allowed]
-    return list(dict.fromkeys(out))
+    out = []
+    for re_, why in FORBIDDEN:
+        if why == NOTATION and notation_ok:
+            continue
+        if re_.search(text):
+            out.append(f"{label}: {why}")
+    for opt in SET_OPTION.findall(text):
+        if opt not in allowed:
+            out.append(f"{label}: set_option {opt} is not on the allowlist")
+    return out
 
 
 RECORD_FILES = [
@@ -71,9 +97,9 @@ RECORD_FILES = [
 ]
 
 
-def record_errors(base: str, head: str, p: str, allowed: set[str]) -> list[str]:
-    """The lines a PR adds to one records file, judged by the allow-list (compiled tiers) or the list of known dangers."""
-    errors: list[str] = []
+def lint_record_file(base: str, head: str, p: str, allowed: set[str]) -> list[str]:
+    """The lines a PR adds to a records file, judged by the allow-list (compiled tiers) or the list of known dangers."""
+    errors = []
     for no, text in added_lines(base, head, p):
         try:
             r = json.loads(text)
@@ -90,31 +116,21 @@ def record_errors(base: str, head: str, p: str, allowed: set[str]) -> list[str]:
     return errors
 
 
-def module_errors(base: str, head: str, p: str, allowed: set[str], intake: tuple[str, ...] = (), added: bool = False) -> list[str]:
-    """The lines a PR adds to a module: `import` lines are the generator's own (a promotion regenerates them); records may not contain one.
+def lint_module(base: str, head: str, p: str, allowed: set[str], notation_ok: bool, added: bool = False) -> list[str]:
+    """The lines a PR adds to a module. `import` lines in a module are the generator's own (a promotion regenerates them); records may not contain one.
     A module the PR adds is read whole and without its comments and string literals (lean_lex.code_only): the words this list refuses are
     refused where they run, not where a docstring mentions them (`#print axioms` in a doc comment is prose). A module the PR changes is read
     by the lines it adds, comments included: a line alone cannot tell code from the middle of a comment."""
-    notation_ok = p.startswith(intake) if intake else False
     raw = blob(head, p) if added else None
+    if added and raw is None:  # fail closed: the line-by-line path below cannot see a block comment that an `import X -/` line closes
+        return [f"{p}: could not read the module at {head}"]
     if raw is not None:
-        text = "\n".join(ln for ln in raw.decode("utf-8", "replace").split("\n") if not re.match(r"^\s*import\b", ln))
-        return check_text(p, code_only(text), allowed, notation_ok=notation_ok)
-    text = "\n".join(t for _, t in added_lines(base, head, p) if not re.match(r"^\s*import\b", t))
+        # comments and strings first, THEN the import lines: a line `import X -/` inside a block comment closes it, and dropping it first would
+        # turn the rest of the file into comment text (a `#eval` after it would go unread)
+        code = code_only(raw.decode("utf-8", "replace"))
+        return check_text(p, "\n".join(ln for ln in code.split("\n") if not re.match(IMPORT_START, ln)), allowed, notation_ok=notation_ok)
+    text = "\n".join(t for _, t in added_lines(base, head, p) if not re.match(IMPORT_START, t))
     return check_text(p, text, allowed, notation_ok=notation_ok)
-
-
-def diff_errors(base: str, head: str, allowed: set[str]) -> list[str]:
-    errors: list[str] = []
-    intake = intake_modules(base, head)
-    for st, p in changed_files(base, head):
-        if match(p, RECORD_FILES):
-            errors += record_errors(base, head, p, allowed)
-        elif p.endswith(".lean") and p.startswith(
-            "Tengoku/"
-        ):  # modules only; root tool programs (TengokuExtract/TengokuAxioms) run in CI, not in the library
-            errors += module_errors(base, head, p, allowed, intake, added=st == "A")
-    return errors
 
 
 def checked_path(arg: str) -> Path:
@@ -127,10 +143,24 @@ def checked_path(arg: str) -> Path:
 
 def main() -> None:
     allowed = set(load_schema("allowed-options.json")["allowed"])
+    errors = []
     if sys.argv[1] == "--text":
         errors = check_text(sys.argv[2], checked_path(sys.argv[2]).read_text(), allowed)
     else:
-        errors = diff_errors(sys.argv[1], sys.argv[2], allowed)
+        base, head = sys.argv[1], sys.argv[2]
+        intake = intake_modules(base, head)
+        moved_seed = is_restructure(
+            base, head
+        )  # the seed's move is recomputed by restructure_check.py; it is upstream code, never banked content
+        for st, p in changed_files(base, head):
+            if moved_seed and p.startswith("Tengoku/Seed/"):
+                continue
+            if match(p, RECORD_FILES):
+                errors += lint_record_file(base, head, p, allowed)
+            elif p.endswith(".lean") and p.startswith(
+                "Tengoku/"
+            ):  # modules only; root tool programs (TengokuExtract/TengokuAxioms) run in CI, not in the library
+                errors += lint_module(base, head, p, allowed, notation_ok=in_intake(p, intake), added=st == "A")
     if errors:
         fail("banked content lint:\n  " + "\n  ".join(errors[:20]))
     print("content lint OK")

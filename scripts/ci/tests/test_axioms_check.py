@@ -11,6 +11,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -28,7 +29,11 @@ def bump(d):
             fcntl.flock(g, fcntl.LOCK_EX); g.seek(0); p = int(g.read() or 0)
             if n > p: g.seek(0); g.truncate(); g.write(str(n))
 bump(1)
-time.sleep(30 if set(mods) & set(os.environ.get("FAKE_HANG", "").split(",")) - {""} else 0.05)
+if set(mods) & set(os.environ.get("FAKE_HANG", "").split(",")) - {""}:
+    import subprocess
+    subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])  # a child holding the pipes, as lake env's is
+    time.sleep(60)
+time.sleep(0.05)
 with open(log, "a") as f: f.write(" ".join(mods) + "\n")
 bump(-1)
 pairs = [p.split(":") for p in os.environ.get("FAKE_CLASH", "").split(",") if p]
@@ -119,7 +124,9 @@ class AxiomsCheck(unittest.TestCase):
         self.assertLessEqual(self.peak(), 2)
 
     def test_a_stuck_run_fails_instead_of_holding_the_queue(self) -> None:
+        start = time.monotonic()
         rc, out, _ = self.check(["M0", "M1"], hang="M1", run_timeout="1")
+        self.assertLess(time.monotonic() - start, 20)  # the whole process group is stopped, children included
         self.assertEqual(rc, 1)
         self.assertIn("did not finish in 1 s", out)
 

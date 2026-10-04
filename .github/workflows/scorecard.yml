@@ -1,6 +1,6 @@
 # OpenSSF Scorecard: a public score of this repository's security practices (pinned actions, token permissions,
 # branch protection, dangerous workflow patterns, …), published weekly for the README badge
-# (https://scorecard.dev/viewer/?uri=github.com/competemath/tengoku-sandbox). Weekly rather than per merge: the queue merges
+# (https://scorecard.dev/viewer/?uri=github.com/competemath/tengoku). Weekly rather than per merge: the queue merges
 # many times a day, and runners are shared with it.
 name: scorecard
 on:

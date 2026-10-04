@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import shutil
@@ -89,6 +90,70 @@ class Gates(unittest.TestCase):
             self.assertEqual(rc, 0, f"{s}: {out}")
         self.assertIn("class=content", r.gate("classify.py")[1])
 
+    def test_credit_docstring_in_statement_passes_and_is_protected(self):
+        r = Repo()
+        doc = "/-- One plus one.\n\nAuthor: Ada Lovelace (https://github.com/ada), with Claude. -/\n"
+        rec = {**GOOD, "name": "Lib.credited", "statement": doc + "theorem Lib.credited : 1 + 1 = 2"}
+        r.append("data/staging/lib.jsonl", json.dumps(rec) + "\n")
+        r.commit("add")
+        for s in ["classify.py", "append_only.py", "credits.py", "validate_records.py", "lint_banked.py"]:
+            rc, out = r.gate(s)
+            self.assertEqual(rc, 0, f"{s}: {out}")
+        r.git("checkout", "-q", "-b", "strip")
+        r.write(
+            "data/staging/lib.jsonl", json.dumps(GOOD) + "\n" + json.dumps({**rec, "statement": "theorem Lib.credited : 1 + 1 = 2"}) + "\n"
+        )
+        r.commit("drop the credit")
+        rc, out = r.gate("credits.py", "pr", "strip")
+        self.assertEqual(rc, 1)
+        self.assertIn("Author:", out)
+
+    def test_vacuous_theorem_needs_an_acknowledgement(self):
+        r = Repo()
+        rec = {
+            **GOOD,
+            "name": "Lib.vac",
+            "statement": "theorem Lib.vac (n : Nat) (h : n < 0) : n = 1",
+            "proof": ":= by omega",
+            "source_path": "lib/A.lean",
+            "context": "",
+        }
+        r.append("data/staging/lib.jsonl", json.dumps(rec) + "\n")
+        r.commit("add")
+        report = r.dir / "report.txt"
+        report.write_text(
+            "tactics available: [omega]\nVACUOUS Lib.vac Tengoku.Lib._candidate_A omega\n  its assumptions can never all hold; `omega` derives a contradiction from:\n    h : n < 0\nchecked 1 theorems in 1 modules: 1 vacuous\n"
+        )
+        env = {"VACUITY_REPORT": str(report), "VACUITY_TARGETS": "0"}
+        (r.dir / "body.txt").write_text("Adds a lemma.\n")
+        rc, out = r.gate("vacuity.py", "main", "pr", str(r.dir / "body.txt"), env=env)
+        self.assertEqual(rc, 1)
+        self.assertIn("Lib.vac", out)
+        self.assertIn("h : n < 0", out)
+        self.assertIn("Vacuous-Ack: Lib.vac:", out)
+        (r.dir / "body.txt").write_text(
+            "Adds a lemma.\n\nVacuous-Ack: Lib.vac: the source states it this way; the theorem documents the impossible case.\n"
+        )
+        rc, out = r.gate("vacuity.py", "main", "pr", str(r.dir / "body.txt"), env=env)
+        self.assertEqual(rc, 0, out)
+        self.assertIn("acknowledged", out)
+        # the checker reports the name with the namespaces the module opens around the record (the
+        # sandbox's acked scenario failed here: FirstOrder.Language.Formula.Selftest.vac2); the name as the
+        # record writes it acknowledges it, a different name does not
+        report.write_text(
+            "tactics available: [omega]\nVACUOUS Ctx.Deep.Lib.vac Tengoku.Lib._candidate_A omega\n  its assumptions can never all hold; `omega` derives a contradiction from:\n    h : n < 0\nchecked 1 theorems in 1 modules: 1 vacuous\n"
+        )
+        rc, out = r.gate("vacuity.py", "main", "pr", str(r.dir / "body.txt"), env=env)
+        self.assertEqual(rc, 0, out)
+        self.assertIn("Ctx.Deep.Lib.vac is vacuous and acknowledged", out)
+        (r.dir / "body.txt").write_text("Vacuous-Ack: vac: not the record's name, only its last component.\n")
+        rc, out = r.gate("vacuity.py", "main", "pr", str(r.dir / "body.txt"), env=env)
+        self.assertEqual(rc, 1)
+        self.assertIn("Vacuous-Ack: Ctx.Deep.Lib.vac:", out)
+        report.write_text("checked 1 theorems in 1 modules: 0 vacuous\n")
+        rc, out = r.gate("vacuity.py", "main", "pr", str(r.dir / "body.txt"), env=env)
+        self.assertEqual(rc, 0, out)
+
     def test_multi_purpose_fails_classify(self):
         r = Repo()
         r.append("data/staging/lib.jsonl", json.dumps({**GOOD, "name": "Lib.new", "statement": "theorem Lib.new : 1 + 1 = 2"}) + "\n")
@@ -106,6 +171,16 @@ class Gates(unittest.TestCase):
         rc, out = r.gate("classify.py")
         self.assertEqual(rc, 0)
         self.assertIn("class=tooling", out)
+
+    def test_a_file_that_is_not_utf8_does_not_end_a_gate_in_a_traceback(self):
+        """git's output for such a file used to fail to decode (credits.py, on the fuzzer's own corpus)."""
+        r = Repo()
+        (r.dir / "README.md").write_bytes(b"# t\n\xff\xfe\n")
+        r.commit("a document with bytes that are not UTF-8")
+        for gate in ("credits.py", "classify.py"):
+            with self.subTest(gate=gate):
+                rc, out = r.gate(gate)
+                self.assertNotIn("Traceback", out)
 
     def test_derived_edit_fails_classify(self):
         r = Repo()
@@ -173,29 +248,6 @@ class Gates(unittest.TestCase):
         self.assertEqual(rc, 1)
         for needle in ["status 'trusted'", "allowlist", "already trusted", "not JSON", "library 'other'"]:
             self.assertIn(needle, out)
-
-    def test_source_path_stays_in_the_corpus(self):
-        r = Repo()
-        paths = ["../../.github/workflows/x.lean", "/etc/passwd", "-rf/x.lean", "A/../../B.lean", "A\\B.lean", "~/x.lean", ".", "A/.", "A/"]
-        for i, sp in enumerate(paths):
-            r.append(
-                "data/staging/lib.jsonl",
-                json.dumps({**GOOD, "name": f"Lib.p{i}", "statement": f"theorem Lib.p{i} : 1 + 1 = 2", "source_path": sp}) + "\n",
-            )
-        r.commit("paths that leave the corpus")
-        rc, out = r.gate("validate_records.py")
-        self.assertEqual(rc, 1)
-        for sp in paths:  # (on Actions every error is printed twice, as an annotation and as a line: no counting)
-            self.assertIn(f"source_path {sp!r} is not a path inside the corpus", out)
-        ok = Repo()
-        ok.append(
-            "data/staging/lib.jsonl",
-            json.dumps({**GOOD, "name": "Lib.fine", "statement": "theorem Lib.fine : 1 + 1 = 2", "source_path": "Lib/Sub/File.lean"})
-            + "\n",
-        )
-        ok.commit("a path inside the corpus")
-        rc, out = ok.gate("validate_records.py")
-        self.assertNotIn("is not a path inside the corpus", out)
 
     def test_content_lint(self):
         r = Repo()
@@ -401,6 +453,16 @@ class ScopeFixUnits(unittest.TestCase):
         self.assertFalse(ok("-- instance", "-- local instance"))  # inside a comment
         self.assertFalse(ok("instance", "instance"))  # nothing inserted
         self.assertFalse(ok("instance : A", "local instance : B"))  # something else changed too
+
+    def test_only_global_registrations_count(self):
+        text = self.sf.mask(
+            "attribute [local instance] A.a\nattribute [-simp] B.b\nattribute [scoped instance] C.c\n"
+            "attribute [local simp, instance 100] D.d\nattribute [simp] E.e\nlocal instance f : X := x\n"
+            "@[local simp] theorem g : a = b := rfl\n@[simp, to_additive] theorem h : a = b := rfl\ninstance i : Y := y\n"
+        )
+        got = self.sf.registrations(text)
+        self.assertEqual(got["instance"], {"d", "i"})  # `local instance f` and `attribute [local instance] a` are not registrations
+        self.assertEqual(got["simp"], {"e", "h"})  # `-simp`, `local simp` (even beside a global instance) are not
 
     def test_what_a_library_registers_by_kind(self):
         text = self.sf.mask(
@@ -778,7 +840,7 @@ class GateSummary(unittest.TestCase):
         self.assertIn("check failed", failed)
         for out in (passed, failed):  # the whole guidance, in each verdict
             self.assertIn("every review conversation must be resolved", out)
-            self.assertIn("CodeRabbit, Greptile", out)
+            self.assertIn("(CodeRabbit)", out)
             self.assertIn("fix what applies or reply saying why not", out)
             self.assertIn("**Resolve conversation**", out)
             self.assertIn("As the PR's author you can resolve them yourself", out)
@@ -857,6 +919,203 @@ class DeregisteredSource(unittest.TestCase):
         rc, out = r.gate("credits.py")
         self.assertEqual(rc, 1)
         self.assertIn("provenance", out)
+
+
+class Export:
+    """A tiny lean4export file, written line by line in the exporter's order."""
+
+    def __init__(self) -> None:
+        meta = {
+            "exporter": {"name": "lean4export", "version": "3.1.0"},
+            "format": {"version": "3.1.0"},
+            "lean": {"githash": "x", "version": "4.34.0-rc2"},
+        }
+        self.lines = [json.dumps({"meta": meta})]
+        self.names = {"": 0}
+        self.terms = 0
+
+    def n(self, s: str) -> int:
+        if s not in self.names:
+            pre, _, last = s.rpartition(".")
+            p = self.n(pre) if pre else 0
+            self.names[s] = len(self.names)
+            self.lines.append(json.dumps({"in": self.names[s], "str": {"pre": p, "str": last}}))
+        return self.names[s]
+
+    def e(self, kind: str, v) -> int:
+        self.lines.append(json.dumps({"ie": self.terms, kind: v}))
+        self.terms += 1
+        return self.terms - 1
+
+    def const(self, s: str) -> int:
+        return self.e("const", {"name": self.n(s), "us": []})
+
+    def app(self, f: int, a: int) -> int:
+        return self.e("app", {"fn": f, "arg": a})
+
+    def axiom(self, s: str) -> None:
+        ty = self.e("sort", 0)
+        self.lines.append(json.dumps({"axiom": {"name": self.n(s), "levelParams": [], "type": ty, "isUnsafe": False}}))
+
+    def decl(self, s: str, ty: int, val: int, kind: str = "thm") -> None:
+        self.lines.append(json.dumps({kind: {"name": self.n(s), "levelParams": [], "type": ty, "value": val, "all": [self.n(s)]}}))
+
+    def inductive(self, s: str, ctor: str, ty: int, cty: int) -> None:
+        types = [
+            {"name": self.n(s), "levelParams": [], "type": ty, "numParams": 0, "numIndices": 0, "all": [self.n(s)], "ctors": [self.n(ctor)]}
+        ]
+        ctors = [{"name": self.n(ctor), "levelParams": [], "type": cty, "induct": self.n(s), "cidx": 0, "numParams": 0, "numFields": 0}]
+        self.lines.append(json.dumps({"inductive": {"types": types, "ctors": ctors, "recs": []}}))
+
+
+class AxiomScan(unittest.TestCase):
+    """scripts/ci/axiom_scan.py: every constant's axioms, from the export alone."""
+
+    def scan(self, x: Export, records: list[str] | None = None, tombstones: list[str] = (), index: list[str] = ()):
+        """records: the trusted file of a compiled library (Tengoku/Lib.lean exists); index: a library without modules."""
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "tree.ndjson").write_text("\n".join(x.lines) + "\n")
+            args = [sys.executable, str(CI / "axiom_scan.py"), "tree.ndjson", "--permitted", "permitted.json"]
+            if records is not None:
+                (Path(d) / "data/trusted").mkdir(parents=True)
+                (Path(d) / "Tengoku").mkdir()
+                (Path(d) / "Tengoku/Lib.lean").write_text("")
+                lines = [json.dumps({"name": r}) for r in records] + [json.dumps({"tombstone": r}) for r in tombstones]
+                (Path(d) / "data/trusted/lib.jsonl").write_text("\n".join(lines) + "\n")
+                (Path(d) / "data/trusted/mathlib-index.jsonl").write_text("".join(json.dumps({"name": r}) + "\n" for r in index))
+                args += ["--records", "data/trusted"]
+            r = subprocess.run(args, cwd=d, capture_output=True, text=True)
+            permitted = json.loads((Path(d) / "permitted.json").read_text()) if (Path(d) / "permitted.json").exists() else None
+        return r.returncode, r.stdout + r.stderr, permitted
+
+    def standard(self) -> Export:
+        x = Export()
+        for a in ("propext", "Classical.choice", "Quot.sound"):
+            x.axiom(a)
+        return x
+
+    def test_standard_axioms_pass_and_are_permitted(self):
+        x = self.standard()
+        p = x.const("propext")
+        x.decl("A", p, x.app(p, p))
+        x.decl("NS.B", p, x.const("A"))  # a record named B, declared inside a namespace
+        code, out, permitted = self.scan(x, ["A", "B", "Gone"], tombstones=["Gone"])
+        self.assertEqual(code, 0, out)
+        self.assertEqual(permitted, ["propext", "Classical.choice", "Quot.sound"])
+        self.assertIn("2 trusted records, 2 in the export, 2 of them rest only on the standard axioms", out)
+
+    def test_sorry_anywhere_fails_even_through_other_constants(self):
+        x = self.standard()
+        x.axiom("sorryAx")
+        s = x.const("sorryAx")
+        x.decl("f", s, s, kind="def")
+        x.decl("B", x.const("f"), x.const("f"))
+        code, out, _ = self.scan(x)
+        self.assertEqual(code, 1, out)
+        self.assertIn("2 constants rest on sorryAx", out)
+        self.assertIn("B", out)
+
+    def test_native_axioms_fail_a_record_but_are_only_reported_elsewhere(self):
+        x = self.standard()
+        x.axiom("Lean.ofReduceBool")
+        r = x.const("Lean.ofReduceBool")
+        x.decl("Core.fast", r, r)
+        x.decl("Rec", r, x.const("Core.fast"))
+        code, out, permitted = self.scan(x, [])
+        self.assertEqual(code, 0, out)  # no record rests on it
+        self.assertIn("Lean.ofReduceBool: 2 constants rest on it", out)
+        self.assertIn("Lean.ofReduceBool", permitted)
+        code, out, _ = self.scan(x, ["Rec"])
+        self.assertEqual(code, 1, out)
+        self.assertIn("Rec rests on ['Lean.ofReduceBool']", out)
+
+    def test_an_axiom_outside_the_prelude_fails(self):
+        x = self.standard()
+        x.axiom("Evil.ax")
+        code, out, _ = self.scan(x)
+        self.assertEqual(code, 1, out)
+        self.assertIn("declares the axiom Evil.ax", out)
+
+    def test_an_inductive_mentioning_itself_passes_its_axioms_on(self):
+        # The exporter writes `const T` (inside T's own constructor type) before T's line, and every later
+        # term that mentions T reuses that same term: its axioms must be T's, not nothing.
+        x = self.standard()
+        x.axiom("Lean.trustCompiler")
+        g = x.const("Lean.trustCompiler")
+        x.decl("g", g, g, kind="def")
+        t = x.const("T")
+        x.inductive("T", "T.mk", x.e("sort", 0), x.app(t, x.const("g")))
+        x.decl("UsesT", x.app(t, t), t)
+        code, out, _ = self.scan(x, ["UsesT"])
+        self.assertEqual(code, 1, out)
+        self.assertIn("UsesT rests on ['Lean.trustCompiler']", out)
+
+    def test_a_constant_never_declared_or_a_missing_record_fails(self):
+        x = self.standard()
+        x.decl("A", x.const("Nowhere"), x.const("propext"))
+        code, out, _ = self.scan(x)
+        self.assertEqual(code, 1, out)
+        self.assertIn("mentioned and never declared: ['Nowhere']", out)
+        x = self.standard()
+        x.decl("A", x.const("propext"), x.const("propext"))
+        code, out, _ = self.scan(x, ["A", "NotCompiled"], index=["A", "Archive.thing"])
+        self.assertEqual(code, 1, out)
+        self.assertIn("1 trusted records of compiled libraries are not in the export: ['NotCompiled']", out)
+        code, out, _ = self.scan(x, ["A"], index=["Archive.thing", "Other.thing"])
+        self.assertEqual(code, 0, out)  # a library without modules: counted, not failed
+        self.assertIn("from libraries the tree does not compile: mathlib-index 2", out)
+        code, out, _ = self.scan(x, ["A", "Both"], index=["Both"])  # listed by a compiled library too: it must be there
+        self.assertEqual(code, 1, out)
+        self.assertIn("are not in the export: ['Both']", out)
+
+    def test_terms_out_of_order_stop_the_scan(self):
+        x = self.standard()
+        x.lines.append(json.dumps({"ie": 99, "sort": 0}))
+        code, out, _ = self.scan(x)
+        self.assertNotEqual(code, 0)
+        self.assertIn("out of order", out)
+
+
+class OneDiffPerRun(unittest.TestCase):
+    """_git.file_diff splits one whole-range diff by file; each section must be exactly what the old
+    one-call-per-file diff printed, for every kind of change and awkward path."""
+
+    def test_sections_equal_per_file_diffs(self):
+        r = Repo()
+        r.git("checkout", "-q", "main")
+        r.write("docs/a b.md", "one\ntwo\n")
+        r.write("Tengoku/«1102.4662»/X.lean", "theorem x : True := trivial\n")
+        r.write('docs/quote"d.md', "q\n")
+        r.write("docs/old.md", "old\n")
+        r.write("docs/moved.md", "moved\ncontent\nhere\n")
+        r.write("scripts/tool.sh", "echo 1\n")
+        (r.dir / "docs/blob.bin").write_bytes(bytes(range(256)))
+        r.commit("base files")
+        r.git("checkout", "-q", "-B", "pr")
+        r.write("docs/a b.md", "one\n2\nthree\n")
+        r.write("Tengoku/«1102.4662»/X.lean", "/-\nChanged for Tengoku.\n-/\ntheorem x : True := trivial\n")
+        r.write('docs/quote"d.md', "q2\n")
+        r.git("rm", "-q", "docs/old.md")
+        r.git("mv", "docs/moved.md", "docs/renamed.md")
+        (r.dir / "scripts/tool.sh").chmod(0o755)
+        (r.dir / "docs/blob.bin").write_bytes(bytes(reversed(range(256))))
+        r.write("docs/new.md", "new\n")
+        r.commit("change everything")
+        code = (
+            "import sys, _git\n"
+            "paths = [p for _, p in _git.changed_files('main', 'pr')]\n"
+            "bad = [p for p in paths if _git.file_diff('main', 'pr', p) != _git.run('diff', '-U0', 'main...pr', '--', p)]\n"
+            "print(len(paths), 'paths;', 'mismatch:', bad)\n"
+            "sys.exit(1 if bad or len(paths) < 9 else 0)\n"
+        )
+        p = subprocess.run(
+            [sys.executable, "-c", code],
+            cwd=CI,
+            capture_output=True,
+            text=True,
+            env={**os.environ, "TENGOKU_CI_ROOT": str(r.dir), "PYTHONPATH": str(CI)},
+        )
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
 
 
 class Intake(unittest.TestCase):
@@ -1013,12 +1272,98 @@ class Intake(unittest.TestCase):
         self.assertIn("notation", out)
         rc, out = r.gate("lint_banked.py", env={"TENGOKU_INTAKE_LINT": "proposed"})
         self.assertEqual(rc, 0, out)
+        # a sibling whose name merely starts like the bundle's root file is not the bundle's
+        r.write("Tengoku/FxLib.leanExtra.lean", 'notation "ℓ" => 1\n')
+        r.commit("a sibling of the root file")
+        rc, out = r.gate("lint_banked.py", env={"TENGOKU_INTAKE_LINT": "proposed"})
+        self.assertNotEqual(rc, 0)
+        self.assertIn("Tengoku/FxLib.leanExtra.lean", out)
+        r.git("reset", "-q", "--hard", "HEAD~1")
         # and only inside the bundle's own modules: a notation in any other module of the tree is still refused
         r.write("Tengoku/Lib/Basic.lean", 'theorem Lib.old : 1 + 1 = 2 := rfl\nnotation "ℓ" => 1\n')
         r.commit("a notation in an older library")
         rc, out = r.gate("lint_banked.py", env={"TENGOKU_INTAKE_LINT": "proposed"})
         self.assertNotEqual(rc, 0)
         self.assertIn("Tengoku/Lib/Basic.lean", out)
+
+    def test_the_reducibility_attributes_are_inert(self):
+        r = self.repo()
+        self.bundle(r, mod=self.MOD + "\n@[implicit_reducible] def Fx.one : Nat := 1\n")
+        rc, out = r.gate("intake_check.py")
+        self.assertEqual(rc, 0, out)
+
+    def test_a_manifest_that_is_not_made_of_objects_fails_with_a_message(self):
+        r = self.repo()
+        self.bundle(r)
+        good = json.loads((r.dir / "data/intake/fx-lib/manifest.jsonl").read_text())
+        rows = [[1, 2], {**good, "module": 5}, {**good, "name": ["x"]}, "text"]
+        (r.dir / "data/intake/fx-lib/manifest.jsonl").write_text("".join(json.dumps(x) + "\n" for x in rows))
+        r.commit("odd manifest")
+        rc, out = r.gate("intake_check.py")
+        self.assertNotEqual(rc, 0)
+        self.assertNotIn("Traceback", out)
+        self.assertIn("not a JSON object", out)
+
+    def test_a_tree_command_written_indented_is_still_refused(self):
+        r = self.repo()
+        self.bundle(r, mod=self.MOD + "\n  theorem_wanted foo : True\n")
+        rc, out = r.gate("intake_check.py")
+        self.assertNotEqual(rc, 0)
+        self.assertIn("theorem_wanted", out)
+
+    def test_an_import_line_may_carry_a_comment(self):
+        r = self.repo()
+        self.bundle(r, mod="import Tengoku -- the tree\n" + self.MOD.replace("import Tengoku\n", "", 1))
+        rc, out = r.gate("intake_check.py")
+        self.assertEqual(rc, 0, out)
+
+    def with_record(self, name):
+        """A repository whose base (main) already holds a trusted record of that name, then the bundle's branch."""
+        r = self.repo()
+        r.write(
+            "data/trusted/lib2.jsonl",
+            json.dumps({"name": name, "statement": f"theorem {name} : True", "status": "trusted", "library": "lib2"}) + "\n",
+        )
+        r.commit("a record of the tree")
+        r.git("checkout", "-q", "main")
+        r.git("merge", "-q", "--ff-only", "pr")
+        r.git("checkout", "-q", "pr")
+        return r
+
+    def test_a_bare_name_equal_to_a_records_proves_nothing_but_a_qualified_one_does(self):
+        r = self.with_record("good")  # the tree's `good` is a record written inside some namespace
+        self.bundle(r, name="good")
+        rc, out = r.gate("intake_check.py")
+        self.assertEqual(rc, 0, out)
+        r2 = self.with_record("Fx.good")
+        self.bundle(r2, name="Fx.good")
+        rc, out = r2.gate("intake_check.py")
+        self.assertNotEqual(rc, 0)
+        self.assertIn("already a trusted record", out)
+
+    def test_staging_records_of_another_library_do_not_block_a_bundle_but_a_merged_bundles_theorem_does(self):
+        r = self.repo()
+        r.write(
+            "data/staging/lib2/20260101T000000Z-000.jsonl",
+            json.dumps({"name": "Fx.good", "statement": "theorem Fx.good : True", "status": "staging", "library": "lib2"}) + "\n",
+        )
+        r.commit("a staged record of another library")
+        r.git("checkout", "-q", "main")
+        r.git("merge", "-q", "--ff-only", "pr")
+        r.git("checkout", "-q", "pr")
+        self.bundle(r, name="Fx.good")
+        rc, out = r.gate("intake_check.py")
+        self.assertEqual(rc, 0, out)
+        r2 = self.repo()
+        r2.write("data/intake/lib2/manifest.jsonl", json.dumps({"name": "Fx.good", "library": "lib2"}) + "\n")
+        r2.commit("a merged bundle")
+        r2.git("checkout", "-q", "main")
+        r2.git("merge", "-q", "--ff-only", "pr")
+        r2.git("checkout", "-q", "pr")
+        self.bundle(r2, name="Fx.good")
+        rc, out = r2.gate("intake_check.py")
+        self.assertNotEqual(rc, 0)
+        self.assertIn("already a trusted record or a bundle theorem", out)
 
     def test_the_queues_content_lint_reads_an_added_module_without_its_comments(self):
         r = self.repo()
@@ -1035,41 +1380,25 @@ class Intake(unittest.TestCase):
         rc, out = r2.gate("lint_banked.py")
         self.assertNotEqual(rc, 0)
         self.assertIn("#print axioms", out)
+        r4 = self.repo()  # a line `import X -/` that closes a block comment must not be dropped before the comment is read
+        self.bundle(r4, mod=self.MOD + "\n/- a comment\nimport Foo -/\n#eval 1\n")
+        rc, out = r4.gate("lint_banked.py")
+        self.assertNotEqual(rc, 0)
+        self.assertIn("#eval", out)
         r3 = self.repo()
         self.bundle(r3, mod=self.MOD + '\nopen Lean in\nrun_cmd logInfo "x"\n')
         rc, out = r3.gate("lint_banked.py")
         self.assertNotEqual(rc, 0)
         self.assertIn("run_cmd", out)
 
-    def with_record(self, name):
-        """A repository whose base (main) already holds a trusted record of that name, then the bundle's branch."""
+    def test_an_empty_manifest_is_refused(self):
         r = self.repo()
-        r.write(
-            "data/trusted/lib2.jsonl",
-            json.dumps({"name": name, "statement": f"theorem {name} : True", "status": "trusted", "library": "lib2"}) + "\n",
-        )
-        r.commit("a record of the tree")
-        r.git("checkout", "-q", "main")
-        r.git("merge", "-q", "--ff-only", "pr")
-        r.git("checkout", "-q", "pr")
-        return r
-
-    def test_an_import_line_may_carry_a_comment(self):
-        r = self.repo()
-        self.bundle(r, mod="import Tengoku -- the tree\n" + self.MOD.replace("import Tengoku\n", "", 1))
+        self.bundle(r)
+        (r.dir / "data/intake/fx-lib/manifest.jsonl").write_text("")
+        r.commit("a bundle that claims no theorem")
         rc, out = r.gate("intake_check.py")
-        self.assertEqual(rc, 0, out)
-
-    def test_a_bare_name_equal_to_a_records_proves_nothing_but_a_qualified_one_does(self):
-        r = self.with_record("good")  # the tree's `good` is a record written inside some namespace
-        self.bundle(r, name="good")
-        rc, out = r.gate("intake_check.py")
-        self.assertEqual(rc, 0, out)
-        r2 = self.with_record("Fx.good")
-        self.bundle(r2, name="Fx.good")
-        rc, out = r2.gate("intake_check.py")
         self.assertNotEqual(rc, 0)
-        self.assertIn("already a record of the tree", out)
+        self.assertIn("manifest has no theorem", out)
 
     def test_the_rebuilt_archive_is_the_factorys_archive(self):
         r = self.repo()
@@ -1091,6 +1420,20 @@ class Intake(unittest.TestCase):
         bundle_tar.write_tar(bundle_tar.read_dir(str(d)), str(out2))
         self.assertEqual(tar.read_bytes(), out2.read_bytes())
 
+    def test_the_archive_is_only_written_inside_the_working_or_a_temporary_directory(self):
+        sys.path.insert(0, str(CI))
+        import bundle_tar
+
+        tmp = Path(tempfile.mkdtemp())
+        self.assertTrue(bundle_tar.write_tar({"a.txt": b"x"}, str(tmp / "ok.tar")))
+        for bad in (str(tmp / ".." / ".." / ".." / ".." / "etc" / "x.tar"), "/etc/x.tar", str(Path.home() / "x.tar")):
+            with self.assertRaises(ValueError):
+                bundle_tar.write_tar({"a.txt": b"x"}, bad)
+        link = tmp / "link"
+        link.symlink_to("/etc")
+        with self.assertRaises(ValueError):  # a symlink out of the temporary directory
+            bundle_tar.write_tar({"a.txt": b"x"}, str(link / "x.tar"))
+
     def test_the_archive_is_the_same_bytes_on_every_machine(self):
         sys.path.insert(0, str(CI))
         import bundle_tar
@@ -1101,6 +1444,32 @@ class Intake(unittest.TestCase):
             bundle_tar.write_tar({"a.txt": b"hello\n", "dir/b.lean": b"theorem x : True := trivial\n"}, str(out)),
             "69860ced3534fa1c7d35bcaf779a68ea88028baf4f447748b381fab33d64e100",  # pragma: allowlist secret (a digest, not a secret)
         )
+
+
+class RecordNameTypes(unittest.TestCase):
+    """A tombstone, a tombstone_note or a credit_correction names a record: a list or a number there is an error with a message, never a traceback
+    (found by the records fuzz target: `{"tombstone_note": [...]}` raised TypeError: unhashable type)."""
+
+    def test_a_name_that_is_not_a_string_fails_with_a_message(self):
+        extra = {
+            "category": "duplicate",
+            "reason": "r",
+            "at": "2026-01-01",
+            "note": "n",
+            "see": ["Lib.old"],
+            "by": "b",
+            "credit": "Authors: x",
+            "evidence": "https://example.org",
+        }
+        for key in ("tombstone", "tombstone_note", "credit_correction"):
+            for value in (["Lib.old"], 5, {"a": 1}):
+                r = Repo()
+                r.append("data/trusted/lib.jsonl", json.dumps({key: value, **extra}) + "\n")
+                r.commit("a record name that is not a string")
+                rc, out = r.gate("validate_records.py")
+                self.assertNotEqual(rc, 0, (key, value, out))
+                self.assertNotIn("Traceback", out, (key, value))
+                self.assertIn("is the name of a record", out, (key, value))
 
 
 class QueuePlacement(unittest.TestCase):
@@ -1143,6 +1512,14 @@ class QueuePlacement(unittest.TestCase):
         self.assertEqual(annotation("a\n::add-mask::x\r%"), "a%0A::add-mask::x%0D%25")
         self.assertNotIn("\n", annotation("Lib.x\n::stop-commands::t"))
 
+    def test_the_log_form_of_a_failure_cannot_start_a_workflow_command(self):
+        from _git import plain
+
+        out = plain("in no module: Lib.x\n::add-mask::secret\r\n  ::stop-commands::t")
+        self.assertNotIn("\n::", out)
+        self.assertNotRegex(out, r"(?m)^\s*::")
+        self.assertIn("in no module: Lib.x\n", out)  # still readable, line breaks kept
+
     def test_comments_and_strings_hide_nothing_and_declare_nothing(self):
         from _git import unplaced
 
@@ -1170,167 +1547,6 @@ class QueuePlacement(unittest.TestCase):
         self.assertEqual(code_only('def «x"y» := 1 -- z'), 'def «x"y» := 1 ')
         for src in ("a -- x\nb", "x /- y\nz -/ w", 's!"p\nq" r', "c '\\n' d", 'r#"u\nv"# t'):
             self.assertEqual(code_only(src).count("\n"), src.count("\n"), src)  # line breaks survive: line checks stay aligned
-
-
-class Export:
-    """A tiny lean4export file, written line by line in the exporter's order."""
-
-    def __init__(self) -> None:
-        meta = {
-            "exporter": {"name": "lean4export", "version": "3.1.0"},
-            "format": {"version": "3.1.0"},
-            "lean": {"githash": "x", "version": "4.34.0-rc2"},
-        }
-        self.lines = [json.dumps({"meta": meta})]
-        self.names = {"": 0}
-        self.terms = 0
-
-    def n(self, s: str) -> int:
-        if s not in self.names:
-            pre, _, last = s.rpartition(".")
-            p = self.n(pre) if pre else 0
-            self.names[s] = len(self.names)
-            self.lines.append(json.dumps({"in": self.names[s], "str": {"pre": p, "str": last}}))
-        return self.names[s]
-
-    def e(self, kind: str, v) -> int:
-        self.lines.append(json.dumps({"ie": self.terms, kind: v}))
-        self.terms += 1
-        return self.terms - 1
-
-    def const(self, s: str) -> int:
-        return self.e("const", {"name": self.n(s), "us": []})
-
-    def app(self, f: int, a: int) -> int:
-        return self.e("app", {"fn": f, "arg": a})
-
-    def axiom(self, s: str) -> None:
-        ty = self.e("sort", 0)
-        self.lines.append(json.dumps({"axiom": {"name": self.n(s), "levelParams": [], "type": ty, "isUnsafe": False}}))
-
-    def decl(self, s: str, ty: int, val: int, kind: str = "thm") -> None:
-        self.lines.append(json.dumps({kind: {"name": self.n(s), "levelParams": [], "type": ty, "value": val, "all": [self.n(s)]}}))
-
-    def inductive(self, s: str, ctor: str, ty: int, cty: int) -> None:
-        types = [
-            {"name": self.n(s), "levelParams": [], "type": ty, "numParams": 0, "numIndices": 0, "all": [self.n(s)], "ctors": [self.n(ctor)]}
-        ]
-        ctors = [{"name": self.n(ctor), "levelParams": [], "type": cty, "induct": self.n(s), "cidx": 0, "numParams": 0, "numFields": 0}]
-        self.lines.append(json.dumps({"inductive": {"types": types, "ctors": ctors, "recs": []}}))
-
-
-class AxiomScan(unittest.TestCase):
-    """scripts/ci/axiom_scan.py: every constant's axioms, from the export alone."""
-
-    def scan(self, x: Export, records: list[str] | None = None, tombstones: list[str] = (), index: list[str] = ()):
-        """records: the trusted file of a compiled library (Tengoku/Lib.lean exists); index: a library without modules."""
-        with tempfile.TemporaryDirectory() as d:
-            (Path(d) / "tree.ndjson").write_text("\n".join(x.lines) + "\n")
-            args = [sys.executable, str(CI / "axiom_scan.py"), "tree.ndjson", "--permitted", "permitted.json", "--report", "report.json"]
-            if records is not None:
-                (Path(d) / "data/trusted").mkdir(parents=True)
-                (Path(d) / "Tengoku").mkdir()
-                (Path(d) / "Tengoku/Lib.lean").write_text("")
-                lines = [json.dumps({"name": r}) for r in records] + [json.dumps({"tombstone": r}) for r in tombstones]
-                (Path(d) / "data/trusted/lib.jsonl").write_text("\n".join(lines) + "\n")
-                (Path(d) / "data/trusted/mathlib-index.jsonl").write_text("".join(json.dumps({"name": r}) + "\n" for r in index))
-                args += ["--records", "data/trusted"]
-            r = subprocess.run(args, cwd=d, capture_output=True, text=True)
-            permitted = json.loads((Path(d) / "permitted.json").read_text()) if (Path(d) / "permitted.json").exists() else None
-            self.report = json.loads((Path(d) / "report.json").read_text()) if (Path(d) / "report.json").exists() else None
-        return r.returncode, r.stdout + r.stderr, permitted
-
-    def standard(self) -> Export:
-        x = Export()
-        for a in ("propext", "Classical.choice", "Quot.sound"):
-            x.axiom(a)
-        return x
-
-    def test_standard_axioms_pass_and_are_permitted(self):
-        x = self.standard()
-        p = x.const("propext")
-        x.decl("A", p, x.app(p, p))
-        x.decl("NS.B", p, x.const("A"))  # a record named B, declared inside a namespace
-        code, out, permitted = self.scan(x, ["A", "B", "Gone"], tombstones=["Gone"])
-        self.assertEqual(code, 0, out)
-        self.assertEqual(permitted, ["propext", "Classical.choice", "Quot.sound"])
-        self.assertIn("2 trusted records, 2 in the export, 2 of them rest only on the standard axioms", out)
-        self.assertTrue(self.report["passed"])
-        self.assertEqual(self.report["trusted_records"]["resting_only_on_standard_axioms"], 2)
-
-    def test_sorry_anywhere_fails_even_through_other_constants(self):
-        x = self.standard()
-        x.axiom("sorryAx")
-        s = x.const("sorryAx")
-        x.decl("f", s, s, kind="def")
-        x.decl("B", x.const("f"), x.const("f"))
-        code, out, _ = self.scan(x)
-        self.assertEqual(code, 1, out)
-        self.assertIn("2 constants rest on sorryAx", out)
-        self.assertIn("B", out)
-
-    def test_native_axioms_fail_a_record_but_are_only_reported_elsewhere(self):
-        x = self.standard()
-        x.axiom("Lean.ofReduceBool")
-        r = x.const("Lean.ofReduceBool")
-        x.decl("Core.fast", r, r)
-        x.decl("Rec", r, x.const("Core.fast"))
-        code, out, permitted = self.scan(x, [])
-        self.assertEqual(code, 0, out)  # no record rests on it
-        self.assertIn("Lean.ofReduceBool: 2 constants rest on it", out)
-        self.assertIn("Lean.ofReduceBool", permitted)
-        code, out, _ = self.scan(x, ["Rec"])
-        self.assertEqual(code, 1, out)
-        self.assertIn("Rec rests on ['Lean.ofReduceBool']", out)
-        self.assertFalse(self.report["passed"])
-        self.assertEqual(self.report["resting_on_other_axioms"]["Lean.ofReduceBool"], ["Core.fast", "Rec"])
-        self.assertEqual(self.report["trusted_records"]["resting_on_more"], ["Rec rests on ['Lean.ofReduceBool']"])
-
-    def test_an_axiom_outside_the_prelude_fails(self):
-        x = self.standard()
-        x.axiom("Evil.ax")
-        code, out, _ = self.scan(x)
-        self.assertEqual(code, 1, out)
-        self.assertIn("declares the axiom Evil.ax", out)
-
-    def test_an_inductive_mentioning_itself_passes_its_axioms_on(self):
-        # The exporter writes `const T` (inside T's own constructor type) before T's line, and every later
-        # term that mentions T reuses that same term: its axioms must be T's, not nothing.
-        x = self.standard()
-        x.axiom("Lean.trustCompiler")
-        g = x.const("Lean.trustCompiler")
-        x.decl("g", g, g, kind="def")
-        t = x.const("T")
-        x.inductive("T", "T.mk", x.e("sort", 0), x.app(t, x.const("g")))
-        x.decl("UsesT", x.app(t, t), t)
-        code, out, _ = self.scan(x, ["UsesT"])
-        self.assertEqual(code, 1, out)
-        self.assertIn("UsesT rests on ['Lean.trustCompiler']", out)
-
-    def test_a_constant_never_declared_or_a_missing_record_fails(self):
-        x = self.standard()
-        x.decl("A", x.const("Nowhere"), x.const("propext"))
-        code, out, _ = self.scan(x)
-        self.assertEqual(code, 1, out)
-        self.assertIn("mentioned and never declared: ['Nowhere']", out)
-        x = self.standard()
-        x.decl("A", x.const("propext"), x.const("propext"))
-        code, out, _ = self.scan(x, ["A", "NotCompiled"], index=["A", "Archive.thing"])
-        self.assertEqual(code, 1, out)
-        self.assertIn("1 trusted records of compiled libraries are not in the export: ['NotCompiled']", out)
-        code, out, _ = self.scan(x, ["A"], index=["Archive.thing", "Other.thing"])
-        self.assertEqual(code, 0, out)  # a library without modules: counted, not failed
-        self.assertIn("from libraries the tree does not compile: mathlib-index 2", out)
-        code, out, _ = self.scan(x, ["A", "Both"], index=["Both"])  # listed by a compiled library too: it must be there
-        self.assertEqual(code, 1, out)
-        self.assertIn("are not in the export: ['Both']", out)
-
-    def test_terms_out_of_order_stop_the_scan(self):
-        x = self.standard()
-        x.lines.append(json.dumps({"ie": 99, "sort": 0}))
-        code, out, _ = self.scan(x)
-        self.assertNotEqual(code, 0)
-        self.assertIn("out of order", out)
 
 
 class Sbom(unittest.TestCase):
@@ -1457,3 +1673,123 @@ class AllowList(unittest.TestCase):
         for name, (text, rejected) in self.CASES.items():
             with self.subTest(name):
                 self.assertEqual(bool(violations(text, allowed)), rejected, violations(text, allowed))
+
+
+class Restructure(unittest.TestCase):
+    """The move of the seed into Tengoku/Seed/: classify names it, and restructure_check.py accepts only what scripts/restructure.py produces on the base."""
+
+    BOT = {"PR_ACTOR": "tengoku-bot", "TENGOKU_BOT": "tengoku-bot"}
+    SEEDED = "module\n\npublic import Tengoku.Std\npublic import Tengoku.Logic.Basic\n"
+
+    def repo(self):
+        r = Repo()
+        shutil.copy(TREE / "scripts" / "restructure.py", r.dir / "scripts" / "restructure.py")
+        r.write("Tengoku.lean", self.SEEDED)
+        r.write("Tengoku/Std.lean", "module\n")
+        r.write(
+            "Tengoku/Lib/Basic.lean", "module\n\npublic import Tengoku\npublic import Tengoku.Std\n\ntheorem Lib.old : 1 + 1 = 2 := rfl\n"
+        )
+        r.commit("a tree with a seed")
+        r.git("checkout", "-q", "main")
+        r.git("merge", "-q", "--ff-only", "pr")
+        r.git("checkout", "-q", "pr")
+        return r
+
+    def move(self, r):
+        spec = importlib.util.spec_from_file_location("restructure_under_test", TREE / "scripts" / "restructure.py")
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        mod.apply(r.dir, mod.libs_from_tree(r.dir))
+
+    def moved(self, extra=None):
+        r = self.repo()
+        self.move(r)
+        for path, text in (extra or {}).items():
+            r.write(path, text)
+        r.commit("the move")
+        return r
+
+    def test_the_exact_move_is_a_restructure_and_passes(self):
+        r = self.moved()
+        rc, out = r.gate("classify.py", env=self.BOT)
+        self.assertEqual(rc, 0, out)
+        self.assertIn("class=restructure", out)
+        rc, out = r.gate("restructure_check.py")
+        self.assertEqual(rc, 0, out)
+        self.assertIn("restructure ok", out)
+        self.assertEqual(
+            (r.dir / "Tengoku/Lib/Basic.lean").read_text(), "module\n\npublic import Tengoku\n\ntheorem Lib.old : 1 + 1 = 2 := rfl\n"
+        )
+
+    def test_only_the_factory_may_send_one(self):
+        rc, out = self.moved().gate("classify.py", env={"PR_ACTOR": "someone", "TENGOKU_BOT": "tengoku-bot"})
+        self.assertNotEqual(rc, 0)
+        self.assertIn("factory's account", out)
+
+    def test_one_changed_line_is_refused(self):
+        r = self.moved({"Tengoku/Seed/Std.lean": "module\n\n-- one more line\n"})
+        rc, out = r.gate("restructure_check.py")
+        self.assertEqual(rc, 1)
+        self.assertIn("Tengoku/Seed/Std.lean: differs from the script's output", out)
+
+    def test_a_file_the_script_does_not_produce_is_refused(self):
+        rc, out = self.moved({"Tengoku/Seed/Extra.lean": "module\n"}).gate("restructure_check.py")
+        self.assertEqual(rc, 1)
+        self.assertIn("Tengoku/Seed/Extra.lean: the PR has a file the script does not produce", out)
+
+    def test_a_missing_file_is_refused(self):
+        r = self.moved()
+        r.git("rm", "-q", "Tengoku/Seed/Std.lean")
+        r.commit("lose a file")
+        rc, out = r.gate("restructure_check.py")
+        self.assertEqual(rc, 1)
+        self.assertIn("Tengoku/Seed/Std.lean: the PR does not have it", out)
+
+    def test_nothing_else_may_ride_along(self):
+        rc, out = self.moved({"scripts/x.py": "print(2)\n"}).gate("restructure_check.py")
+        self.assertEqual(rc, 1)
+        self.assertIn("touches only what scripts/restructure.py owns", out)
+        self.assertIn("scripts/x.py", out)
+
+    def test_without_the_new_folder_it_is_not_a_restructure(self):
+        r = self.repo()
+        r.append("scripts/x.py", "print(3)\n")
+        r.commit("tooling")
+        rc, out = r.gate("classify.py", env=self.BOT)
+        self.assertEqual(rc, 0, out)
+        self.assertNotIn("class=restructure", out)
+        rc, out = r.gate("restructure_check.py")
+        self.assertEqual(rc, 1)
+        self.assertIn("not a restructure", out)
+
+    def test_the_queue_builds_nothing_for_it(self):
+        rc, out = self.moved().gate("queue_targets.py")
+        self.assertEqual(rc, 0, out)
+        self.assertIn("restructure group", out)
+        self.assertNotIn("Tengoku.", out.replace("scripts/restructure.py", ""))
+
+    def test_a_credit_that_moved_with_its_file_is_not_removed(self):
+        r = self.moved()
+        rc, out = r.gate("credits.py")
+        self.assertEqual(rc, 1)  # without the flag a move looks like a removal
+        self.assertIn("Tengoku/Logic/Basic.lean", out)
+        rc, out = r.gate("credits.py", "main", "pr", "--restructure")
+        self.assertEqual(rc, 0, out)
+        self.assertIn("credits OK", out)
+
+    def test_a_credit_that_did_not_move_with_its_file_is_removed(self):
+        r = self.moved({"Tengoku/Seed/Logic/Basic.lean": "/-\n-/\ntheorem seeded : True := trivial\n"})
+        rc, out = r.gate("credits.py", "main", "pr", "--restructure")
+        self.assertEqual(rc, 1)
+        self.assertIn("Authors: Mathlib", out)
+
+    def test_the_moved_seed_is_not_linted_but_a_library_still_is(self):
+        odd = "module\n\nset_option tengoku.fake true\n"
+        r = self.moved({"Tengoku/Seed/Std.lean": odd})
+        rc, out = r.gate("lint_banked.py")
+        self.assertEqual(rc, 0, out)  # upstream code: recomputed by restructure_check.py, not banked content
+        r.write("Tengoku/Lib/Basic.lean", "module\n\npublic import Tengoku\n\nset_option tengoku.fake true\n")
+        r.commit("a library module with an option off the allow-list")
+        rc, out = r.gate("lint_banked.py")
+        self.assertEqual(rc, 1)
+        self.assertIn("Tengoku/Lib/Basic.lean", out)

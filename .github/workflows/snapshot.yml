@@ -2,8 +2,8 @@
 # statement, proof, source, licence and credit; scripts/snapshot.py) and its manifest (version, date, commit,
 # toolchain, counts, the dataset's sha256), published as the release `vX.Y.Z` with build provenance. The version
 # comes from comparing with the previous release (scripts/snapshot.py says how: a new toolchain or a removed field
-# is major, added theorems minor, corrections a patch); a month with no change publishes nothing. Zenodo mints a
-# DOI for every release. A paper cites the version; anyone can check the files against the manifest and the
+# is major, added theorems minor, corrections a patch); a month with no change publishes nothing. Each release is
+# deposited on Zenodo for its DOI (the last step). A paper cites the version; anyone can check the files against the manifest and the
 # attestation.
 name: snapshot
 on:
@@ -36,14 +36,15 @@ jobs:
       - name: Dataset and manifest
         id: snap
         run: |
-          args=(--out snapshot); [ -d previous ] && args+=(--previous previous)
+          args=(--out snapshot --notes release-notes.md); [ -d previous ] && args+=(--previous previous)
           python3 scripts/snapshot.py "${args[@]}"
           if [ -f snapshot/unchanged ]; then echo "changed=false" >> "$GITHUB_OUTPUT"; exit 0; fi
           version="$(python3 -c 'import json; print(json.load(open("snapshot/snapshot.json"))["version"])')"
           date="$(python3 -c 'import json; print(json.load(open("snapshot/snapshot.json"))["date"])')"
           # the release's copy names the version to cite; the repository's copy stays generic
           { cat CITATION.cff; printf 'version: "%s"\ndate-released: "%s"\n' "$version" "$date"; } > snapshot/CITATION.cff
-          cp LICENSE LICENSE-THIRD-PARTY.md NOTICE snapshot/   # the licence texts and notices go with the data
+          # the licence texts and notices go with the data (they are attested and published like the other files)
+          cp LICENSE LICENSE-THIRD-PARTY.md NOTICE snapshot/
           ls -la snapshot
           printf 'changed=true\nversion=%s\ndate=%s\n' "$version" "$date" >> "$GITHUB_OUTPUT"
       - name: Attest the files
@@ -53,7 +54,11 @@ jobs:
         with: { subject-path: "snapshot/*" }
       - name: Publish the release
         if: steps.snap.outputs.changed == 'true'
-        env: { GH_TOKEN: "${{ github.token }}", VERSION: "${{ steps.snap.outputs.version }}", DATE: "${{ steps.snap.outputs.date }}", BUNDLE: "${{ steps.attest.outputs.bundle-path }}" }
+        env:
+          GH_TOKEN: "${{ github.token }}"
+          VERSION: "${{ steps.snap.outputs.version }}"
+          DATE: "${{ steps.snap.outputs.date }}"
+          BUNDLE: "${{ steps.attest.outputs.bundle-path }}"
         run: |
           # a published version is never changed; the tag decides, not the release (a release can be deleted while its
           # tag stays)
@@ -70,7 +75,43 @@ jobs:
           if [ "${kind:-}" = tag ]; then at="$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$at" --jq .object.sha)"; fi
           if [ -n "$at" ] && [ "$at" != "$GITHUB_SHA" ]; then echo "::error::$tag already points at $at, not $GITHUB_SHA"; exit 1; fi
           if gh release view "$tag" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then echo "$tag already snapshots $GITHUB_SHA"; exit 0; fi
-          cp "$BUNDLE" snapshot/tengoku-snapshot.intoto.jsonl   # the attestation as a file of the release (mirror of the library PR)
-          records="$(python3 -c 'import json; print(json.load(open("snapshot/snapshot.json"))["dataset"]["records"])')"
-          gh release create "$tag" snapshot/* -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "Tengoku $tag ($DATE)" \
-            --notes "A citable snapshot of Tengoku: ${records} trusted records. \`snapshot.json\` names the commit, toolchain and counts, and the sha256 of the published dataset; every file carries build provenance (\`gh attestation verify <file> -R $GITHUB_REPOSITORY\`). Versions: a new toolchain or a removed field is a new major version, added theorems a minor one, corrections a patch. How to cite: CITATION.cff."
+          # the notes say what changed since the previous release and what upgrading means (scripts/snapshot.py)
+          # shellcheck disable=SC2016  # the backticks below are markdown, not command substitution
+          { cat release-notes.md
+            printf '\n## The files\n\n`tengoku-dataset.jsonl.gz` is every trusted theorem with its statement, proof, source, licence and credit; `snapshot.json` names the commit, toolchain and counts, and the dataset'"'"'s sha256; `LICENSE`, `LICENSE-THIRD-PARTY.md` and `NOTICE` are the licence texts and notices the records are distributed under. The dataset, the manifest and CITATION.cff carry build provenance: `gh attestation verify <file> -R %s`. `tengoku-snapshot.intoto.jsonl` is that attestation as a file (not a subject of it): add `--bundle tengoku-snapshot.intoto.jsonl` to check offline. Versions: a new toolchain or a removed field is a new major version, added theorems a minor one, corrections a patch. How to cite: CITATION.cff.\n' "$GITHUB_REPOSITORY"
+          } > notes-full.md
+          # the attestation of the files above, as a file of the release too (not a subject: it was made after them)
+          cp "$BUNDLE" snapshot/tengoku-snapshot.intoto.jsonl
+          gh release create "$tag" snapshot/* -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "Tengoku $tag ($DATE)" --notes-file notes-full.md
+      # The DOI. Zenodo's GitHub integration is off for this repository (it would mint one for every release, the nightly
+      # caches included): only a vX.Y.Z release is deposited, through Zenodo's API. Every run makes sure the newest
+      # release has its DOI, so a deposit that failed is made by the next run; one Zenodo already has is not repeated.
+      - name: A DOI on Zenodo for the newest release
+        env:
+          ZENODO_TOKEN: "${{ secrets.ZENODO_TOKEN }}"
+          GH_TOKEN: "${{ github.token }}"
+          CHANGED: "${{ steps.snap.outputs.changed }}"
+          VERSION: "${{ steps.snap.outputs.version }}"
+          DATE: "${{ steps.snap.outputs.date }}"
+        run: |  # pragma: allowlist secret (the name of the Zenodo token secret, not a secret)
+          if [ -z "$ZENODO_TOKEN" ]; then echo "::warning::no ZENODO_TOKEN secret: the release has no DOI yet"; exit 0; fi
+          if [ "$CHANGED" = true ]; then
+            dir=snapshot
+          elif [ -f previous/snapshot.json ]; then
+            dir=previous
+            VERSION="$(python3 -c 'import json; print(json.load(open("previous/snapshot.json"))["version"])')"
+            DATE="$(python3 -c 'import json; print(json.load(open("previous/snapshot.json"))["date"])')"
+            gh release download "v$VERSION" -R "$GITHUB_REPOSITORY" -p CITATION.cff -D previous --clobber
+          else
+            echo "no release yet"; exit 0
+          fi
+          doi="$(python3 scripts/zenodo_deposit.py --metadata zenodo.json --version "$VERSION" --date "$DATE" \
+            --related "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/v$VERSION" \
+            "$dir/tengoku-dataset.jsonl.gz" "$dir/snapshot.json" "$dir/CITATION.cff" LICENSE LICENSE-THIRD-PARTY.md NOTICE)"
+          echo "v$VERSION: https://doi.org/$doi" | tee -a "$GITHUB_STEP_SUMMARY"
+          body="$(gh release view "v$VERSION" -R "$GITHUB_REPOSITORY" --json body -q .body)"
+          if ! grep -qF "doi.org/$doi" <<< "$body"; then
+            gh release edit "v$VERSION" -R "$GITHUB_REPOSITORY" --notes "$body
+
+          DOI: https://doi.org/$doi"
+          fi

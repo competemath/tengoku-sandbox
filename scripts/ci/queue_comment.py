@@ -40,7 +40,10 @@ HINTS = [
         r"\(deterministic\) timeout|maximum recursion depth",
         "The proof exceeds the default heartbeat/recursion budget. Simplify it or add an allowed `set_option maxHeartbeats` in `context` (see schemas/allowed-options.json).",
     ),
-    (r"axiom", "A non-standard axiom is not allowed in trusted content. Only propext, Classical.choice and Quot.sound are accepted."),
+    (
+        r"axiom|allowed: propext|_native\.decide|ofReduceBool",
+        "A non-standard axiom is not allowed in trusted content (native_decide / decide +native introduce one). Only propext, Classical.choice and Quot.sound are accepted.",
+    ),
     (
         r"forbidden|content lint",
         "The content lint rejected a construct that runs or links code. See scripts/ci/lint_banked.py for the list.",

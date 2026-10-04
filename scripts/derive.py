@@ -226,6 +226,8 @@ def topics(module: str) -> list[str]:
     parts = module.split(".")
     if parts and parts[0] == "Tengoku":
         parts = parts[1:]
+        if parts[:1] == ["Seed"]:  # the seeded code sits under Tengoku.Seed: the folder is not a topic
+            parts = parts[1:]
     return [" ".join(t.lower() for t in CAMEL.split(p)) for p in parts if p and p != "Basic"]
 
 

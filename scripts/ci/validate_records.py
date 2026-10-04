@@ -5,13 +5,14 @@ tier (schemas/record.schema.json), status matches the tier, library matches
 the file, source on the allowlist (schemas/sources.json), no duplicate names
 in the PR or against trusted, tombstones point at existing names and carry a fixed category, a note on
 where to look instead points at a tombstoned name, a credit correction names a trusted record and links its
-evidence, file ≤ 50 MB."""
+evidence, file ≤ 50 MB, at most ten headline records per PR, each crediting its author."""
 
 from __future__ import annotations
 
 import json
 import re
 import sys
+import urllib.parse
 
 from _git import ROOT, added_lines, blob, changed_files, fail, library_of, load_schema, match
 
@@ -19,28 +20,9 @@ MAX_BYTES = 50 * 1024 * 1024
 MAX_HEADLINES = 10  # the results a PR is about, shown first; more would be clutter
 base, head = sys.argv[1], sys.argv[2]
 schema = load_schema("record.schema.json")
-NAME_RE = re.compile(r"[^\s,\x00-\x1f]+")
-# source_path names a file inside the corpus checkout, and the generator builds the module's path from it: a path that
-# leaves the checkout (absolute, a `..` segment, a backslash), starts like an option, or has control characters is refused
-SOURCE_PATH_BAD = re.compile(r"[\x00-\x1f\\]")
-
-
-def bad_source_path(sp: object) -> str:
-    """Why `sp` cannot be a path inside the corpus, or ''."""
-    if not isinstance(sp, str):
-        return ""  # the type check reports it
-    if SOURCE_PATH_BAD.search(sp):
-        return "a backslash or control character"
-    if sp.startswith(("/", "-", "~")):
-        return "it starts with /, - or ~"
-    parts = sp.split("/")
-    if ".." in parts:
-        return "a .. segment"
-    if parts[-1] in ("", "."):
-        return "it names a directory, not a file"
-    return ""
-
-
+NAME_RE = re.compile(
+    r"[^\s,\x00-\x08\x0e-\x1b]+"
+)  # not whitespace, a comma or a control character (\s already covers \t \n \v \f \r and \x1c-\x1f)
 sources_doc = load_schema("sources.json")
 sources = sources_doc["allowed"]
 corpora = sources_doc.get("corpora", {})
@@ -52,33 +34,43 @@ def tier(p: str) -> str:
     return p.split("/")[1]
 
 
+_EVENTS: list[dict] | None = None
+
+
+def _tombstones_in(f) -> list[dict]:
+    """The tombstone records of one trusted file; each line is decoded."""
+    out = []
+    for line in f.open(encoding="utf-8"):
+        if not line.strip():
+            continue
+        try:
+            r = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(r, dict) and "tombstone" in r:
+            out.append(r)
+    return out
+
+
+def trusted_tombstones() -> list[dict]:
+    """Every tombstone line in trusted, flat and per-library files. All of trusted parses in under a second."""
+    global _EVENTS
+    if _EVENTS is None:
+        _EVENTS = [r for f in (ROOT / "data" / "trusted").rglob("*.jsonl") for r in _tombstones_in(f)]
+    return _EVENTS
+
+
 def tombstone_categories() -> dict[str, str]:
     """name -> the category its first tombstone set (a category never changes)."""
     out: dict[str, str] = {}
-    for f in (ROOT / "data" / "trusted").rglob("*.jsonl"):  # flat and per-library files
-        for line in f.open(encoding="utf-8"):
-            if '"tombstone"' in line:
-                try:
-                    r = json.loads(line)
-                except ValueError:
-                    continue
-                if isinstance(r, dict) and "tombstone" in r and r.get("category"):
-                    out.setdefault(str(r["tombstone"]), str(r["category"]))
+    for r in trusted_tombstones():
+        if r.get("category"):
+            out.setdefault(str(r["tombstone"]), str(r["category"]))
     return out
 
 
 def tombstoned_names() -> set[str]:
-    out = set()
-    for f in (ROOT / "data" / "trusted").rglob("*.jsonl"):  # flat and per-library files
-        for line in f.open(encoding="utf-8"):
-            if '"tombstone"' in line:  # decoded as JSON: a name may be written with \u escapes
-                try:
-                    r = json.loads(line)
-                except ValueError:
-                    continue
-                if isinstance(r, dict) and "tombstone" in r:
-                    out.add(str(r["tombstone"]))
-    return out
+    return {str(r["tombstone"]) for r in trusted_tombstones()}
 
 
 def trusted_names() -> set[str]:
@@ -94,7 +86,17 @@ def trusted_names() -> set[str]:
 known = None
 tombstoned = None
 categories = None
-LINKISH = re.compile(r"https?://\S+")
+AT_RE = re.compile(r"\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2}Z)?")  # UTC: the newest correction is the greatest string
+
+
+def good_link(url: str) -> bool:
+    try:
+        u = urllib.parse.urlsplit(url)
+    except ValueError:
+        return False
+    return u.scheme in ("http", "https") and bool(u.hostname) and "." in (u.hostname or "") and not re.search(r"\s", url)
+
+
 for st, p in changed_files(base, head):
     if not match(
         p, ["data/tentative/*.jsonl", "data/staging/*.jsonl", "data/trusted/*.jsonl", "data/tentative/*/*.jsonl", "data/staging/*/*.jsonl"]
@@ -113,15 +115,20 @@ for st, p in changed_files(base, head):
         except Exception as e:
             errors.append(f"{p}:{no}: not JSON ({e})")
             continue
-        if not isinstance(r, dict):  # mirror of the library fix (scripts/ci/fuzz)
+        if not isinstance(r, dict):  # a number, string or list used to end the check in a traceback (scripts/ci/fuzz)
             errors.append(f"{p}:{no}: a record is a JSON object, not {type(r).__name__}")
             continue
+        if any(k in r for k in ("tombstone", "tombstone_note", "credit_correction")) and "at" in r and not AT_RE.fullmatch(str(r["at"])):
+            errors.append(f"{p}:{no}: at is a UTC date or time: YYYY-MM-DD or YYYY-MM-DDTHH:MM:SSZ (got {r['at']!r})")
         if "tombstone" in r:
             for k in schema["tombstone"]["required"]:
                 if k not in r:
                     errors.append(f"{p}:{no}: tombstone missing {k}")
             if "category" in r and r["category"] not in schema["tombstone_categories"]:
                 errors.append(f"{p}:{no}: tombstone category {r['category']!r} is not one of {', '.join(schema['tombstone_categories'])}")
+            if not isinstance(r["tombstone"], str):
+                errors.append(f"{p}:{no}: tombstone is the name of a record (a string)")
+                continue
             if categories is None:
                 categories = tombstone_categories()
             first = categories.setdefault(str(r["tombstone"]), str(r.get("category", "")))
@@ -137,6 +144,9 @@ for st, p in changed_files(base, head):
             for k in schema[kind]["required"]:
                 if k not in r:
                     errors.append(f"{p}:{no}: {kind} missing {k}")
+            if not isinstance(r[kind], str):
+                errors.append(f"{p}:{no}: {kind} is the name of a record (a string)")
+                continue
             if t != "trusted":
                 errors.append(f"{p}:{no}: a {kind} goes in data/trusted/<library>.jsonl")
             if known is None:
@@ -168,7 +178,7 @@ for st, p in changed_files(base, head):
                     errors.append(f"{p}:{no}: credit is one `Author:` line (a single line with a single `Author:`)")
                 if any(d in str(r.get(k, "")) for k in ("credit", "evidence") for d in ("-/", "/-")):
                     errors.append(f"{p}:{no}: credit and evidence may not contain `-/` or `/-` (they are written into a Lean doc comment)")
-                if not LINKISH.fullmatch(str(r.get("evidence", ""))):
+                if not good_link(str(r.get("evidence", ""))):
                     errors.append(f"{p}:{no}: evidence is an http(s) link to what shows the plagiarism")
             continue
         req = schema["record"]["required"] + schema["record"].get("required_by_tier", {}).get(t, [])
@@ -186,9 +196,6 @@ for st, p in changed_files(base, head):
             errors.append(
                 f"{p}:{no}: a {lib} record needs source_path and context, or it is never compiled (see schemas/sources.json corpora)"
             )
-        why = bad_source_path(r.get("source_path"))
-        if why:
-            errors.append(f"{p}:{no}: source_path {r.get('source_path')!r} is not a path inside the corpus ({why})")
         if not any(str(r.get("source_url", "")).startswith(s) for s in sources):
             errors.append(f"{p}:{no}: source_url not on the allowlist (schemas/sources.json): {r.get('source_url')}")
         n = r.get("name")

@@ -1,5 +1,5 @@
 {
-  "$comment": "One JSON object per line in data/<tier>/<library>.jsonl. Enforced by scripts/ci/validate_records.py on added lines only. Staging records of a library with a corpus (schemas/sources.json) must carry source_path and context. Contributors add one file per PR: data/staging/<library>/<anything>.jsonl.",
+  "$comment": "One JSON object per line in data/<tier>/<library>.jsonl. Enforced by scripts/ci/validate_records.py on added lines only. Staging records of a library with a corpus (schemas/sources.json) must carry source_path and context. Contributors add one file per PR: data/staging/<library>/<anything>.jsonl. `upstream` (optional): for a record from an aggregating source (Lean Pool), the repository the project was imported from, at its commit. `headline` (optional, true): one of the at most ten results a PR is about; it carries an `Author:` credit in its statement.",
   "record": {
     "required": [
       "name",
@@ -23,6 +23,7 @@
       "promoted_at",
       "added_by",
       "build_error",
+      "upstream",
       "headline"
     ],
     "types": {
@@ -38,6 +39,7 @@
       "staged_at": "string",
       "promoted_at": "string",
       "added_by": "string",
+      "upstream": "string",
       "headline": "boolean"
     }
   },
@@ -59,6 +61,7 @@
     "other"
   ],
   "tombstone_note": {
+    "$comment": "Where to look instead of a retracted record ({\"tombstone_note\": \"<name>\", \"note\": \"...\", \"see\": [...]}). Unlike the tombstone it can change as the library changes: append a new one and the newest wins; the old ones stay as history. `see`: tengoku names or http(s) links.",
     "required": [
       "tombstone_note",
       "note",
@@ -70,6 +73,7 @@
     ]
   },
   "credit_correction": {
+    "$comment": "Plagiarism is the one case where credit changes, and only with evidence: {\"credit_correction\": \"<name>\", \"credit\": \"Author: ...\", \"evidence\": \"https://...\"}. The record is never edited; the generated module shows the corrected credit and the evidence. The newest correction wins.",
     "required": [
       "credit_correction",
       "credit",
