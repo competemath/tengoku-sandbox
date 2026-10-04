@@ -7,9 +7,6 @@ module
 
 public import Tengoku.FormalMathfin.MathFin.BlackScholes.AmericanPut.Stopping.HeatBoundaryKernel
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-! # Smooth causal extension of the heat boundary kernel
 

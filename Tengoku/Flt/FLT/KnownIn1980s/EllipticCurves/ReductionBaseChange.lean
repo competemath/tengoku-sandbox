@@ -6,9 +6,6 @@ Authors: Kevin Buzzard, William Coram
 module
 
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 -- the minimality criterion `WeierstrassCurve.isMinimal_of_valuation_c₄_eq_one` (step 2)
 public import Tengoku.Flt.FLT.Mathlib.AlgebraicGeometry.EllipticCurve.Reduction
 -- the valuation-transfer lemmas `ValuativeExtension.valuation_algebraMap_{le,lt,eq}_one`

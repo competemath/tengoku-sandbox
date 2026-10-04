@@ -7,9 +7,6 @@ Authors: Daniel Liao
 module
 
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 public import Tengoku.Compfiles.Compfiles.Usa1981P5
 
 @[expose] public section

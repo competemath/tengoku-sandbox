@@ -6,9 +6,6 @@ Authors: Raphael Coelho
 module
 
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-!
 # Path-level reflection identity for ±1 walks (André 1887, algebraic core)

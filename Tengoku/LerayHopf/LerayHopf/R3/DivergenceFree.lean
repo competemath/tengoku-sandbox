@@ -1,8 +1,5 @@
 import Tengoku.LerayHopf.LerayHopf.R3.Domain
 import Tengoku
-import Tengoku.Std
-import Tengoku.Tactic.Aesop
-import Tengoku.Meta.Qq
 -- WL-1: SeparableSpace L2VF_R3 — via Lp.SecondCountableTopology
 --   (IsSeparable volume from CountablyGenerated+SFinite; SeparableSpace EuclideanSpace from SecondCountableTopology)
 -- WL-4: L2Sigma_R3_weaklyClosed — Mazur: closed convex set is weakly closed

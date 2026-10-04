@@ -5,9 +5,6 @@ Authors: Chris Birkbeck
 -/
 import Tengoku.Leanmodularforms.LeanModularForms.ForMathlib.Residue
 import Tengoku
-import Tengoku.Std
-import Tengoku.Tactic.Aesop
-import Tengoku.Meta.Qq
 
 /-!
 # Residue via Circle Integral

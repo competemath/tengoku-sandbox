@@ -8,7 +8,7 @@ module
 
 import all Init.Data.Vector.Algebra
 
-public import Tengoku.Std.Data.Vector.Lemmas
+public import Tengoku.Seed.Std.Data.Vector.Lemmas
 public import Tengoku.Vcvio.LatticeCrypto.Ring.Kernel
 
 /-!

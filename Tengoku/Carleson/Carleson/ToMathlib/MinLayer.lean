@@ -6,9 +6,6 @@ Authors: Jeremy Tan, Joachim Breitner
 module
 
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-!
 # Minimal and maximal layers of a set

@@ -6,9 +6,6 @@ Authors: Vitalik Buterin, Nicolas Consigny, Alexander Hicks
 
 module
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-!
 # WOTS+ Checksum Incomparability

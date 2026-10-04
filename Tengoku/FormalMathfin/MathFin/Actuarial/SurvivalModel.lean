@@ -13,9 +13,6 @@ here with thanks and with the author's kind permission.
 module
 
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-!
 # The survival model: age-at-death random variable and conditional survival

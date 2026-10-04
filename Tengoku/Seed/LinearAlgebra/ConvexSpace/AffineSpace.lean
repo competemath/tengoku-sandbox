@@ -1,0 +1,10 @@
+module
+
+public import Tengoku.Seed.Algebra.Order.Ring.Defs
+public import Tengoku.Seed.Algebra.Order.Field.Basic
+public import Tengoku.Seed.Data.Finset.Attr
+public import Tengoku.Seed.Tactic.NormNum.Inv
+public import Tengoku.Seed.Tactic.NormNum.Pow
+public import Tengoku.Seed.Tactic.SetLike
+
+deprecated_module (since := "2026-05-11")

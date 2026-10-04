@@ -7,9 +7,6 @@ module
 
 public import Tengoku.Physlib.Physlib.Units.WithDim.Basic
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 /-!
 
 # Dimensional invariance of fderiv

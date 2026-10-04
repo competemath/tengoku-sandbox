@@ -5,9 +5,6 @@ Authors: Joseph Myers
 -/
 import Tengoku.Aperiodicmonotiles.AM.Mathlib.Combinatorics.Tiling.Function.Basic
 import Tengoku
-import Tengoku.Std
-import Tengoku.Tactic.Aesop
-import Tengoku.Meta.Qq
 
 /-!
 # Union properties for tiles

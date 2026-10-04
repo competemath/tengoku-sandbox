@@ -6,9 +6,6 @@ Authors: Zachary Feng, Y. Samanda Zhang
 module
 
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-!
 # Irreducible ↔ absolutely irreducible, given a one-dimensional fixed space: proofs

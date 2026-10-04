@@ -7,9 +7,6 @@ module
 
 public import Tengoku.BrownianMotion.BrownianMotion.Choquet.CompactSystem
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-!
 # Analytic sets in the sense of a paved space

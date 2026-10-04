@@ -6,9 +6,6 @@ import Tengoku.Leanmodularforms.LeanModularForms.ForMathlib.DixonDef
 import Tengoku.Leanmodularforms.LeanModularForms.ForMathlib.DslopeIntegral
 import Tengoku.Leanmodularforms.LeanModularForms.ForMathlib.NullHomologous
 import Tengoku
-import Tengoku.Std
-import Tengoku.Tactic.Aesop
-import Tengoku.Meta.Qq
 
 /-!
 # Dixon Function Differentiability

@@ -7,9 +7,6 @@ Authors: Gian Cordana Sanjaya
 module
 public import Tengoku.Imoshortlist.IMOSLLean4.Extra.CharTwo.Defs
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-!
 # Characteristic two monoids and homomorphisms

@@ -4,9 +4,6 @@ Released under Apache 2.0 license as described in the file LICENSE.
 Authors:
 -/
 import Tengoku
-import Tengoku.Std
-import Tengoku.Tactic.Aesop
-import Tengoku.Meta.Qq
 import Tengoku.Leanmodularforms.LeanModularForms.ForMathlib.SegmentFTC
 import Tengoku.Leanmodularforms.LeanModularForms.ForMathlib.TrigLemmas
 import Tengoku.Leanmodularforms.LeanModularForms.ForMathlib.ValenceFormula.Boundary.Smooth

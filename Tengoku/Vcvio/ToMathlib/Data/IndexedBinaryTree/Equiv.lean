@@ -8,9 +8,6 @@ module
 
 public import Tengoku.Vcvio.ToMathlib.Data.IndexedBinaryTree.Basic
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-!
 # Equivalences

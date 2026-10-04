@@ -3,9 +3,6 @@ Authors: Anne Baanen, Alain Chavarri Villarello
 -/
 
 import Tengoku
-import Tengoku.Std
-import Tengoku.Tactic.Aesop
-import Tengoku.Meta.Qq
 
 /-!
 # Relation between the polynomial discriminant and algebra discriminant

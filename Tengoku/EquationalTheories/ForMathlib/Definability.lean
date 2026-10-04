@@ -1,9 +1,9 @@
 -- Tengoku.EquationalTheories.ForMathlib.Definability: verified translations of equational_theories/ForMathlib/Definability.lean (328 theorems)
 import Tengoku
-import Tengoku.ModelTheory.Definability
-import Tengoku.Data.Rel
-import Tengoku.Data.Set.Card
-import Tengoku.Algebra.BigOperators.Fin
+import Tengoku.Seed.ModelTheory.Definability
+import Tengoku.Seed.Data.Rel
+import Tengoku.Seed.Data.Set.Card
+import Tengoku.Seed.Algebra.BigOperators.Fin
 import Tengoku.EquationalTheories.Deps.Equations
 import Tengoku.EquationalTheories.Deps.Magma
 

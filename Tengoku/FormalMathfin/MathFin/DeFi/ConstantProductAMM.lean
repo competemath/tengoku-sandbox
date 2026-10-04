@@ -35,9 +35,6 @@ Released under Apache 2.0 license as described in the file LICENSE.
 module
 
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-!
 # Constant-product AMM (phase 38, after Pusceddu-Bartoletti 2024)

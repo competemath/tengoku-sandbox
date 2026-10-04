@@ -6,9 +6,6 @@ Authors: Quang Dao, Devon Tuma
 module
 
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 public import Tengoku.Vcvio.ToMathlib.Control.Monad.Transformer
 public import Tengoku.Vcvio.ToMathlib.ProbabilityTheory.SPMF
 

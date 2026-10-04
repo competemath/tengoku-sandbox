@@ -6,9 +6,6 @@ Authors: Chris Birkbeck
 import Tengoku.Leanmodularforms.LeanModularForms.ForMathlib.ContourIntegral.PVSplit
 import Tengoku.Leanmodularforms.LeanModularForms.ForMathlib.ContourIntegral.SegmentFTC
 import Tengoku
-import Tengoku.Std
-import Tengoku.Tactic.Aesop
-import Tengoku.Meta.Qq
 
 /-!
 # Crossing Limit Theorem

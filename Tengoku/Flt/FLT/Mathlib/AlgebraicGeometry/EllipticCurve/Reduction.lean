@@ -6,9 +6,6 @@ Authors: Kevin Buzzard, William Coram, Claude
 module
 
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 public import Tengoku.Flt.FLT.Mathlib.Algebra.Polynomial.QuadraticDiscriminant
 public import Tengoku.Flt.FLT.Mathlib.AlgebraicGeometry.EllipticCurve.Weierstrass
 public import Tengoku.Flt.FLT.Mathlib.RingTheory.Valuation.Discrete.IsDiscreteValuationRing

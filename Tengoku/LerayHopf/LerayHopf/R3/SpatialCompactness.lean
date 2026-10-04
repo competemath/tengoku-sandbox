@@ -1,7 +1,7 @@
 import Tengoku.LerayHopf.LerayHopf.R3.Regularity
-import Tengoku.Topology.Sequences
-import Tengoku.MeasureTheory.Function.L2Space
-import Tengoku.MeasureTheory.Integral.Bochner.Set
+import Tengoku.Seed.Topology.Sequences
+import Tengoku.Seed.MeasureTheory.Function.L2Space
+import Tengoku.Seed.MeasureTheory.Integral.Bochner.Set
 
 namespace LerayHopf
 open MeasureTheory Filter Topology Metric

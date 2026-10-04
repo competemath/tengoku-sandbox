@@ -5,9 +5,6 @@ Authors: Ching-Tsun Chou
 -/
 
 import Tengoku
-import Tengoku.Std
-import Tengoku.Tactic.Aesop
-import Tengoku.Meta.Qq
 
 /-!
 This file proves a Ramsey theorem on infinite graphs.

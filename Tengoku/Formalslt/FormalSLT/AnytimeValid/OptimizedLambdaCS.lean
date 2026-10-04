@@ -5,9 +5,6 @@ Authors: Robby Sneiderman
 -/
 import Tengoku.Formalslt.FormalSLT.AnytimeValid.MixtureCS
 import Tengoku
-import Tengoku.Std
-import Tengoku.Tactic.Aesop
-import Tengoku.Meta.Qq
 
 /-!
 # Finite-grid sub-Gamma time-uniform boundaries and a pointwise optimized-tilt bridge

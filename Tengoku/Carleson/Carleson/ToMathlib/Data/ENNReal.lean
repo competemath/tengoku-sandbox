@@ -1,9 +1,6 @@
 module
 
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 -- Upstreaming status: lemmas seem useful; proofs may need some polish.
 -- At least three or four distinct PRs.

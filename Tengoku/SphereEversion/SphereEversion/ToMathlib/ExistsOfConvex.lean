@@ -1,8 +1,5 @@
 import Tengoku.SphereEversion.SphereEversion.ToMathlib.Partition
 import Tengoku
-import Tengoku.Std
-import Tengoku.Tactic.Aesop
-import Tengoku.Meta.Qq
 
 noncomputable section
 

@@ -7,9 +7,6 @@ module
 
 public import Tengoku.Physlib.Physlib.Mathematics.List.InsertIdx
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 /-!
 
 # Field statistics

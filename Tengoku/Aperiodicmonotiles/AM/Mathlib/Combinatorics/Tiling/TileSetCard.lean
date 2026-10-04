@@ -5,9 +5,6 @@ Authors: Joseph Myers
 -/
 import Tengoku.Aperiodicmonotiles.AM.Mathlib.Combinatorics.Tiling.TileSet
 import Tengoku
-import Tengoku.Std
-import Tengoku.Tactic.Aesop
-import Tengoku.Meta.Qq
 
 /-!
 # Cardinality in tilings

@@ -2,10 +2,10 @@
 import Tengoku
 import Tengoku.EquationalTheories.Deps.Magma
 import Lean
-import Tengoku.Data.FunLike.Basic
-import Tengoku.Logic.Equiv.Basic
-import Tengoku.Data.List.NodupEquivFin
-import Tengoku.Data.Set.Defs
+import Tengoku.Seed.Data.FunLike.Basic
+import Tengoku.Seed.Logic.Equiv.Basic
+import Tengoku.Seed.Data.List.NodupEquivFin
+import Tengoku.Seed.Data.Set.Defs
 import Lean.Elab.Exception
 import Lean.Elab.Declaration
 import Lean.Util.CollectAxioms
@@ -13,10 +13,10 @@ import Lean.Environment
 import Lean.Meta.Basic
 import Lean.Util
 import Tengoku.EquationalTheories.Deps.MemoFinOp
-import Tengoku.Data.Finite.Prod
-import Tengoku.Data.Fintype.Perm
-import Tengoku.Tactic.Linarith
-import Tengoku.Tactic.NormNum
+import Tengoku.Seed.Data.Finite.Prod
+import Tengoku.Seed.Data.Fintype.Perm
+import Tengoku.Seed.Tactic.Linarith
+import Tengoku.Seed.Tactic.NormNum
 import Tengoku.EquationalTheories.Deps.Equations
 
 set_option linter.all false

@@ -7,9 +7,6 @@ module
 
 public import Tengoku.FormalMathfin.MathFin.BlackScholes.AmericanPut.Stopping.CoupledHeatBoundary
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-! # Two-sided heat boundary correction on a finite interval 
 ## Result

@@ -6,10 +6,7 @@ Authors: Joseph Tooby-Smith
 module
 public import Tengoku.Physlib.Physlib.Mathematics.Fin
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
-import all Tengoku.Data.List.Sort
+import all Tengoku.Seed.Data.List.Sort
 /-!
 # List lemmas
 

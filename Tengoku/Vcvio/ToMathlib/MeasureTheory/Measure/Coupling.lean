@@ -7,9 +7,6 @@ Authors: Devon Tuma, Quang Dao
 module
 
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-!
 # Couplings of measures

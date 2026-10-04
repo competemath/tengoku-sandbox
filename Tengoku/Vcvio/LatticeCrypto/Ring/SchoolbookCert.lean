@@ -7,9 +7,6 @@ Authors: Quang Dao
 module
 public import Tengoku.Vcvio.LatticeCrypto.Ring.VectorBackend
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-!
 # Schoolbook Negacyclic Multiplication Soundness

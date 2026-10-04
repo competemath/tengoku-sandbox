@@ -8,13 +8,13 @@ import Lean.Util.CollectAxioms
 import Lean.Environment
 import Lean.Meta.Basic
 import Lean.Util
-import Tengoku.Data.FunLike.Basic
-import Tengoku.Logic.Equiv.Basic
-import Tengoku.Data.List.NodupEquivFin
-import Tengoku.Data.Set.Defs
-import Tengoku.Algebra.Order.Ring.Nat
-import Tengoku.Logic.Denumerable
-import Tengoku.Tactic.Recall
+import Tengoku.Seed.Data.FunLike.Basic
+import Tengoku.Seed.Logic.Equiv.Basic
+import Tengoku.Seed.Data.List.NodupEquivFin
+import Tengoku.Seed.Data.Set.Defs
+import Tengoku.Seed.Algebra.Order.Ring.Nat
+import Tengoku.Seed.Logic.Denumerable
+import Tengoku.Seed.Tactic.Recall
 import Tengoku.EquationalTheories.Deps.Equations
 
 set_option linter.all false

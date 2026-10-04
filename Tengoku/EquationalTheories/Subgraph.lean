@@ -1,18 +1,18 @@
 -- Tengoku.EquationalTheories.Subgraph: verified translations of equational_theories/Subgraph.lean (35 theorems)
-import Tengoku.Tactic
+import Tengoku.Seed.Tactic
 import Lean.Elab.Exception
 import Lean.Elab.Declaration
 import Lean.Util.CollectAxioms
 import Lean.Environment
 import Lean.Meta.Basic
 import Lean.Util
-import Tengoku.Data.FunLike.Basic
-import Tengoku.Logic.Equiv.Basic
+import Tengoku.Seed.Data.FunLike.Basic
+import Tengoku.Seed.Logic.Equiv.Basic
 import Tengoku.EquationalTheories.Deps.Magma
-import Tengoku.Data.List.NodupEquivFin
-import Tengoku.Data.Set.Defs
+import Tengoku.Seed.Data.List.NodupEquivFin
+import Tengoku.Seed.Data.Set.Defs
 import Lean
-import Tengoku.Logic.Basic
+import Tengoku.Seed.Logic.Basic
 import Tengoku.EquationalTheories.Deps.Equations
 
 set_option linter.all false

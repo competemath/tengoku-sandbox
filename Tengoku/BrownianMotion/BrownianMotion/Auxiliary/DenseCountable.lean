@@ -6,9 +6,6 @@ Authors: Rémy Degenne
 module
 
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-!
 # A dense countable subset of a second-countable topological space

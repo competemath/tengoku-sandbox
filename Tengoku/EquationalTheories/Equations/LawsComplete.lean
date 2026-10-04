@@ -1,11 +1,11 @@
 -- Tengoku.EquationalTheories.Equations.LawsComplete: verified translations of equational_theories/Equations/LawsComplete.lean (7 theorems)
 import Tengoku
 import Lean.ToExpr
-import Tengoku.Data.FunLike.Basic
-import Tengoku.Logic.Equiv.Basic
+import Tengoku.Seed.Data.FunLike.Basic
+import Tengoku.Seed.Logic.Equiv.Basic
 import Tengoku.EquationalTheories.Deps.Magma
-import Tengoku.Data.List.NodupEquivFin
-import Tengoku.Data.Set.Defs
+import Tengoku.Seed.Data.List.NodupEquivFin
+import Tengoku.Seed.Data.Set.Defs
 import Lean
 import Lean.Elab.Exception
 import Lean.Elab.Declaration
@@ -13,8 +13,8 @@ import Lean.Util.CollectAxioms
 import Lean.Environment
 import Lean.Meta.Basic
 import Lean.Util
-import Tengoku.Std.Data.Array.Lemmas
-import Tengoku.Tactic.Cases
+import Tengoku.Seed.Std.Data.Array.Lemmas
+import Tengoku.Seed.Tactic.Cases
 import Tengoku.EquationalTheories.Deps.Equations
 
 set_option linter.all false

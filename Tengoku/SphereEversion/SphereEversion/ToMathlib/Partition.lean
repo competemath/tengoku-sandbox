@@ -1,7 +1,4 @@
 import Tengoku
-import Tengoku.Std
-import Tengoku.Tactic.Aesop
-import Tengoku.Meta.Qq
 import Tengoku.SphereEversion.SphereEversion.ToMathlib.Analysis.Convex.Basic
 import Tengoku.SphereEversion.SphereEversion.ToMathlib.Geometry.Manifold.Algebra.SmoothGerm
 

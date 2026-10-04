@@ -9,9 +9,6 @@ public import Tengoku.Vcvio.ToMathlib.Data.Vector.Induction
 public import Tengoku.Vcvio.ToMathlib.Data.Vector.ListVector
 public import Tengoku.Vcvio.ToMathlib.Logic.Basic
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-!
 # Lemmas about monadic operations on `Vector`

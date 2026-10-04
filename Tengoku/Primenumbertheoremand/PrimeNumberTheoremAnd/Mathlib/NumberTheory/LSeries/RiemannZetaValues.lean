@@ -6,9 +6,6 @@ Authors: Matteo Cipollina
 module
 
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-!
 ## Special values of the completed Riemann zeta function

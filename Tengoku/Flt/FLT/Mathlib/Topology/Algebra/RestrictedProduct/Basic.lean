@@ -6,9 +6,6 @@ Authors: Matthew Jasper, Kevin Buzzard, Ruben Van de Velde
 module
 
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-!
 # Basic

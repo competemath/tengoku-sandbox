@@ -3,9 +3,6 @@ module
 public import Tengoku.BrownianMotion.BrownianMotion.Auxiliary.Algebra
 public import Tengoku.BrownianMotion.BrownianMotion.Auxiliary.Metric
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-!
 # Measure theory lemmas to be upstreamed to Mathlib

@@ -6,9 +6,6 @@ Authors: Etienne Marion
 module
 
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-!
 # Gaussian processes

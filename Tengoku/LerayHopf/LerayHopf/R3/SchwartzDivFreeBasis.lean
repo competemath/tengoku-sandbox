@@ -1,16 +1,16 @@
 import Tengoku.LerayHopf.LerayHopf.R3.GalerkinScheme
 import Tengoku.LerayHopf.LerayHopf.R3.CurlSchwartzConstruction
   -- CurlSchwartzDense, curlSchwartzL2_projComponent (issue #113 PR-1: split out, self-contained)
-import Tengoku.Analysis.Distribution.SchwartzSpace.Basic
-import Tengoku.Analysis.Distribution.SchwartzSpace.Deriv
-import Tengoku.MeasureTheory.Measure.SeparableMeasure
-import Tengoku.Topology.Bases
+import Tengoku.Seed.Analysis.Distribution.SchwartzSpace.Basic
+import Tengoku.Seed.Analysis.Distribution.SchwartzSpace.Deriv
+import Tengoku.Seed.MeasureTheory.Measure.SeparableMeasure
+import Tengoku.Seed.Topology.Bases
 -- A4 (`div (curl ψ) = 0`) needs symmetry of mixed second partials of Schwartz functions
 -- (Clairaut), supplied by `ContDiffAt.isSymmSndFDerivAt`.  This import is REQUIRED for the
 -- must-prove deliverables A4/C1 to be genuinely sorry-free (DoD: `#print axioms` of C1 must
 -- not contain `sorryAx`).  Flagged for lean-coder/Codex: import addition outside the prover's
 -- usual edit boundary, but unavoidable for the sorry-free div-of-curl=0 proof.
-import Tengoku.Analysis.Calculus.FDeriv.Symmetric
+import Tengoku.Seed.Analysis.Calculus.FDeriv.Symmetric
 
 namespace LerayHopf
 open MeasureTheory SchwartzMap LineDeriv TopologicalSpace

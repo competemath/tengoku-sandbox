@@ -8,9 +8,6 @@ module
 public import Tengoku.Flt.FLT.Deformations.ContinuousRepresentation.IsTopologicalModule
 public import Tengoku.Flt.FLT.Deformations.Algebra.InverseLimit.Basic
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-!
 # Topology on inverse limits

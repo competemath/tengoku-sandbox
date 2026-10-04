@@ -1,8 +1,5 @@
 import Tengoku.LerayHopf.LerayHopf.EnergySkeleton
 import Tengoku
-import Tengoku.Std
-import Tengoku.Tactic.Aesop
-import Tengoku.Meta.Qq
 
 /-!
 # Abstract energy-law framework (M4)

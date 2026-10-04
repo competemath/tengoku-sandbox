@@ -1,8 +1,5 @@
 import Tengoku.LerayHopf.LerayHopf.R3.Domain
 import Tengoku
-import Tengoku.Std
-import Tengoku.Tactic.Aesop
-import Tengoku.Meta.Qq
 
 /-!
 # PlancherelKernels — shared gradient–Fourier Plancherel kernels (issue #111 PR-2)

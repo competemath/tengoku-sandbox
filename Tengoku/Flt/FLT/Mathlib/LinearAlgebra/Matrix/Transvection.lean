@@ -6,9 +6,6 @@ Authors: Kevin Buzzard
 module
 
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 /-!
 
 Variant of `Matrix.diagonal_transvection_induction_of_det_ne_zero`

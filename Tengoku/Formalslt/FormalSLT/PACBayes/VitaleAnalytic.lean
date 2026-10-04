@@ -1,9 +1,6 @@
 import Tengoku.Formalslt.FormalSLT.PACBayes.VitaleLemma
 import Tengoku.Formalslt.FormalSLT.PACBayes.GaussianKL
 import Tengoku
-import Tengoku.Std
-import Tengoku.Tactic.Aesop
-import Tengoku.Meta.Qq
 
 /-!
 # Analytic Vitale/Gaussian KL surface

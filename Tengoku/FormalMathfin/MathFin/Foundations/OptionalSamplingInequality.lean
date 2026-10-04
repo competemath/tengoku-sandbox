@@ -6,9 +6,6 @@ Authors: Raphael Coelho
 module
 
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-!
 # Optional sampling inequality for submartingales (bounded stopping times)

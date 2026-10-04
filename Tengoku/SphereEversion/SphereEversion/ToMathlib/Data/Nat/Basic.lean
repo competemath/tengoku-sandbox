@@ -1,7 +1,4 @@
 import Tengoku
-import Tengoku.Std
-import Tengoku.Tactic.Aesop
-import Tengoku.Meta.Qq
 
 -- The next lemma won't be used, it's a warming up exercise for the one below.
 -- It could go to mathlib.

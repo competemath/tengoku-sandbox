@@ -8,9 +8,6 @@ module
 public import Tengoku.AddCombi.AddCombi.Convolution.Finite.Defs
 
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 public section
 

@@ -9,9 +9,6 @@ public import Tengoku.Primenumbertheoremand.PrimeNumberTheoremAnd.Mathlib.Analys
 public import Tengoku.Primenumbertheoremand.PrimeNumberTheoremAnd.Mathlib.Analysis.Complex.ValueDistribution.LogCounting.Growth
 public import Tengoku.Primenumbertheoremand.PrimeNumberTheoremAnd.Mathlib.Analysis.Meromorphic.DivisorHolomorphic
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 public import Tengoku.Primenumbertheoremand.PrimeNumberTheoremAnd.Mathlib.Analysis.SpecialFunctions.Log.Dyadic
 public import Tengoku.Primenumbertheoremand.PrimeNumberTheoremAnd.Mathlib.Analysis.SpecialFunctions.Log.PosLog
 

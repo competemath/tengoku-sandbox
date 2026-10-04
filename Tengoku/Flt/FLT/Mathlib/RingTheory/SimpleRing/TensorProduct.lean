@@ -9,9 +9,6 @@ module
 -- https://github.com/leanprover-community/mathlib4/pull/26377/
 
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-!
 # Tensor product of simple algebras over a field

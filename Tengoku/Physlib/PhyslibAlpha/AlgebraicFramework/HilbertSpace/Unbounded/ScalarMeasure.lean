@@ -7,9 +7,6 @@ module
 
 public import Tengoku.Physlib.PhyslibAlpha.AlgebraicFramework.HilbertSpace.Unbounded.Basic
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-!
 

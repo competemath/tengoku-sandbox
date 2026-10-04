@@ -8,9 +8,6 @@ module
 public import Tengoku.Flt.FLT.AutomorphicForm.GroupTheoryStuff
 public import Tengoku.Flt.FLT.Mathlib.Topology.Algebra.Group.Basic
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-! # Random assortments of API lemmas missing in mathlib. -/
 

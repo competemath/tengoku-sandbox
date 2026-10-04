@@ -6,8 +6,8 @@ Authors: Quang Dao
 module
 
 -- import Mathlib.CategoryTheory.Monad.Basic
-public import Tengoku.Control.Lawful
-public import Tengoku.Std.Control.OptionT
+public import Tengoku.Seed.Control.Lawful
+public import Tengoku.Seed.Std.Control.OptionT
 
 /-!
 # Monad transformers

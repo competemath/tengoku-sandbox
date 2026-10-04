@@ -14,9 +14,6 @@ public import Tengoku.Primenumbertheoremand.PrimeNumberTheoremAnd.Mathlib.Analys
 public import Tengoku.Primenumbertheoremand.PrimeNumberTheoremAnd.Mathlib.Analysis.SpecialFunctions.Pow.Real
 public import Tengoku.Primenumbertheoremand.PrimeNumberTheoremAnd.Mathlib.NumberTheory.LSeries.RiemannZeta
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 public import Tengoku.Primenumbertheoremand.PrimeNumberTheoremAnd.Mathlib.NumberTheory.LSeries.RiemannZetaStripBound
 
 /-!

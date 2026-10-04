@@ -7,9 +7,6 @@ module
 
 public import Tengoku.Carleson.Carleson.ToMathlib.MeasureTheory.Measure.NoAtoms.Defs
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 -- Upstreaming status: Needs significant clean-up (refactoring, code style, extracting lemmas,
 -- moving to proper location etc.)

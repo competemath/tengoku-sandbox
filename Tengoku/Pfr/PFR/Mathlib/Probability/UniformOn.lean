@@ -1,9 +1,6 @@
 module
 
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 public import Tengoku.Pfr.PFR.Mathlib.Data.Set.Card
 
 public section

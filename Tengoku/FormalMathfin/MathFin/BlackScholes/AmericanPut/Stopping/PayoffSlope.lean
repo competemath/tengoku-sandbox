@@ -7,9 +7,6 @@ module
 
 public import Tengoku.FormalMathfin.MathFin.BlackScholes.AmericanPut.Boundary.Problem
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-! # Bounded logarithmic put-payoff difference quotients
 

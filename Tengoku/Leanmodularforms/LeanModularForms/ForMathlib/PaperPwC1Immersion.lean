@@ -4,9 +4,6 @@ Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Chris Birkbeck
 -/
 import Tengoku
-import Tengoku.Std
-import Tengoku.Tactic.Aesop
-import Tengoku.Meta.Qq
 import Tengoku.Leanmodularforms.LeanModularForms.ForMathlib.PiecewiseC1Path
 import Tengoku.Leanmodularforms.LeanModularForms.ForMathlib.PiecewiseC1PathOn
 

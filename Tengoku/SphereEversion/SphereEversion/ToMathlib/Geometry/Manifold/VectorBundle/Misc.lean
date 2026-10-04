@@ -6,9 +6,6 @@ Authors: Floris van Doorn
 ! This file was ported from Lean 3 source module to_mathlib.geometry.manifold.vector_bundle.misc
 -/
 import Tengoku
-import Tengoku.Std
-import Tengoku.Tactic.Aesop
-import Tengoku.Meta.Qq
 
 /-!
 # Various operations on and properties of smooth vector bundles

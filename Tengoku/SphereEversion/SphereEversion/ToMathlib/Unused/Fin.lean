@@ -1,7 +1,4 @@
 import Tengoku
-import Tengoku.Std
-import Tengoku.Tactic.Aesop
-import Tengoku.Meta.Qq
 
 -- not directly used
 theorem Fin.coe_succ_le_iff_le {n : ℕ} {j k : Fin n} : j.castSucc ≤ k.castSucc ↔ j ≤ k :=

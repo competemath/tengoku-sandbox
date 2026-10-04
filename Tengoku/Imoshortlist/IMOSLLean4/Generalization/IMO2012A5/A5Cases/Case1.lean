@@ -8,9 +8,6 @@ module
 public import Tengoku.Imoshortlist.IMOSLLean4.Generalization.IMO2012A5.A5Answers.SubOneMap
 public import Tengoku.Imoshortlist.IMOSLLean4.Generalization.IMO2012A5.A5Answers.F3Map1
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-!
 # IMO 2012 A5 (Case 1: `f(-1) ≠ 0`)

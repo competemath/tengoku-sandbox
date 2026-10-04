@@ -8,9 +8,6 @@ module
 
 public import Tengoku.Vcvio.ToMathlib.Data.ENNReal.AbsDiff
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-!
 # Total variation distance for subprobability measures

@@ -1,8 +1,8 @@
 import Tengoku.LerayHopf.LerayHopf.R3.RellichBall
-import Tengoku.Analysis.Convolution
-import Tengoku.Analysis.Calculus.BumpFunction.Normed
-import Tengoku.Topology.UniformSpace.Cauchy
-import Tengoku.MeasureTheory.Function.LpSpace.ContinuousCompMeasurePreserving
+import Tengoku.Seed.Analysis.Convolution
+import Tengoku.Seed.Analysis.Calculus.BumpFunction.Normed
+import Tengoku.Seed.Topology.UniformSpace.Cauchy
+import Tengoku.Seed.MeasureTheory.Function.LpSpace.ContinuousCompMeasurePreserving
 
 namespace LerayHopf
 open MeasureTheory Filter Topology Metric TemperedDistribution

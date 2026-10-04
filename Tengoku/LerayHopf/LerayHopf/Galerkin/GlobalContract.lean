@@ -22,9 +22,6 @@ plus the interim live pins in `scripts/check-axioms-live.sh`.
 -/
 import Tengoku.LerayHopf.LerayHopf.Galerkin.SolutionBundles
 import Tengoku
-import Tengoku.Std
-import Tengoku.Tactic.Aesop
-import Tengoku.Meta.Qq
 
 open MeasureTheory Filter Topology Set
 

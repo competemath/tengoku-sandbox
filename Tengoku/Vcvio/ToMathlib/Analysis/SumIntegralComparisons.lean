@@ -6,9 +6,6 @@ Authors: Oleksandr Vovkotrub
 
 module
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-!
 # Improper Integrals Of One-Sided Monotone Functions Versus Unit-Grid Sums

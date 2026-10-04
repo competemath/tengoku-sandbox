@@ -1,7 +1,7 @@
 -- Tengoku.EquationalTheories.Mathlib.Order.Greedy: verified translations of equational_theories/Mathlib/Order/Greedy.lean (2 theorems)
 import Tengoku
-import Tengoku.Order.Preorder.Chain
-import Tengoku.Data.Set.Countable
+import Tengoku.Seed.Order.Preorder.Chain
+import Tengoku.Seed.Data.Set.Countable
 import Tengoku.EquationalTheories.Deps.Equations
 import Tengoku.EquationalTheories.Deps.Magma
 

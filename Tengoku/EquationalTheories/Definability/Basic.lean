@@ -1,13 +1,13 @@
 -- Tengoku.EquationalTheories.Definability.Basic: verified translations of equational_theories/Definability/Basic.lean (2 theorems)
-import Tengoku.ModelTheory.Definability
-import Tengoku.Data.Rel
-import Tengoku.Data.Set.Card
-import Tengoku.Algebra.BigOperators.Fin
-import Tengoku.Data.FunLike.Basic
-import Tengoku.Logic.Equiv.Basic
+import Tengoku.Seed.ModelTheory.Definability
+import Tengoku.Seed.Data.Rel
+import Tengoku.Seed.Data.Set.Card
+import Tengoku.Seed.Algebra.BigOperators.Fin
+import Tengoku.Seed.Data.FunLike.Basic
+import Tengoku.Seed.Logic.Equiv.Basic
 import Tengoku.EquationalTheories.Deps.Magma
-import Tengoku.Data.List.NodupEquivFin
-import Tengoku.Data.Set.Defs
+import Tengoku.Seed.Data.List.NodupEquivFin
+import Tengoku.Seed.Data.Set.Defs
 import Tengoku.EquationalTheories.Deps.Equations
 
 set_option linter.all false

@@ -7,9 +7,6 @@ Authors: Devon Tuma
 module
 public import Tengoku.Vcvio.VCVio.CryptoFoundations.Asymptotics.Negligible
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-!
 # Negligible-function bridge canaries

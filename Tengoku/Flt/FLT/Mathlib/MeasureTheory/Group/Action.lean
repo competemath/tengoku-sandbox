@@ -6,9 +6,6 @@ Authors: Yaël Dillies, Kevin Buzzard, Ruben Van de Velde, David Ledvinka
 module
 
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 /-!
 # TODO
 

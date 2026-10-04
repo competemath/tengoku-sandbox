@@ -1,9 +1,6 @@
 module
 
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-! We prove the 1st order Euler-Maclaurin formula by specialising Abel summation and manipulating integrals. -/
 

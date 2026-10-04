@@ -5,9 +5,6 @@ Released under Apache 2.0 license as described in the file LICENSE.
 import Tengoku.Leanmodularforms.LeanModularForms.ForMathlib.FlatnessConditions
 import Tengoku.Leanmodularforms.LeanModularForms.ForMathlib.HungerbuhlerWasem
 import Tengoku
-import Tengoku.Std
-import Tengoku.Tactic.Aesop
-import Tengoku.Meta.Qq
 
 /-!
 # Laurent extraction for HungerbuhlerWasem (T-LE-01)

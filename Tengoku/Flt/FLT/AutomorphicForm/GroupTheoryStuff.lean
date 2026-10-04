@@ -6,9 +6,6 @@ Authors: Andrew Yang
 module
 
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-! # Random assortments of results on group theory. -/
 

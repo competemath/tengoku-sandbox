@@ -8,9 +8,6 @@ Authors: Matthew Jasper
 module
 
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-!
 # Base Change

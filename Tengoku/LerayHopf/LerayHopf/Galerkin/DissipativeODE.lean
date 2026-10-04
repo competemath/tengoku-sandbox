@@ -1,8 +1,5 @@
 import Tengoku
-import Tengoku.Std
-import Tengoku.Tactic.Aesop
-import Tengoku.Meta.Qq
-import Tengoku.Analysis.InnerProductSpace.Calculus
+import Tengoku.Seed.Analysis.InnerProductSpace.Calculus
 
 /-!
 # Generic dissipative finite-dimensional ODE: forward-global existence (issue #112)

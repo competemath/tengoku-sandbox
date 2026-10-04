@@ -5,9 +5,6 @@ Authors: Chris Birkbeck
 -/
 import Tengoku.Leanmodularforms.LeanModularForms.ForMathlib.PiecewiseC1PathOn
 import Tengoku
-import Tengoku.Std
-import Tengoku.Tactic.Aesop
-import Tengoku.Meta.Qq
 
 /-!
 # Piecewise C¹ Paths

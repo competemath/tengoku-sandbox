@@ -1,8 +1,5 @@
 import Tengoku.LerayHopf.LerayHopf.R3.Regularity
 import Tengoku
-import Tengoku.Std
-import Tengoku.Tactic.Aesop
-import Tengoku.Meta.Qq
 -- Sobolev.lean import justification: MemSobolev.add, MemSobolev.smul, MemSobolev.lineDerivOp,
 --   used to extract the spectral L² weak-derivative representative below.
 

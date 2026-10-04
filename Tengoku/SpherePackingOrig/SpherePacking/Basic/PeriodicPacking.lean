@@ -6,9 +6,6 @@ Authors: Gareth Ma
 module
 
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 public import Tengoku.SpherePackingOrig.SpherePacking.Basic.SpherePacking
 public import Tengoku.SpherePackingOrig.SpherePacking.ForMathlib.ENNReal

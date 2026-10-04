@@ -6,9 +6,6 @@ Authors: Stefan Kebekus, Matteo Cipollina
 module
 
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-!
 # Extra logarithmic counting API

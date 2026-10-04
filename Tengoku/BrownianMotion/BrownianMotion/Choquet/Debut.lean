@@ -8,9 +8,6 @@ module
 public import Tengoku.BrownianMotion.BrownianMotion.Choquet.Capacity
 public import Tengoku.BrownianMotion.BrownianMotion.StochasticIntegral.Predictable
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-!
 This file contains the basic definitions and properties of the debut of a set.

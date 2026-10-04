@@ -7,9 +7,6 @@ module
 
 public import Tengoku.Flt.FLT.Mathlib.Topology.Algebra.RestrictedProduct.Basic
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-!
 # `ℚ` inside the restricted product of the `ℚ_p`

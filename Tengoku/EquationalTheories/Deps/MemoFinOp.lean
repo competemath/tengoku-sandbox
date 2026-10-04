@@ -1,6 +1,6 @@
 -- EquationalTheories/Deps/MemoFinOp: verbatim from equational_theories.MemoFinOp (imports mapped, corpus bookkeeping attributes stripped)
 import Lean
-import Tengoku.Init
+import Tengoku.Seed.Init
 
 set_option linter.all false
 

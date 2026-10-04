@@ -4,9 +4,6 @@ Released under Apache 2.0 license as described in the file LICENSE.
 -/
 import Tengoku.Leanmodularforms.LeanModularForms.ForMathlib.CurveUtilities
 import Tengoku
-import Tengoku.Std
-import Tengoku.Tactic.Aesop
-import Tengoku.Meta.Qq
 
 /-!
 # Crossing Analysis — Proposition 2.2

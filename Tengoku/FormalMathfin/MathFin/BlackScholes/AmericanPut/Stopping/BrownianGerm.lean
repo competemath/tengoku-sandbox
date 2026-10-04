@@ -7,9 +7,6 @@ module
 
 public import Tengoku.FormalMathfin.MathFin.BlackScholes.AmericanPut.Stopping.BrownianModel
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-! # Arbitrarily early downward Brownian excursions
 

@@ -17,9 +17,6 @@ Depends only on mathlib's `Filter.atTop` order machinery — no PDE / analysis i
 so it serves as the domain-neutral diagonal engine consumed by `Torus/DiagonalGalerkin.lean`.
 -/
 import Tengoku
-import Tengoku.Std
-import Tengoku.Tactic.Aesop
-import Tengoku.Meta.Qq
 
 open Filter
 

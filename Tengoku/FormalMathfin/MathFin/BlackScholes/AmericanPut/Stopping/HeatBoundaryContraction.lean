@@ -7,9 +7,6 @@ module
 
 public import Tengoku.FormalMathfin.MathFin.BlackScholes.AmericanPut.Stopping.HeatBoundaryEquation
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-! # Strict finite-time contraction of cross-boundary heat propagation
 

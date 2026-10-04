@@ -1,7 +1,4 @@
 import Tengoku
-import Tengoku.Std
-import Tengoku.Tactic.Aesop
-import Tengoku.Meta.Qq
 
 theorem Filter.EventuallyEq.eventuallyEq_ite {X Y : Type*} {l : Filter X} {f g : X → Y}
     {P : X → Prop} [DecidablePred P] (h : f =ᶠ[l] g) :

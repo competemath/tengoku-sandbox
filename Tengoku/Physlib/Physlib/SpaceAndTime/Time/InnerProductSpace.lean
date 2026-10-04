@@ -6,9 +6,6 @@ Authors: Joseph Tooby-Smith
 module
 
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 public import Tengoku.Physlib.Physlib.SpaceAndTime.Time.Basic
 /-!
 # Time as an inner product space

@@ -6,9 +6,6 @@ Authors: Robert Martin
 module
 
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 public import Tengoku.FormalMathfin.MathFin.BlackScholes.AmericanPut.Stopping.LocalizationTimes
 
 /-! # Uniformly bounded smooth compact minorants of a continuous payoff

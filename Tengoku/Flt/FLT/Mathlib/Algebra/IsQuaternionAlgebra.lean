@@ -5,11 +5,11 @@ Authors: Kevin Buzzard
 -/
 module
 
-public import Tengoku.Analysis.Quaternion
-public import Tengoku.NumberTheory.NumberField.InfinitePlace.Basic
+public import Tengoku.Seed.Analysis.Quaternion
+public import Tengoku.Seed.NumberTheory.NumberField.InfinitePlace.Basic
 
-import Tengoku.RingTheory.SimpleModule.WedderburnArtin
-import Tengoku.LinearAlgebra.Matrix.Unique
+import Tengoku.Seed.RingTheory.SimpleModule.WedderburnArtin
+import Tengoku.Seed.LinearAlgebra.Matrix.Unique
 
 /-!
 # Is Quaternion Algebra

@@ -1,8 +1,8 @@
 import Tengoku.LerayHopf.LerayHopf.R3.SpatialCompactness
 import Tengoku.LerayHopf.LerayHopf.R3.FourierL2
-import Tengoku.Analysis.Fourier.LpSpace
-import Tengoku.MeasureTheory.Measure.Haar.Unique
-import Tengoku.MeasureTheory.Function.LpSpace.Indicator
+import Tengoku.Seed.Analysis.Fourier.LpSpace
+import Tengoku.Seed.MeasureTheory.Measure.Haar.Unique
+import Tengoku.Seed.MeasureTheory.Function.LpSpace.Indicator
 
 namespace LerayHopf
 open MeasureTheory Filter Topology Metric
