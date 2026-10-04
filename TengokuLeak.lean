@@ -52,13 +52,16 @@ def trigger (ty : Expr) : Expr :=
 def scan (pfxs : List Name) : CoreM (Array Leak × Counts) := do
   let env ← getEnv
   let idxs := (List.range env.header.moduleNames.size).filter fun i => pfxs.any (·.isPrefixOf env.header.moduleNames[i]!)
-  let own (c : Name) : Bool := match env.getModuleIdxFor? c with
-    | some m => idxs.contains m
+  -- ownership is per library: a registration of library A that mentions only constants of another selected library B touches nothing of A
+  let ownBy (p : Name) (c : Name) : Bool := match env.getModuleIdxFor? c with
+    | some m => p.isPrefixOf env.header.moduleNames[m]!
     | none => false
   let mut leaks : Array Leak := #[]
   let mut counts : Counts := {}
   for i in idxs do
     let modName := env.header.moduleNames[i]!
+    let some libPfx := pfxs.find? (·.isPrefixOf modName) | continue
+    let own := ownBy libPfx
     for e in instanceExtension.ext.getModuleEntries env i do
       match e with
       | .scoped _ _ => counts := { counts with instScoped := counts.instScoped + 1 }
@@ -78,7 +81,8 @@ def scan (pfxs : List Name) : CoreM (Array Leak × Counts) := do
       | .global (.thm t) =>
         counts := { counts with simp := counts.simp + 1 }
         let n := t.origin.key
-        let ty := ((env.find? n).map (·.type)).getD (.sort .zero)
+        let rule := t.proof.constName?.getD n  -- an auxiliary or reversed rule has its own type; `n` stays the name reported
+        let ty := ((env.find? rule).map (·.type)).getD (.sort .zero)
         unless (trigger ty).getUsedConstants.any own do
           let r ← findDeclarationRanges? n
           let dm := (env.getModuleIdxFor? n).bind fun m => env.header.moduleNames[m]?
@@ -99,9 +103,11 @@ def report (treePrefix : Name) (leaks : Array Leak) (c : Counts) : List String :
        | some n, _ => s!" (declared at line {n})"
        | none, some m => s!" (declared in {m}: an `attribute` command of the library turns it on)"
        | none, none => "")
-  rows ++ [s!"roots: {c.roots.size} declarations of the library are in the root namespace (nothing in their names tells libraries apart; a second library declaring one fails to import): " ++
-    s!"{(c.roots.toList.take 20).map toString}"] ++ [s!"leakscan: {c.inst} global instances ({(leaks.filter (·.kind == "instance")).size} touch no type of the library), {c.instScoped} scoped; " ++
-    s!"{c.simp} global simp lemmas ({(leaks.filter (·.kind == "simp")).size} trigger on nothing of the library), {c.simpScoped} scoped"]
+  -- the totals come first (a report cut to its first lines keeps them), then every leak, then every root-level name
+  [s!"leakscan: {c.inst} global instances ({(leaks.filter (·.kind == "instance")).size} touch no type of the library), {c.instScoped} scoped; " ++
+    s!"{c.simp} global simp lemmas ({(leaks.filter (·.kind == "simp")).size} trigger on nothing of the library), {c.simpScoped} scoped",
+   s!"roots: {c.roots.size} declarations of the library are in the root namespace (nothing in their names tells libraries apart; a second library declaring one fails to import)"]
+    ++ rows ++ c.roots.toList.map fun n => s!"root: {n}"
 
 unsafe def main (argv : List String) : IO UInt32 := do
   enableInitializersExecution

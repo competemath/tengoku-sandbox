@@ -179,7 +179,9 @@ jobs:
           if ! lake build tengoku-leakscan 2>&1 | tail -3; then echo "::warning::tengoku-leakscan did not build; no leak report for this group"; exit 0; fi
           read -ra mods <<< "$TARGETS"
           args=(); for m in "${mods[@]}"; do args+=(--module "$m"); done
-          { echo '### Leak report'; echo '```'; lake env .lake/build/bin/tengoku-leakscan "${args[@]}" 2>&1 | head -60 || true; echo '```'; } | tee -a build.log "$GITHUB_STEP_SUMMARY"
+          lake env .lake/build/bin/tengoku-leakscan "${args[@]}" > leakscan.txt 2>&1 || true
+          cat leakscan.txt >> build.log   # the whole report (every leak, every root-level name); the totals are its first lines
+          { echo '### Leak report'; echo '```'; head -60 leakscan.txt; echo '```'; } | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Derived files match their generator
         if: github.event_name == 'merge_group'
         run: |
