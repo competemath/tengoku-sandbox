@@ -1,6 +1,9 @@
 /-
 Axiom check for the merge queue: every declaration of a module must rest only
-on propext, Classical.choice and Quot.sound.
+on propext, Classical.choice and Quot.sound. A module name also stands for every
+module under it: an intake library is named by its root (`Tengoku.Apap`), a root
+that declares nothing itself, and the check used to cover only the declarations of
+the module named ("axioms: 0 declarations checked" for every intake group).
 
   lake build tengoku-axioms
   lake env .lake/build/bin/tengoku-axioms --module Tengoku.Lib._candidate_x
@@ -17,7 +20,7 @@ def check (mods : List Name) : CoreM UInt32 := do
   for (n, _) in env.constants.toList do
     let some idx := env.getModuleIdxFor? n | continue
     let some m := env.header.moduleNames[idx.toNat]? | continue
-    if !mods.contains m then continue
+    if !mods.any (·.isPrefixOf m) then continue
     if n.isInternal || n.hasMacroScopes then continue
     let axioms ← collectAxioms n
     checked := checked + 1
