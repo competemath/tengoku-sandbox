@@ -300,8 +300,13 @@ class ScopeFix(unittest.TestCase):
 
     def test_the_exact_transformation_passes(self):
         r = self.repo()
-        basic = self.BASIC.replace("instance :", "local instance :").replace("@[simp]", "@[local simp]") + "-- Tengoku: 2 registration(s) of this module made local so they do not change other libraries (generated)\n"
-        use = self.USE.replace("\ntheorem use", "\nattribute [local instance] Fx.instCoeProdNatInt\nattribute [local simp] Fx.s\n\ntheorem use")
+        basic = (
+            self.BASIC.replace("instance :", "local instance :").replace("@[simp]", "@[local simp]")
+            + "-- Tengoku: 2 registration(s) of this module made local so they do not change other libraries (generated)\n"
+        )
+        use = self.USE.replace(
+            "\ntheorem use", "\nattribute [local instance] Fx.instCoeProdNatInt\nattribute [local simp] Fx.s\n\ntheorem use"
+        )
         self.edit(r, basic, use)
         rc, out = self.judge(r)
         self.assertEqual(rc, 0, out)
@@ -328,12 +333,19 @@ class ScopeFix(unittest.TestCase):
 
     def test_a_local_in_a_comment_or_a_string_is_refused(self):
         r = self.repo()
-        self.edit(r, self.BASIC.replace("namespace Fx", "-- an instance of the thing\nnamespace Fx").replace("-- an instance", "-- an local instance"))
+        self.edit(
+            r,
+            self.BASIC.replace("namespace Fx", "-- an instance of the thing\nnamespace Fx").replace(
+                "-- an instance", "-- an local instance"
+            ),
+        )
         self.assertNotEqual(self.judge(r)[0], 0)
 
     def test_an_added_attribute_must_repeat_a_registration_of_the_library(self):
         r = self.repo()
-        self.edit(r, None, self.USE.replace("\ntheorem use", "\nattribute [local instance] Matrix.linftyOpNormedAddCommGroup\n\ntheorem use"))
+        self.edit(
+            r, None, self.USE.replace("\ntheorem use", "\nattribute [local instance] Matrix.linftyOpNormedAddCommGroup\n\ntheorem use")
+        )
         rc, out = self.judge(r)
         self.assertNotEqual(rc, 0)
         self.assertIn("is not a name this library registers", out)
@@ -346,6 +358,18 @@ class ScopeFix(unittest.TestCase):
         r2 = self.repo()
         self.edit(r2, None, None, extra=[("Tengoku/Lib/Basic.lean", "/-\nAuthors: Someone\n-/\nlocal instance : Foo := x\n")])
         self.assertNotIn("class=scope-fix", r2.gate("classify.py", env=self.BOT)[1])
+
+    def test_the_queue_builds_the_library_of_a_scope_fix_again(self):
+        r = ScopeFix().repo()
+        r.write("schemas/sources.json", json.dumps({"corpora": {}}))
+        r.commit("schemas")
+        r.git("checkout", "-q", "main")
+        r.git("merge", "-q", "--ff-only", "pr")
+        r.git("checkout", "-q", "pr")
+        ScopeFix().edit(r, ScopeFix.BASIC.replace("instance :", "local instance :"))
+        rc, out = r.gate("queue_targets.py")
+        self.assertEqual(rc, 0, out)
+        self.assertIn("Tengoku.FxLib", out.split())
 
 
 if __name__ == "__main__":

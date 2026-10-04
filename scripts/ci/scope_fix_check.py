@@ -89,7 +89,8 @@ def registered(ns: str) -> set[str]:
         out |= {
             last(m.group(1))
             for m in re.finditer(
-                rf"@\[[^\]]*(?<![\w.])simp\b[^\]]*\]\s*(?:(?:private|protected|noncomputable|nonrec|partial|unsafe)\s+)*(?:theorem|lemma|def|abbrev)\s+({NAME})", text
+                rf"@\[[^\]]*(?<![\w.])simp\b[^\]]*\]\s*(?:(?:private|protected|noncomputable|nonrec|partial|unsafe)\s+)*(?:theorem|lemma|def|abbrev)\s+({NAME})",
+                text,
             )
         }
         for m in re.finditer(rf"attribute\s*\[([^\]]*)\]((?:[ \t\n]+{NAME})+)", text):
@@ -107,15 +108,21 @@ def check_file(path: str, old: str, new: str, known: set[str]) -> list[str]:
         if tag == "insert":
             for k in range(j1, j2):
                 if n[k] and not ATTR_LINE.fullmatch(n[k]) and not NOTE.fullmatch(n[k]):
-                    errors.append(f"{path}:{k + 1}: an added line must be `attribute [local instance|simp] names`, a blank line or the note, not `{n[k][:80]}`")
+                    errors.append(
+                        f"{path}:{k + 1}: an added line must be `attribute [local instance|simp] names`, a blank line or the note, not `{n[k][:80]}`"
+                    )
                 elif ATTR_LINE.fullmatch(n[k]):
                     for name in n[k].split("]", 1)[1].split():
                         if last(name) not in known and not re.match(r"inst[A-Z_]", last(name)):
-                            errors.append(f"{path}:{k + 1}: `{name}` is not a name this library registers (the line may only repeat the library's own registrations)")
+                            errors.append(
+                                f"{path}:{k + 1}: `{name}` is not a name this library registers (the line may only repeat the library's own registrations)"
+                            )
         elif tag == "replace" and i2 - i1 == j2 - j1:
             for a, b in zip(range(i1, i2), range(j1, j2)):
                 if not local_insertion(o[a], n[b]):
-                    errors.append(f"{path}:{b + 1}: a changed line may only gain `local ` before `instance`/`simp`: `{o[a][:60]}` -> `{n[b][:60]}`")
+                    errors.append(
+                        f"{path}:{b + 1}: a changed line may only gain `local ` before `instance`/`simp`: `{o[a][:60]}` -> `{n[b][:60]}`"
+                    )
         else:
             errors.append(f"{path}:{j1 + 1}: lines were removed or replaced by a different number of lines ({tag}: {i2 - i1} -> {j2 - j1})")
     return errors
@@ -147,4 +154,6 @@ if not files:
     errors.append("an empty diff")
 if errors:
     fail("scope-fix PR: " + "; ".join(errors[:10]) + (f"; and {len(errors) - 10} more" if len(errors) > 10 else ""))
-print(f"scope-fix ok: {len(files)} modules of {len({re.match(r'Tengoku/([^/]+)/', p).group(1) for _, p in files})} libraries, only `local` registrations")
+print(
+    f"scope-fix ok: {len(files)} modules of {len({re.match(r'Tengoku/([^/]+)/', p).group(1) for _, p in files})} libraries, only `local` registrations"
+)

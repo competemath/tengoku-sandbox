@@ -26,6 +26,7 @@ from _git import (
     load_schema,
     match,
     pascal,
+    run,
     unplaced,
 )
 
@@ -119,4 +120,15 @@ for lib in sorted(touched - set(work)):
     if lib in corpora:
         targets.append(f"Tengoku.{pascal(lib)}")  # tombstones: rebuild the library's modules
 targets += [f"Tengoku.{ns}" for ns in sorted(intake_ns)]
+# A scope-fix PR (scripts/ci/scope_fix_check.py) modifies existing modules of an intake library: the queue builds that library again, with its axiom
+# check and leak report, as it did when the library arrived.
+intake_at_base = {
+    pascal(m.group(1))
+    for p in run("ls-tree", "-r", "--name-only", base, "data/intake").split("\n")
+    if (m := re.fullmatch(r"data/intake/([^/]+)/manifest\.jsonl", p))
+}
+for st, p in changed_files(base, head):
+    m = re.fullmatch(r"Tengoku/([^/]+)/.+\.lean", p)
+    if st == "M" and m and m.group(1) in intake_at_base:
+        targets.append(f"Tengoku.{m.group(1)}")
 print("\n".join(dict.fromkeys(targets)))
