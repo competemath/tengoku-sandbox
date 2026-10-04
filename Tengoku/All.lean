@@ -17,6 +17,7 @@ import Tengoku.Tautology
 import Tengoku.LerayHopf
 import Tengoku.Flt
 import Tengoku.EquationalTheories
+import Tengoku.Apap
 import Tengoku.AddCombi
 import Tengoku.Pfr
 import Tengoku.Automatatheory
