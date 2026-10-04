@@ -1,0 +1,11 @@
+import Tengoku.Automatatheory.AutomataTheory.Automata.Basic
+import Tengoku.Automatatheory.AutomataTheory.Automata.Hist
+import Tengoku.Automatatheory.AutomataTheory.Automata.OI2
+import Tengoku.Automatatheory.AutomataTheory.Automata.Prod
+import Tengoku.Automatatheory.AutomataTheory.Automata.Sum
+import Tengoku.Automatatheory.AutomataTheory.Mathlib.Imports
+import Tengoku.Automatatheory.AutomataTheory.Mathlib.InfGraphRamsey
+import Tengoku.Automatatheory.AutomataTheory.Sequences.Basic
+import Tengoku.Automatatheory.AutomataTheory.Sequences.InfOcc
+import Tengoku.Automatatheory.AutomataTheory.Sequences.Segments
+import Tengoku.Automatatheory.AutomataTheory.Sequences.Temporal

@@ -17,6 +17,7 @@ import Tengoku.Flt
 import Tengoku.EquationalTheories
 import Tengoku.AddCombi
 import Tengoku.Pfr
+import Tengoku.Automatatheory
 import Tengoku.Vcvio
 import Tengoku.Compfiles
 import Tengoku.ForbiddenMatrix
