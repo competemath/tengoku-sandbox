@@ -35,6 +35,8 @@ bounded (or even densely-defined) operator on all of `H`.
 -/
 
 @[expose] public section
+attribute [local instance] QuantumMechanics.instIsAddTorsionFreeContinuousLinearMapWOTComplexIdOfCompleteSpace
+
 
 noncomputable section
 

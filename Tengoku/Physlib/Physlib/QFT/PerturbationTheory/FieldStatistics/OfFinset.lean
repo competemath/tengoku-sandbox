@@ -17,6 +17,8 @@ public import Tengoku.Meta.Qq
 -/
 
 @[expose] public section
+attribute [local simp] Physlib.List.insertIdx_length_fin
+
 
 namespace FieldStatistic
 

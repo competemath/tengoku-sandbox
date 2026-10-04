@@ -30,6 +30,8 @@ diagonal measures from `ScalarMeasure.lean` (`unitaryConjSpectralMeasure_scalarM
 -/
 
 @[expose] public section
+attribute [local instance] QuantumMechanics.instIsAddTorsionFreeContinuousLinearMapWOTComplexIdOfCompleteSpace
+
 
 noncomputable section
 

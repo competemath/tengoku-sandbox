@@ -40,6 +40,8 @@ recovers `ext_of_scalarMeasure_eq`).
 -/
 
 @[expose] public section
+attribute [local instance] QuantumMechanics.instIsAddTorsionFreeContinuousLinearMapWOTComplexIdOfCompleteSpace
+
 
 noncomputable section
 

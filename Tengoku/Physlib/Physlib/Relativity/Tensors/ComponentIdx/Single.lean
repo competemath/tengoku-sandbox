@@ -33,6 +33,8 @@ color and the basis indices of that color.
 -/
 
 @[expose] public section
+attribute [local instance] Physlib.PiTensorProduct.instAddCommMonoidElim
+
 
 namespace TensorSpecies
 
