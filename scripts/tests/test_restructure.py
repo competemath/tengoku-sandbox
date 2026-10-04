@@ -108,6 +108,16 @@ class Headers(unittest.TestCase):
             "module\r\n\r\npublic meta import Tengoku.Seed.Std  -- why\r\nimport all Tengoku.Seed.Std.X\r\nprivate import Tengoku.Lib\r\n\r\ntheorem t : 1 = 1 := rfl\r\n",
         )
 
+    def test_the_code_examples_of_seeded_doc_comments_follow_when_asked(self):
+        text = "import Tengoku.Std\n\n/-! example\n```lean\nimport Tengoku.Std.X\nimport Tengoku.Lib\n```\n-/\ndef x := 1\n"
+        out = restructure.rewrite_header(text, restructure.seeded_name({"Std"}), everywhere=True)
+        self.assertEqual(
+            out,
+            text.replace("import Tengoku.Std\n", "import Tengoku.Seed.Std\n", 1).replace(
+                "import Tengoku.Std.X", "import Tengoku.Seed.Std.X"
+            ),
+        )
+
     def test_imports_below_the_header_are_not_touched(self):
         text = "import Tengoku.Std\n\n/-- doc\nimport Tengoku.Std.X\n-/\ndef x := 1\n"
         self.assertEqual(

@@ -121,7 +121,8 @@ if it is exactly that output: every file under `Tengoku/` and the root `Tengoku.
 `LICENSE-THIRD-PARTY.md`, byte for byte and executable bit for executable bit, and nothing else. Then `restructure.py verify` checks
 that every `import Tengoku…` and every `include_str` path of the result resolves.
 
-The script changes only imports and `include_str` paths. Seeded files: `import Tengoku.X` becomes `import Tengoku.Seed.X`, and an
+The script changes only imports and `include_str` paths. Seeded files: `import Tengoku.X` becomes `import Tengoku.Seed.X` (in the header
+and in the code examples of doc comments), and an
 `include_str` path that leaves the tree gains one `..`. Library modules: the umbrella imports that the root `Tengoku` re-exports
 (`Tengoku.Std`, `Tengoku.Tactic.Aesop`, `Tengoku.Meta.Qq`, …) are dropped, any other seeded import is renamed. Anyone can repeat it:
 

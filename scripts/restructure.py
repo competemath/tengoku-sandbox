@@ -5,8 +5,8 @@ Tengoku was seeded once from upstream packages (SEED.md): their files sit at Ten
 of verified translations. This moves every seeded file to Tengoku/Seed/<same path>, so the seed is one folder and
 the origin of a module is visible from its path, and rewrites what names the moved files:
 
-  - seeded modules: `import Tengoku.X` becomes `import Tengoku.Seed.X` in their headers, and an `include_str` path
-    that climbs out of the tree gets one more `..`;
+  - seeded modules: `import Tengoku.X` becomes `import Tengoku.Seed.X` in their headers and in the code examples of their doc
+    comments, and an `include_str` path that climbs out of the tree gets one more `..`;
   - library modules (Tengoku/<Library>/**, Tengoku/<Library>.lean, Tengoku/All.lean): the umbrella imports that the root
     `Tengoku` re-exports are dropped, any other seeded import is renamed as above;
   - the root aggregator Tengoku.lean, and the two documents that list the seed's paths (SEED.md, LICENSE-THIRD-PARTY.md).
@@ -122,15 +122,16 @@ def rename_import(mod: str, roots: set[str]) -> str:
     return mod
 
 
-def rewrite_header(text: str, new_name: Callable[[str, list[str]], str | None]) -> str:
-    """`new_name(module, all header imports)` -> the module the line should import, or None to drop the line."""
+def rewrite_header(text: str, new_name: Callable[[str, list[str]], str | None], everywhere: bool = False) -> str:
+    """`new_name(module, all header imports)` -> the module the line should import, or None to drop the line. Only the header's
+    imports are rewritten, unless `everywhere`: then also the import lines of the code examples in doc comments."""
     lines = text.split("\n")
     end, code = header_scan(lines)
     imports = header_imports(lines)
     out = []
     for i, ln in enumerate(lines):
         cr = "\r" if ln.endswith("\r") else ""
-        m = parse_import(ln[: len(ln) - len(cr)]) if i < end and code[i] else None
+        m = parse_import(ln[: len(ln) - len(cr)]) if everywhere or (i < end and code[i]) else None
         if not m:
             out.append(ln)
             continue
@@ -235,7 +236,7 @@ def library_files(tree: Path, namespaces: set[str]) -> list[Path]:
 
 def rewrite_seeded(path: Path, seed: Path, roots: set[str]) -> bool:
     depth = len(path.relative_to(seed).parts) - 1  # the directories between Tengoku/Seed/ and the file
-    return rewrite_file(path, lambda t: fix_include_str(rewrite_header(t, seeded_name(roots)), depth))
+    return rewrite_file(path, lambda t: fix_include_str(rewrite_header(t, seeded_name(roots), everywhere=True), depth))
 
 
 def apply(root: Path, libs: set[str]) -> Counter:
@@ -256,7 +257,7 @@ def apply(root: Path, libs: set[str]) -> Counter:
     for f in library_files(tree, namespaces):
         done["library modules rewritten"] += rewrite_file(f, lambda t: rewrite_header(t, library_name(roots)))
     if (root / ROOT_FILE).is_file():
-        done["root rewritten"] += rewrite_file(root / "Tengoku.lean", lambda t: rewrite_header(t, seeded_name(roots)))
+        done["root rewritten"] += rewrite_file(root / ROOT_FILE, lambda t: rewrite_header(t, seeded_name(roots)))
     done["documents rewritten"] = rewrite_docs(root, roots)
     return done
 
@@ -264,7 +265,7 @@ def apply(root: Path, libs: set[str]) -> Counter:
 def module_index(root: Path) -> dict[str, Path]:
     mods = {".".join(p.relative_to(root).with_suffix("").parts): p for p in (root / "Tengoku").rglob(LEAN_GLOB)}
     if (root / ROOT_FILE).is_file():
-        mods["Tengoku"] = root / "Tengoku.lean"
+        mods["Tengoku"] = root / ROOT_FILE
     return mods
 
 
