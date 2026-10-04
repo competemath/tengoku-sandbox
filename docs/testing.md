@@ -66,14 +66,26 @@ The jobs, in the order they matter:
   are merged or already in the queue.
 - **lint-python**, **tooling-tests** (tooling only): `pre-commit run
   --all-files`, the unit tests, `actionlint` on the workflows.
-- **sorry-advisory**: a comment listing `sorry`/`admit` in the change; never
-  blocks, because the queue is the authority on proofs.
+- **sorry-advisory**: lists `sorry`/`admit` in the change, in the gate comment
+  below; never blocks, because the queue is the authority on proofs.
 - **pr-gate**: the required check. Passes only when every job of the PR's
   class passed. It also posts **one comment per PR**, updated in place: each
   failed check with its step, the first lines of its error, what the check
   looks for, what to do, and — for the checks that reason about paths, text
   patterns or other services — a prefilled *Report a gate bug* issue link,
   because those checks can be wrong themselves.
+
+**Reading untrusted data and holding a write token are never the same job.**
+Every job that reads the PR's commits (or the queue entry's) holds a read-only
+token and runs main's scripts on them as data. The jobs that can write are two,
+and neither touches the PR's commits: `label` (takes the class as an output and
+accepts only the fixed class names) and `pr-gate` (stops stale queue runs and
+writes the one comment, which quotes other jobs' output as data, inside a code
+fence the quote cannot close). The queue entry is re-checked by `queue-recheck`,
+a read-only job, and `pr-gate` only reports its result.
+`workflow_rules.py` enforces it (rule `write-and-pr`), so a later edit cannot
+quietly bring the two together again; CodeQL's `untrusted-checkout` alerts on
+this workflow pointed at exactly the three jobs that did.
 
 Every `run:` step in every workflow runs under `bash -e -o pipefail`, so a
 piped command's failure fails the step. That default exists because the

@@ -18,6 +18,10 @@ read from the PR's commit as data. The rules:
                command puts the PR's files in the tree or runs them, and local actions use `$/<path>`: a `./` action is loaded from the workspace, which may hold
                the PR's files. The one exception is `git checkout <pr> -- data…`: the PR's records, as data.
 
+  write-and-pr a job of a pull_request_target, workflow_run or merge_group workflow that holds a write permission never fetches the PR's
+               (or the queue entry's) commits: reading untrusted data and holding a token that can write are split over two jobs, and
+               the one that writes takes only validated outputs. Without this, a later step that ever ran a file of the PR would hold the token.
+
   --online     genuine pins: the tag named in the comment contains the commit. A repository shares commits with
                all its forks, so a pin can name a commit that exists only in an attacker's fork (an impostor commit).
 
@@ -59,6 +63,9 @@ FIXED = re.compile(
 )
 SELF = "scripts/ci/workflow_rules.py"
 PRIVILEGED = {"pull_request_target", "workflow_run"}
+UNTRUSTED_REF = re.compile(
+    r"PR_REF|refs/pull|head_ref|pull_request\.head|merge_group\.head"
+)  # what names the PR's or the queue entry's commits
 # what a checkout in a privileged workflow may name: the base side only
 BASE_SIDE = {
     "github.event.pull_request.base.sha",
@@ -184,7 +191,23 @@ class Checker:
             if isinstance(job.get("uses"), str):
                 self.pinned(job["uses"], line)
             self.steps(job.get("steps") or [], job.get("env") or {}, doc.get("env") or {}, on)
+            self.write_and_pr(name, job, on)
         return self
+
+    def write_and_pr(self, name: str, job: dict, on: set[str]) -> None:
+        """A job that can write never fetches the commits of the PR or of the queue entry."""
+        writes = [k for k, v in items(job.get("permissions")) if str(v).lower() == "write"]
+        if not writes or not on & (PRIVILEGED | {"merge_group"}):
+            return
+        for step in job.get("steps") or []:
+            run = step.get("run") if isinstance(step, dict) else None
+            if isinstance(run, str) and "git fetch" in run and UNTRUSTED_REF.search(run):
+                self.add(
+                    step.get(LINE, 1),
+                    "write-and-pr",
+                    f"job `{name}` holds `{writes[0]}: write` and fetches the PR's commits: read them in a job without a write permission "
+                    "and pass only validated outputs to this one",
+                )
 
     def steps(self, steps: list, job_env: dict, wf_env: dict, on: set[str]) -> None:
         for step in steps if isinstance(steps, list) else []:  # `steps: 5` used to end the check in a traceback (scripts/ci/fuzz)

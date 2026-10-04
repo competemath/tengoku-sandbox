@@ -35,7 +35,7 @@ jobs:
     if: github.event_name == 'pull_request_target'
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    permissions: { contents: read, pull-requests: write }
+    permissions: { contents: read }   # reads the PR's commits and runs main's scripts: no write token here (the label job below holds it)
     outputs: { class: "${{ steps.c.outputs.class }}" }
     steps:
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
@@ -51,10 +51,22 @@ jobs:
           TENGOKU_BOT: "${{ vars.TENGOKU_BOT || 'tengoku-bot' }}"
           TENGOKU_ACTOR_CHECKED: "${{ github.event_name == 'merge_group' && '1' || '' }}"  # the PR's own gate verified the actor
         run: python3 scripts/ci/classify.py "$BASE" "$HEAD"
+
+  # The only thing the class is used for here is a label. This job holds the write token and touches nothing of the PR: it has no checkout and
+  # no fetch, takes the class from the classify job's output, and refuses any value that is not one of the fixed class names.
+  label:
+    needs: classify
+    if: always() && needs.classify.outputs.class != '' && github.event_name == 'pull_request_target'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: { pull-requests: write }
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
+        with: { egress-policy: audit }
       - name: Label the PR with its class
-        if: always() && steps.c.outputs.class != '' && github.event_name == 'pull_request_target'
-        env: { GH_TOKEN: "${{ github.token }}", CLASS: "${{ steps.c.outputs.class }}", PR: "${{ github.event.pull_request.number }}" }
+        env: { GH_TOKEN: "${{ github.token }}", CLASS: "${{ needs.classify.outputs.class }}", PR: "${{ github.event.pull_request.number }}" }
         run: |
+          case "$CLASS" in content|tombstone|tooling|docs|promotion|derived|intake|scope-fix|restructure) ;; *) echo "::error::not a class name"; exit 1 ;; esac
           # one class label at a time: a PR whose class changes (docs, then content) loses the old one
           old=$(gh pr view "$PR" -R "$GITHUB_REPOSITORY" --json labels --jq '.labels[].name' | grep -xE 'content|tombstone|tooling|docs|promotion|derived|intake|scope-fix|restructure' | grep -vxF "$CLASS" | paste -sd, - || true)
           args=(--add-label "$CLASS"); [ -n "$old" ] && args+=(--remove-label "$old")
@@ -253,7 +265,7 @@ jobs:
     if: needs.classify.outputs.class == 'content' || needs.classify.outputs.class == 'tooling'
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    permissions: { contents: read, pull-requests: write }
+    permissions: { contents: read }   # advisory: what it finds is quoted in the gate comment, which the one privileged job writes
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { ref: "${{ env.BASE }}", fetch-depth: 0, filter: "blob:none", persist-credentials: false }
@@ -264,9 +276,6 @@ jobs:
           python3 scripts/ci/sorry_scan.py "$BASE" "$HEAD" > sorry.md
           cat sorry.md
           echo "found=$(grep -c '^- ' sorry.md || true)" >> "$GITHUB_OUTPUT"
-      - if: steps.s.outputs.found != '0' && github.event_name == 'pull_request_target'
-        env: { GH_TOKEN: "${{ github.token }}" }
-        run: gh pr comment "${{ github.event.pull_request.number }}" --body-file sorry.md
 
   # A new theorem whose hypotheses can never all hold proves nothing (vacuity). Its candidate module
   # is built here, before the queue, and the PR fails until the description acknowledges each such
@@ -355,35 +364,18 @@ jobs:
         env: { GH_TOKEN: "${{ github.token }}", BODY: "${{ github.event.pull_request.body }}" }
         run: printf '%s' "$BODY" > body.txt && python3 scripts/ci/depends.py body.txt
 
-  pr-gate:
-    needs: [classify, data-rules, credits, dco, secrets, workflows, depends, vacuity, goals, intake, scope-fix, restructure]
-    if: always()
+  # The merge queue's re-check of an entry (the PR merged onto what is ahead of it) against its new base. It reads the entry's commits as data
+  # and runs main's scripts; it holds no write token. The privileged `pr-gate` job below never touches the entry's commits.
+  queue-recheck:
+    if: github.event_name == 'merge_group'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions: { contents: read, actions: write, pull-requests: write }   # actions: write — to stop the runs of removed queue entries
+    timeout-minutes: 15
+    permissions: { contents: read }
     steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
+        with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { ref: "${{ env.BASE }}", fetch-depth: 0, filter: "blob:none", persist-credentials: false }
-      # In the merge queue. Each entry is built on the entry ahead of it, so BASE...HEAD is still only this PR's
-      # change, and its own gate already passed on that change: credits, sign-off, secrets and the workflow rules
-      # would give the same answer again. What the new base can change is checked here, in this one job: the class,
-      # and a data change's records against everything merged ahead of them. (Nine jobs per entry, five entries at
-      # a time, starved the runners: entries waited past the queue's 40-minute timeout and were removed, and the
-      # queue restarted every entry behind them.)
-      - name: Stop the runs of queue entries that no longer exist
-        if: github.event_name == 'merge_group'
-        env: { GH_TOKEN: "${{ github.token }}", OWN: "${{ github.event.merge_group.head_ref }}" }
-        run: |
-          # a rebuilt or removed entry's runs keep going (up to 90 minutes) on runners the live entries wait for
-          live="$(git ls-remote origin 'refs/heads/gh-readonly-queue/*' | awk '{print $2}' | sed 's#^refs/heads/##')" || { echo "could not list the queue; nothing stopped"; exit 0; }
-          grep -qxF "${OWN#refs/heads/}" <<< "$live" || { echo "this entry is not in the listing; nothing stopped"; exit 0; }
-          for status in in_progress queued waiting requested pending; do
-            gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs?event=merge_group&status=$status&per_page=100" --jq '.workflow_runs[] | "\(.id) \(.head_branch)"'
-          done | sort -u | while read -r id branch; do
-            if ! grep -qxF "$branch" <<< "$live"; then
-              gh api -X POST "repos/$GITHUB_REPOSITORY/actions/runs/$id/cancel" >/dev/null 2>&1 && echo "stopped run $id: $branch is no longer in the queue"
-            fi
-          done || true
       - name: The entry's commits, as data (the checks are main's)
         if: github.event_name == 'merge_group'
         run: git fetch -q --no-tags --filter=blob:none origin "+$PR_REF:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
@@ -405,6 +397,37 @@ jobs:
           python3 scripts/ci/append_only.py "$BASE" "$HEAD" "${promotion[@]}"
           python3 scripts/ci/validate_records.py "$BASE" "$HEAD"
           python3 scripts/ci/lint_banked.py "$BASE" "$HEAD"
+
+  pr-gate:
+    needs: [classify, data-rules, credits, dco, secrets, workflows, depends, vacuity, goals, intake, scope-fix, restructure, sorry-advisory, queue-recheck]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions: { contents: read, actions: write, pull-requests: write }   # actions: write — to stop the runs of removed queue entries
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { ref: "${{ env.BASE }}", fetch-depth: 0, filter: "blob:none", persist-credentials: false }
+      # In the merge queue. Each entry is built on the entry ahead of it, so BASE...HEAD is still only this PR's
+      # change, and its own gate already passed on that change: credits, sign-off, secrets and the workflow rules
+      # would give the same answer again. What the new base can change is checked by `queue-recheck` (above): the class,
+      # and a data change's records against everything merged ahead of them. This job holds write tokens and never
+      # reads the entry's commits: it stops stale queue runs (API calls) and says whether the re-check passed.
+      # (Nine jobs per entry, five entries at a time, starved the runners: entries waited past the queue's 40-minute
+      # timeout and were removed, and the queue restarted every entry behind them.)
+      - name: Stop the runs of queue entries that no longer exist
+        if: github.event_name == 'merge_group'
+        env: { GH_TOKEN: "${{ github.token }}", OWN: "${{ github.event.merge_group.head_ref }}" }
+        run: |
+          # a rebuilt or removed entry's runs keep going (up to 90 minutes) on runners the live entries wait for
+          live="$(git ls-remote origin 'refs/heads/gh-readonly-queue/*' | awk '{print $2}' | sed 's#^refs/heads/##')" || { echo "could not list the queue; nothing stopped"; exit 0; }
+          grep -qxF "${OWN#refs/heads/}" <<< "$live" || { echo "this entry is not in the listing; nothing stopped"; exit 0; }
+          for status in in_progress queued waiting requested pending; do
+            gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs?event=merge_group&status=$status&per_page=100" --jq '.workflow_runs[] | "\(.id) \(.head_branch)"'
+          done | sort -u | while read -r id branch; do
+            if ! grep -qxF "$branch" <<< "$live"; then
+              gh api -X POST "repos/$GITHUB_REPOSITORY/actions/runs/$id/cancel" >/dev/null 2>&1 && echo "stopped run $id: $branch is no longer in the queue"
+            fi
+          done || true
       # One comment per PR (updated in place): which check failed, what it said, what to do, and a
       # prefilled "Report a gate bug" issue link for the checks complex enough to be wrong themselves.
       - name: Explain the verdict on the PR
@@ -422,6 +445,12 @@ jobs:
           echo "$RESULTS" | python3 -c '
           import json, sys
           r = json.load(sys.stdin)
-          bad = [k for k, v in r.items() if v["result"] in ("failure", "cancelled")]  # skipped jobs are fine
+          bad = [k for k, v in r.items() if v["result"] in ("failure", "cancelled") and k != "sorry-advisory"]  # skipped jobs are fine; the advisory never blocks
           print({k: v["result"] for k, v in r.items()})
           sys.exit(1 if bad or r["classify"]["result"] != "success" else 0)'
+      - name: The queue entry's re-check passed
+        if: github.event_name == 'merge_group'
+        env: { RECHECK: "${{ needs.queue-recheck.result }}" }
+        run: |
+          echo "queue-recheck: $RECHECK"
+          [ "$RECHECK" = success ]

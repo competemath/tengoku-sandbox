@@ -331,3 +331,43 @@ class Changed(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class WriteAndPr(unittest.TestCase):
+    """A job that holds a write permission never fetches the PR's or the queue entry's commits."""
+
+    FETCH = 'git fetch -q --no-tags origin "+$PR_REF:refs/remotes/origin/pr-head"'
+
+    def wf(self, perms: str, run: str, on: str = "pull_request_target") -> str:
+        return f"""name: t
+on:
+  {on}:
+permissions: {{}}
+jobs:
+  a:
+    runs-on: ubuntu-latest
+    permissions: {perms}
+    steps:
+      - uses: {CO}
+        with: {{ persist-credentials: false }}
+      - run: {run}
+"""
+
+    def test_a_write_job_that_fetches_the_pr_is_refused(self):
+        self.assertIn("write-and-pr", rules(self.wf("{ contents: read, pull-requests: write }", f"'{self.FETCH}'")))
+        self.assertIn("write-and-pr", rules(self.wf("{ actions: write }", f"'{self.FETCH}'", on="merge_group")))
+        self.assertIn("write-and-pr", rules(self.wf("{ pull-requests: write }", "'git fetch origin refs/pull/1/head'", on="workflow_run")))
+
+    def test_a_read_only_job_may_fetch_it(self):
+        self.assertNotIn("write-and-pr", rules(self.wf("{ contents: read }", f"'{self.FETCH}'")))
+
+    def test_a_write_job_that_does_not_fetch_it_passes(self):
+        self.assertNotIn("write-and-pr", rules(self.wf("{ pull-requests: write }", "'gh pr edit 1 --add-label x'")))
+        self.assertNotIn("write-and-pr", rules(self.wf("{ pull-requests: write }", "'git fetch origin main'")))
+
+    def test_an_unprivileged_trigger_is_not_this_rules_business(self):
+        self.assertNotIn("write-and-pr", rules(self.wf("{ pull-requests: write }", f"'{self.FETCH}'", on="pull_request")))
+
+    def test_odd_shapes_do_not_crash(self):
+        for perms in ("write-all", "5", "{}"):
+            rules(self.wf(perms, f"'{self.FETCH}'"))
