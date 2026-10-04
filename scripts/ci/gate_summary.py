@@ -181,6 +181,26 @@ def issue_link(job: str, step: str, text: str) -> str:
     return f"{SERVER}/{REPO}/issues/new?{q}"
 
 
+def failed_section(j: dict) -> list[str]:
+    """The comment's lines for one failed job: its step, what the check looks for, what it said (fenced), what to do."""
+    out: list[str] = []
+    steps = [s["name"] for s in j.get("steps", []) if s.get("conclusion") == "failure"]
+    step = steps[0] if steps else "?"
+    key = step if step in ADVICE else j["name"]
+    fragility, checks, todo = ADVICE.get(key, ("medium", "see the job log", "open the run and read the failing step"))
+    text = excerpt(j["databaseId"])
+    out += [f"**{j['name']}** → step *{step}*", "", f"Checks: {checks}.", ""]
+    if text:
+        out += ["```text", fenced(text), "```", ""]
+    out += [f"**What to do:** {todo}.", ""]
+    if fragility in ("high", "medium"):
+        out += [
+            f"This check reasons about {'paths' if key == 'classify' else 'text patterns or other services'} and can be wrong. If your change is right and the check is not: **[Report a gate bug]({issue_link(j['name'], step, text)})** — a maintainer looks at every one.",
+            "",
+        ]
+    return out
+
+
 def render(all_jobs: list[dict], extra: str = "") -> tuple[str, bool]:
     failed = [j for j in all_jobs if j.get("conclusion") == "failure" and j.get("name") not in ("pr-gate", "sorry-advisory")]
     tail = f"\n\n{extra}" if extra else ""
@@ -191,20 +211,7 @@ def render(all_jobs: list[dict], extra: str = "") -> tuple[str, bool]:
         )
     out = [MARK, f"### Gate: {len(failed)} check{'s' if len(failed) != 1 else ''} failed for a `{CLASS}` PR at `{HEAD}`", ""]
     for j in failed:
-        steps = [s["name"] for s in j.get("steps", []) if s.get("conclusion") == "failure"]
-        step = steps[0] if steps else "?"
-        key = step if step in ADVICE else j["name"]
-        fragility, checks, todo = ADVICE.get(key, ("medium", "see the job log", "open the run and read the failing step"))
-        text = excerpt(j["databaseId"])
-        out += [f"**{j['name']}** → step *{step}*", "", f"Checks: {checks}.", ""]
-        if text:
-            out += ["```text", fenced(text), "```", ""]
-        out += [f"**What to do:** {todo}.", ""]
-        if fragility in ("high", "medium"):
-            out += [
-                f"This check reasons about {'paths' if key == 'classify' else 'text patterns or other services'} and can be wrong. If your change is right and the check is not: **[Report a gate bug]({issue_link(j['name'], step, text)})** — a maintainer looks at every one.",
-                "",
-            ]
+        out += failed_section(j)
     out += [f"Run: {SERVER}/{REPO}/actions/runs/{RUN} · after fixing, push and the gate re-runs.", "", CONVERSATIONS]
     return "\n".join(out) + tail, True
 
@@ -232,7 +239,7 @@ def main() -> int:
         print(body)
         return 0
     all_jobs = jobs()
-    body, failed = render(all_jobs, advisory(all_jobs))
+    body, _ = render(all_jobs, advisory(all_jobs))
     summary = os.environ.get("GITHUB_STEP_SUMMARY")
     if summary:
         with open(summary, "a", encoding="utf-8") as f:
