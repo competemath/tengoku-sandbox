@@ -7,9 +7,6 @@ module
 
 public import Tengoku.Primenumbertheoremand.PrimeNumberTheoremAnd.Mathlib.Analysis.Complex.DivisorQuotientConvergence
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-!
 # Removable singularities and multiplicities for divisor-indexed canonical products

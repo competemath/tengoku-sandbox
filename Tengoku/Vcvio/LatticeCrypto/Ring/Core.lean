@@ -7,9 +7,6 @@ Authors: Quang Dao
 module
 public import Init.Data.Vector.Basic
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-!
 # Generic Negacyclic Ring Core

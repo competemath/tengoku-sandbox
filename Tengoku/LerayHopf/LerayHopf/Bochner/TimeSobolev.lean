@@ -81,12 +81,12 @@ after the prior generic-`p,q` statement was found FALSE (issue #158).
 -/
 
 import Tengoku.LerayHopf.LerayHopf.Bochner.GelfandTriple
-import Tengoku.Analysis.Distribution.AEEqOfIntegralContDiff
-import Tengoku.Analysis.InnerProductSpace.Dual
-import Tengoku.MeasureTheory.Function.ConvergenceInMeasure
-import Tengoku.MeasureTheory.Function.LpSpace.Basic
-import Tengoku.MeasureTheory.Integral.IntervalIntegral.Basic
-import Tengoku.MeasureTheory.Integral.IntervalIntegral.IntegrationByParts
+import Tengoku.Seed.Analysis.Distribution.AEEqOfIntegralContDiff
+import Tengoku.Seed.Analysis.InnerProductSpace.Dual
+import Tengoku.Seed.MeasureTheory.Function.ConvergenceInMeasure
+import Tengoku.Seed.MeasureTheory.Function.LpSpace.Basic
+import Tengoku.Seed.MeasureTheory.Integral.IntervalIntegral.Basic
+import Tengoku.Seed.MeasureTheory.Integral.IntervalIntegral.IntegrationByParts
 
 namespace LerayHopf.Bochner
 

@@ -9,9 +9,6 @@ public import Tengoku.Flt.FLT.KnownIn1980s.EllipticCurves.TateParameter
 
 import Tengoku.Flt.FLT.Slop.NumberTheory.TsumDivisorsAntidiagonal
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-!
 

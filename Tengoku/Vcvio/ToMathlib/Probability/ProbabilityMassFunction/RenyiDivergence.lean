@@ -6,9 +6,6 @@ Authors: Quang Dao
 
 module
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 public import Tengoku.Vcvio.ToMathlib.Analysis.MeanInequalities
 public import Tengoku.Vcvio.ToMathlib.Probability.ProbabilityMassFunction.TotalVariation
 

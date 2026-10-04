@@ -6,9 +6,6 @@ Authors: Sidharth Hariharan
 module
 
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-! # Deforming Paths of Integration for Open Contours
 

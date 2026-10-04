@@ -27,9 +27,6 @@ Released under Apache 2.0 license as described in the file LICENSE.
 module
 
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 public import Tengoku.FormalMathfin.MathFin.Foundations.DiscreteIto
 
 /-!

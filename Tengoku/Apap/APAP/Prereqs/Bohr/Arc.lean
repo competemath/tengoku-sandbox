@@ -2,9 +2,6 @@ module
 
 public import Tengoku.Apap.APAP.Prereqs.Bohr.Basic
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 @[expose] public section
 

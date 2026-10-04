@@ -6,9 +6,6 @@ Authors: Alfredo Garcia
 module
 
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-!
 # Glosten-Milgrom adverse-selection bid-ask spread

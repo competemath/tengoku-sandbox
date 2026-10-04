@@ -6,9 +6,6 @@ import Tengoku.Leanmodularforms.LeanModularForms.ForMathlib.HungerbuhlerWasem.Se
 import Tengoku.Leanmodularforms.LeanModularForms.ForMathlib.HungerbuhlerWasem.CrossingDataBuilder
 import Tengoku.Leanmodularforms.LeanModularForms.ForMathlib.ExitTime
 import Tengoku
-import Tengoku.Std
-import Tengoku.Tactic.Aesop
-import Tengoku.Meta.Qq
 
 /-!
 # Higher-order CPV discharger from immersion data (T-BR-03)

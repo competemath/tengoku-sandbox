@@ -1,7 +1,4 @@
 import Tengoku
-import Tengoku.Std
-import Tengoku.Tactic.Aesop
-import Tengoku.Meta.Qq
 
 /-!
 # Bounded real multipliers on `Lp ℂ 2 μ` (`BoundedMultiplier`)

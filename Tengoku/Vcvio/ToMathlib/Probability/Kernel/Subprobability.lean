@@ -7,9 +7,6 @@ module
 
 public import Tengoku.Vcvio.ToMathlib.MeasureTheory.Measure.Subprobability
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-!
 # Subprobability kernels

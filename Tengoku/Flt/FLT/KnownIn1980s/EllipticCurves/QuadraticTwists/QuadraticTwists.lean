@@ -12,9 +12,6 @@ public import Tengoku.Flt.FLT.Mathlib.RingTheory.Norm.Quadratic
 public import Tengoku.Flt.FLT.Mathlib.LinearAlgebra.Dimension.IsQuadraticExtension
 
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-!
 

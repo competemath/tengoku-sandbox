@@ -6,9 +6,6 @@ Authors: Salvatore Mercuri
 module
 
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-!
 # Extensions of complex embeddings and infinite places of a number field

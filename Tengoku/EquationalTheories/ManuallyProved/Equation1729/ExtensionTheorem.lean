@@ -1,23 +1,23 @@
 -- Tengoku.EquationalTheories.ManuallyProved.Equation1729.ExtensionTheorem: verified translations of equational_theories/ManuallyProved/Equation1729/ExtensionTheorem.lean (1 theorem)
-import Tengoku.Order.Preorder.Chain
-import Tengoku.Data.Set.Countable
-import Tengoku.Algebra.Ring.NonZeroDivisors
-import Tengoku.Data.Finset.Union
-import Tengoku.GroupTheory.FreeGroup.CyclicallyReduced
+import Tengoku.Seed.Order.Preorder.Chain
+import Tengoku.Seed.Data.Set.Countable
+import Tengoku.Seed.Algebra.Ring.NonZeroDivisors
+import Tengoku.Seed.Data.Finset.Union
+import Tengoku.Seed.GroupTheory.FreeGroup.CyclicallyReduced
 import Tengoku.EquationalTheories.Deps.Magma
 import Lean
-import Tengoku.Data.FunLike.Basic
-import Tengoku.Logic.Equiv.Basic
-import Tengoku.Data.List.NodupEquivFin
-import Tengoku.Data.Set.Defs
+import Tengoku.Seed.Data.FunLike.Basic
+import Tengoku.Seed.Logic.Equiv.Basic
+import Tengoku.Seed.Data.List.NodupEquivFin
+import Tengoku.Seed.Data.Set.Defs
 import Lean.Elab.Exception
 import Lean.Elab.Declaration
 import Lean.Util.CollectAxioms
 import Lean.Environment
 import Lean.Meta.Basic
 import Lean.Util
-import Tengoku.Logic.Equiv.Defs
-import Tengoku.Tactic
+import Tengoku.Seed.Logic.Equiv.Defs
+import Tengoku.Seed.Tactic
 import Tengoku.EquationalTheories.Deps.Equations
 
 set_option linter.all false

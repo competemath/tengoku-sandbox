@@ -1,24 +1,24 @@
 -- Tengoku.EquationalTheories.ManuallyProved.Equation1323: verified translations of equational_theories/ManuallyProved/Equation1323.lean (10 theorems)
-import Tengoku.Algebra.Ring.NonZeroDivisors
-import Tengoku.Data.Finset.Union
-import Tengoku.Data.Set.Countable
-import Tengoku.GroupTheory.FreeGroup.CyclicallyReduced
+import Tengoku.Seed.Algebra.Ring.NonZeroDivisors
+import Tengoku.Seed.Data.Finset.Union
+import Tengoku.Seed.Data.Set.Countable
+import Tengoku.Seed.GroupTheory.FreeGroup.CyclicallyReduced
 import Lean.Elab.Exception
 import Lean.Elab.Declaration
 import Lean.Util.CollectAxioms
 import Lean.Environment
 import Lean.Meta.Basic
 import Lean.Util
-import Tengoku.Data.FunLike.Basic
-import Tengoku.Logic.Equiv.Basic
+import Tengoku.Seed.Data.FunLike.Basic
+import Tengoku.Seed.Logic.Equiv.Basic
 import Tengoku.EquationalTheories.Deps.Magma
-import Tengoku.Data.List.NodupEquivFin
-import Tengoku.Data.Set.Defs
+import Tengoku.Seed.Data.List.NodupEquivFin
+import Tengoku.Seed.Data.Set.Defs
 import Lean
-import Tengoku.Order.Preorder.Chain
-import Tengoku.Logic.Equiv.Finset
-import Tengoku.Tactic.Group
-import Tengoku.GroupTheory.OrderOfElement
+import Tengoku.Seed.Order.Preorder.Chain
+import Tengoku.Seed.Logic.Equiv.Finset
+import Tengoku.Seed.Tactic.Group
+import Tengoku.Seed.GroupTheory.OrderOfElement
 import Tengoku.EquationalTheories.Deps.Equations
 
 set_option linter.all false

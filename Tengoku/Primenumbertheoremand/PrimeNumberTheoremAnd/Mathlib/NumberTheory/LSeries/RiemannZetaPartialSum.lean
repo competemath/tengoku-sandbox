@@ -13,9 +13,6 @@ public import Tengoku.Primenumbertheoremand.PrimeNumberTheoremAnd.Mathlib.Number
 public import Tengoku.Primenumbertheoremand.PrimeNumberTheoremAnd.Mathlib.MeasureTheory.Integral.IntervalIntegral.Basic
 public import Tengoku.Primenumbertheoremand.PrimeNumberTheoremAnd.Mathlib.MeasureTheory.Integral.IntegrableOn
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-!
 # Abel-summation partial sums for the Riemann zeta function

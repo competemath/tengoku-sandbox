@@ -7,9 +7,6 @@ module
 
 public import Tengoku.Vcvio.ToMathlib.MeasureTheory.MeasurableSpace.Option
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-!
 # Discarding the `none` part of an option-valued measure

@@ -5,9 +5,6 @@ Authors: Kei Tsukamoto
 -/
 import Tengoku.Statsmllib.StatsMLlib.Probability.Moments.Orlicz
 import Tengoku
-import Tengoku.Std
-import Tengoku.Tactic.Aesop
-import Tengoku.Meta.Qq
 
 /-!
 # Properties of sub-Gaussian random variables

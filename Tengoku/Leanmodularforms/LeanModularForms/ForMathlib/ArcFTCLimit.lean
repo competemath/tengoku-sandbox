@@ -6,9 +6,6 @@ Authors: Chris Birkbeck
 import Tengoku.Leanmodularforms.LeanModularForms.ForMathlib.ArcFTC
 import Tengoku.Leanmodularforms.LeanModularForms.ForMathlib.SegmentFTC
 import Tengoku
-import Tengoku.Std
-import Tengoku.Tactic.Aesop
-import Tengoku.Meta.Qq
 
 /-!
 # Arc FTC Limit at i — Slit Plane Membership and Log-Arg Computation

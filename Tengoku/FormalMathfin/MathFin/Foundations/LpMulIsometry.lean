@@ -6,9 +6,6 @@ Authors: Raphael Coelho
 module
 
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-! # Multiplication by `f` as an isometry `L²(f²·ν) → L²(ν)`
 

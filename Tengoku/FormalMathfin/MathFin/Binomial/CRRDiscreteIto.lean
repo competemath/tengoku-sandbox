@@ -6,9 +6,6 @@ Authors: Raphael Coelho
 module
 
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 public import Tengoku.FormalMathfin.MathFin.Binomial.CRRConvergence
 public import Tengoku.FormalMathfin.MathFin.Binomial.DriftLimit
 

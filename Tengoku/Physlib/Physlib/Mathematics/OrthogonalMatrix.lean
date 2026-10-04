@@ -6,9 +6,6 @@ Authors: Giuseppe Sorge
 module
 
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 /-!
 
 # Orthogonal matrices and the dot product

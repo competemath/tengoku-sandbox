@@ -6,9 +6,6 @@ Authors: Robert Sneiderman, Joseph Tooby-Smith
 module
 
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 /-!
 # Rational complex numbers
 

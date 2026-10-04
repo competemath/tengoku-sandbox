@@ -1,23 +1,23 @@
 -- Tengoku.EquationalTheories.FiniteModel: verified translations of equational_theories/FiniteModel.lean (7 theorems)
 import Tengoku.EquationalTheories.Deps.Magma
 import Lean
-import Tengoku.Data.FunLike.Basic
-import Tengoku.Logic.Equiv.Basic
-import Tengoku.Data.List.NodupEquivFin
-import Tengoku.Data.Set.Defs
+import Tengoku.Seed.Data.FunLike.Basic
+import Tengoku.Seed.Logic.Equiv.Basic
+import Tengoku.Seed.Data.List.NodupEquivFin
+import Tengoku.Seed.Data.Set.Defs
 import Lean.Elab.Exception
 import Lean.Elab.Declaration
 import Lean.Util.CollectAxioms
 import Lean.Environment
 import Lean.Meta.Basic
 import Lean.Util
-import Tengoku.Data.Fintype.Card
-import Tengoku.Data.Fintype.Pigeonhole
-import Tengoku.Data.Fintype.Units
-import Tengoku.Data.Finite.Prod
-import Tengoku.Logic.Function.Defs
-import Tengoku.Logic.Function.Iterate
-import Tengoku.Tactic.Linarith
+import Tengoku.Seed.Data.Fintype.Card
+import Tengoku.Seed.Data.Fintype.Pigeonhole
+import Tengoku.Seed.Data.Fintype.Units
+import Tengoku.Seed.Data.Finite.Prod
+import Tengoku.Seed.Logic.Function.Defs
+import Tengoku.Seed.Logic.Function.Iterate
+import Tengoku.Seed.Tactic.Linarith
 import Tengoku.EquationalTheories.Deps.Equations
 
 set_option linter.all false

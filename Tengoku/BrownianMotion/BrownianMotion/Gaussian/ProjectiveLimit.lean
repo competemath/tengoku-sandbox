@@ -9,9 +9,6 @@ public import Tengoku.BrownianMotion.BrownianMotion.Auxiliary.MeasureTheory
 public import Tengoku.BrownianMotion.BrownianMotion.Auxiliary.NNReal
 public import Tengoku.BrownianMotion.BrownianMotion.Gaussian.Gaussian
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-!
 # Pre-Brownian motion as a projective limit

@@ -6,9 +6,6 @@ Author: Arend Mellendijk
 ! This file was ported from Lean 3 source module aux_results
 -/
 import Tengoku
-import Tengoku.Std
-import Tengoku.Tactic.Aesop
-import Tengoku.Meta.Qq
 
 noncomputable section
 

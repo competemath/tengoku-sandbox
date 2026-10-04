@@ -6,9 +6,6 @@ Authors:
 import Tengoku.Leanmodularforms.LeanModularForms.ForMathlib.GeneralizedResidueTheory.Residue.MultipointPV
 import Tengoku.Leanmodularforms.LeanModularForms.ForMathlib.GeneralizedResidueTheory.Residue.MultipointPV.DominatedConvergence
 import Tengoku
-import Tengoku.Std
-import Tengoku.Tactic.Aesop
-import Tengoku.Meta.Qq
 
 /-!
 # Generalized Residue Theorem -- Base Infrastructure

@@ -6,9 +6,6 @@ Authors: Robert Martin
 module
 
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-!
 # Exact change to coordinates relative to a decreasing straight line

@@ -1,8 +1,5 @@
 import Tengoku.LerayHopf.LerayHopf.R3.DivergenceFree
 import Tengoku
-import Tengoku.Std
-import Tengoku.Tactic.Aesop
-import Tengoku.Meta.Qq
 
 namespace LerayHopf
 open MeasureTheory SchwartzMap LineDeriv

@@ -6,9 +6,6 @@ Authors: Yongxi Lin
 module
 
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-!
 # Hereditary separability of linear orders

@@ -7,9 +7,6 @@ module
 
 public import Tengoku.Flt.FLT.Mathlib.Topology.Algebra.ContinuousSMulDiscrete
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-!
 # Frobenius elements

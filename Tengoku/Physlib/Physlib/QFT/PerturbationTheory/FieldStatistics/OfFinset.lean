@@ -7,9 +7,6 @@ module
 
 public import Tengoku.Physlib.Physlib.QFT.PerturbationTheory.FieldStatistics.Basic
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 /-!
 
 # Field statistics of a finite set.

@@ -6,7 +6,7 @@ import Tengoku.LerayHopf.LerayHopf.R3.FrechetKolmogorov
 import Tengoku.LerayHopf.LerayHopf.R3.RellichBall
 import Tengoku.LerayHopf.LerayHopf.R3.SpatialCompactness
 import Tengoku.LerayHopf.LerayHopf.R3.WeightedFourierCommute
-import Tengoku.MeasureTheory.Integral.IntervalIntegral.Basic
+import Tengoku.Seed.MeasureTheory.Integral.IntervalIntegral.Basic
 
 open MeasureTheory Filter Topology LineDeriv
 

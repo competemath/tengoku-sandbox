@@ -6,9 +6,6 @@ Authors: Robert Martin
 module
 
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-! # First-contact stability from a vanishing nonnegative gap 
 ## Result

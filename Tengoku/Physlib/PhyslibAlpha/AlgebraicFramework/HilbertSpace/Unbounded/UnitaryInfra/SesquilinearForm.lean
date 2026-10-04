@@ -7,9 +7,6 @@ module
 
 public import Tengoku.Physlib.PhyslibAlpha.AlgebraicFramework.HilbertSpace.Unbounded.WeakIntegral
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-!
 # Infrastructure for the bounded-unitary spectral theorem: the sesquilinear form

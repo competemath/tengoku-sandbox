@@ -1,8 +1,5 @@
 import Tengoku.Formalslt.FormalSLT.PACBayes.GaussianKL
 import Tengoku
-import Tengoku.Std
-import Tengoku.Tactic.Aesop
-import Tengoku.Meta.Qq
 
 /-!
 # Measure-theoretic Gaussian KL bridge

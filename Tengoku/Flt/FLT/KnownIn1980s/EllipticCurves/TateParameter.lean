@@ -6,9 +6,6 @@ Authors: Kevin Buzzard, William Coram
 module
 
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 public import Tengoku.Flt.FLT.Mathlib.RingTheory.Valuation.ValuativeRel.Basic
 public import Tengoku.Flt.FLT.Mathlib.Topology.Algebra.ValuativeRel.ValuativeTopology
 

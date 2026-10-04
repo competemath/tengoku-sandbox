@@ -6,9 +6,6 @@ Authors: Kexing Ying, Greg Neustroev, Shehzad Hathi
 module
 
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-!
 # Progressively Measurable σ-algebra

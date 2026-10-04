@@ -1,8 +1,8 @@
 -- EquationalTheories/Deps/Superposition: verbatim from equational_theories.Superposition (imports mapped, corpus bookkeeping attributes stripped)
 import Lean
-import Tengoku.Std.Tactic.Exact
-import Tengoku.Meta.Qq
-import Tengoku.Init
+import Tengoku.Seed.Std.Tactic.Exact
+import Tengoku.Seed.Meta.Qq
+import Tengoku.Seed.Init
 
 set_option linter.all false
 

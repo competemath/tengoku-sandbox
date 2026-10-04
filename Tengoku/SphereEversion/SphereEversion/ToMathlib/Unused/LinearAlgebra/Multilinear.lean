@@ -1,7 +1,4 @@
 import Tengoku
-import Tengoku.Std
-import Tengoku.Tactic.Aesop
-import Tengoku.Meta.Qq
 
 /-
 Multilinear map stuff that was meant as preliminaries for smooth functions gluing.

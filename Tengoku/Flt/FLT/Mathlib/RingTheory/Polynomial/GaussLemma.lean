@@ -6,9 +6,6 @@ Authors: Michael Stoll, Claude
 module
 
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-!
 # Monic divisors descend along the fraction field

@@ -6,9 +6,6 @@ Authors: Joseph Myers
 import Tengoku.Aperiodicmonotiles.AM.Mathlib.Combinatorics.Tiling.Function.Tiling
 import Tengoku.Aperiodicmonotiles.AM.Mathlib.Combinatorics.Tiling.Isohedral
 import Tengoku
-import Tengoku.Std
-import Tengoku.Tactic.Aesop
-import Tengoku.Meta.Qq
 
 /-!
 # Periodic tilings and aperiodic protosets

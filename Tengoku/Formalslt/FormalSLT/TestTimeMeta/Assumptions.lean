@@ -1,7 +1,4 @@
 import Tengoku
-import Tengoku.Std
-import Tengoku.Tactic.Aesop
-import Tengoku.Meta.Qq
 
 /-!
 # Named assumptions for the PAC-Bayes test-time meta-theorem

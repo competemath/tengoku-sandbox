@@ -6,9 +6,6 @@ Authors: Yongxi Lin
 module
 
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-!
 # Variation of a function over a countable or dense set of points

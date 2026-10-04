@@ -6,9 +6,6 @@ Authors: Sidharth Hariharan
 module
 
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-! The contents of this file should go to Topology.Algebra.InfiniteSum, either
  into Basic or into another file. -/

@@ -2,9 +2,6 @@ module
 
 public import Tengoku.BrownianMotion.BrownianMotion.Auxiliary.LinearAlgebra
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-!
 # Continuous bilinear forms

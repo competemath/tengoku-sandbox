@@ -6,9 +6,6 @@ Authors: Andrew Yang, Kevin Buzzard, Pietro Monticone, Ruben Van de Velde
 module
 
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-!
 # Miscellaneous lemmas for the patching folder

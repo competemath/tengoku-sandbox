@@ -7,9 +7,6 @@ module
 
 public import Tengoku.BrownianMotion.BrownianMotion.Auxiliary.Filtration
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-! # Properties of martingales and submartingales
 -/

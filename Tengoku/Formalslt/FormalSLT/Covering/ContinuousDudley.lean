@@ -1,8 +1,5 @@
 import Tengoku.Formalslt.FormalSLT.Covering.TotalBoundedDudley
 import Tengoku
-import Tengoku.Std
-import Tengoku.Tactic.Aesop
-import Tengoku.Meta.Qq
 
 /-!
 # Brick 3: the continuous Dudley entropy integral as a measure-theoretic limit

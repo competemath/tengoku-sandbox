@@ -7,9 +7,6 @@ module
 
 public import Tengoku.Physlib.Physlib.Relativity.SpeedOfLight
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 /-!
 
 # Free space

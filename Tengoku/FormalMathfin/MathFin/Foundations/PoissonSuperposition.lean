@@ -6,9 +6,6 @@ Authors: Raphael Coelho
 module
 
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-!
 # Superposition of Poisson streams: the map-form increment law

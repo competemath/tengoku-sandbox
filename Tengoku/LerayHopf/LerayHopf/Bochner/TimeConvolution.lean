@@ -47,12 +47,12 @@ No new `axiom`/`opaque`/`constant`, and **zero `sorry`**. The whole-line Young b
 approach is a documented design note only; nothing is weakened and no axiom is introduced.
 -/
 
-import Tengoku.Analysis.Calculus.BumpFunction.Normed
-import Tengoku.Analysis.Calculus.BumpFunction.FiniteDimension
-import Tengoku.MeasureTheory.Function.LpSpace.Basic
-import Tengoku.MeasureTheory.Function.LpSpace.ContinuousCompMeasurePreserving
-import Tengoku.MeasureTheory.Integral.Bochner.Basic
-import Tengoku.MeasureTheory.Integral.CompactlySupported
+import Tengoku.Seed.Analysis.Calculus.BumpFunction.Normed
+import Tengoku.Seed.Analysis.Calculus.BumpFunction.FiniteDimension
+import Tengoku.Seed.MeasureTheory.Function.LpSpace.Basic
+import Tengoku.Seed.MeasureTheory.Function.LpSpace.ContinuousCompMeasurePreserving
+import Tengoku.Seed.MeasureTheory.Integral.Bochner.Basic
+import Tengoku.Seed.MeasureTheory.Integral.CompactlySupported
 
 namespace LerayHopf.Bochner
 

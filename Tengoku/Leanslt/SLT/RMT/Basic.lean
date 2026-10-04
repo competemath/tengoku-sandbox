@@ -6,9 +6,6 @@ Authors: Yuanhe Zhang, Jason D. Lee, Fanghui Liu
 import Tengoku.Leanslt.SLT.CoveringNumber
 import Tengoku.Leanslt.SLT.HansonWright
 import Tengoku
-import Tengoku.Std
-import Tengoku.Tactic.Aesop
-import Tengoku.Meta.Qq
 
 /-!
 # Random Matrix Theory Basics

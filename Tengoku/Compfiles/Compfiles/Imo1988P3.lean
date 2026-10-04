@@ -7,9 +7,6 @@ Authors: InternLM-MATH LEAN Formalizer v0.1, Goedel-Prover-V2
 module
 
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 @[expose] public section
 

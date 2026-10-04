@@ -8,9 +8,6 @@ module
 public import Tengoku.AddCombi.AddCombi.Mathlib.Algebra.Notation.Indicator
 public import Tengoku.AddCombi.AddCombi.Mathlib.Combinatorics.Additive.Energy
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 import Tengoku.AddCombi.AddCombi.Mathlib.Algebra.GroupWithZero.Indicator
 import Tengoku.AddCombi.AddCombi.Mathlib.Algebra.Star.Pi

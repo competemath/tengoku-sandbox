@@ -8,9 +8,6 @@ module
 public import Tengoku.Flt.FLT.Mathlib.Algebra.IsDirectLimit
 public import Tengoku.Flt.FLT.Mathlib.Topology.Algebra.RestrictedProduct.Basic
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-!
 # The finite adele ring as a direct limit

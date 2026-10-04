@@ -7,9 +7,6 @@ Authors: Quang Dao
 module
 public import Tengoku.Vcvio.ToMathlib.Analysis.SumIntegralComparisons
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-!
 # Discrete Gaussian Distribution

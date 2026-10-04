@@ -7,19 +7,19 @@ third-party material listed below, which stays under its upstream licence. Nothi
 
 The tree was seeded by folding the source files of these packages into topic paths (`scripts/seed.py`).
 Seeded files are copied as they are upstream, copyright headers included wherever the upstream file has one;
-the aggregator modules (`Tengoku/Std.lean` and the like) are generated.
+the aggregator modules (`Tengoku/Seed/Std.lean` and the like) are generated.
 
 | Package | Upstream | Licence | Folded into |
 |---|---|---|---|
 | Mathlib | [leanprover-community/mathlib4](https://github.com/leanprover-community/mathlib4) | Apache-2.0 | `Tengoku/` (topic paths) |
-| Batteries | [leanprover-community/batteries](https://github.com/leanprover-community/batteries) | Apache-2.0 | `Tengoku/Std/` |
-| Aesop | [leanprover-community/aesop](https://github.com/leanprover-community/aesop) | Apache-2.0 | `Tengoku/Tactic/Aesop/` |
-| Qq | [leanprover-community/quote4](https://github.com/leanprover-community/quote4) | Apache-2.0 | `Tengoku/Meta/Qq/` |
-| ProofWidgets | [leanprover-community/ProofWidgets4](https://github.com/leanprover-community/ProofWidgets4) | Apache-2.0 | `Tengoku/Widgets/`, `widget/` |
-| Plausible | [leanprover-community/plausible](https://github.com/leanprover-community/plausible) | Apache-2.0 | `Tengoku/Testing/Random/` |
-| LeanSearchClient | [leanprover-community/LeanSearchClient](https://github.com/leanprover-community/LeanSearchClient) | Apache-2.0 | `Tengoku/Search/LeanSearchClient/` |
-| import-graph | [leanprover-community/import-graph](https://github.com/leanprover-community/import-graph) | Apache-2.0 | `Tengoku/Meta/ImportGraph/` |
-| lean4-cli | [leanprover/lean4-cli](https://github.com/leanprover/lean4-cli) | MIT | `Tengoku/Meta/Cli/` |
+| Batteries | [leanprover-community/batteries](https://github.com/leanprover-community/batteries) | Apache-2.0 | `Tengoku/Seed/Std/` |
+| Aesop | [leanprover-community/aesop](https://github.com/leanprover-community/aesop) | Apache-2.0 | `Tengoku/Seed/Tactic/Aesop/` |
+| Qq | [leanprover-community/quote4](https://github.com/leanprover-community/quote4) | Apache-2.0 | `Tengoku/Seed/Meta/Qq/` |
+| ProofWidgets | [leanprover-community/ProofWidgets4](https://github.com/leanprover-community/ProofWidgets4) | Apache-2.0 | `Tengoku/Seed/Widgets/`, `widget/` |
+| Plausible | [leanprover-community/plausible](https://github.com/leanprover-community/plausible) | Apache-2.0 | `Tengoku/Seed/Testing/Random/` |
+| LeanSearchClient | [leanprover-community/LeanSearchClient](https://github.com/leanprover-community/LeanSearchClient) | Apache-2.0 | `Tengoku/Seed/Search/LeanSearchClient/` |
+| import-graph | [leanprover-community/import-graph](https://github.com/leanprover-community/import-graph) | Apache-2.0 | `Tengoku/Seed/Meta/ImportGraph/` |
+| lean4-cli | [leanprover/lean4-cli](https://github.com/leanprover/lean4-cli) | MIT | `Tengoku/Seed/Meta/Cli/` |
 
 lean4-cli is MIT-licensed: `Copyright (c) 2021 mhuisi` ([licence](https://github.com/leanprover/lean4-cli/blob/main/LICENSE)). The MIT permission notice is reproduced in section 4.
 

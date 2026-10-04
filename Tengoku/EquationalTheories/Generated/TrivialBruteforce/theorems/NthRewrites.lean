@@ -1,11 +1,11 @@
 -- Tengoku.EquationalTheories.Generated.TrivialBruteforce.theorems.NthRewrites: verified translations of equational_theories/Generated/TrivialBruteforce/theorems/NthRewrites.lean (150 theorems)
-import Tengoku.Tactic.NthRewrite
+import Tengoku.Seed.Tactic.NthRewrite
 import Tengoku.EquationalTheories.Deps.Magma
 import Lean
-import Tengoku.Data.FunLike.Basic
-import Tengoku.Logic.Equiv.Basic
-import Tengoku.Data.List.NodupEquivFin
-import Tengoku.Data.Set.Defs
+import Tengoku.Seed.Data.FunLike.Basic
+import Tengoku.Seed.Logic.Equiv.Basic
+import Tengoku.Seed.Data.List.NodupEquivFin
+import Tengoku.Seed.Data.Set.Defs
 import Lean.Elab.Exception
 import Lean.Elab.Declaration
 import Lean.Util.CollectAxioms

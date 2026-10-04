@@ -4,9 +4,6 @@ Released under MIT license as described in the file LICENSE.
 Authors: Robby Sneiderman
 -/
 import Tengoku
-import Tengoku.Std
-import Tengoku.Tactic.Aesop
-import Tengoku.Meta.Qq
 import Tengoku.Formalslt.FormalSLT.Concentration.SubGamma.BennettBound
 import Tengoku.Formalslt.FormalSLT.Concentration.SubGamma.BoundedExpIntegrable
 

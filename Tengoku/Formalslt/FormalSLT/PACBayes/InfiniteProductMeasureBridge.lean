@@ -5,9 +5,6 @@ Authors: Robby Sneiderman
 -/
 
 import Tengoku
-import Tengoku.Std
-import Tengoku.Tactic.Aesop
-import Tengoku.Meta.Qq
 
 /-!
 # Infinite iid paths and finite prefixes

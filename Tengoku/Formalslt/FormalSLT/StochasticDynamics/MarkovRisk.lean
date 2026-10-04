@@ -5,9 +5,6 @@ Authors: Robby Sneiderman
 -/
 import Tengoku.Formalslt.FormalSLT.AnytimeValid.OptimizedLambdaCS
 import Tengoku
-import Tengoku.Std
-import Tengoku.Tactic.Aesop
-import Tengoku.Meta.Qq
 
 /-!
 # Prequential risk along a finite Markov trajectory

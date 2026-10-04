@@ -2,9 +2,6 @@ module
 
 public import Tengoku.ForbiddenMatrix.ForbiddenMatrix.ExtremalFunction
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 import Tengoku.ForbiddenMatrix.ForbiddenMatrix.MatrixOperations
 

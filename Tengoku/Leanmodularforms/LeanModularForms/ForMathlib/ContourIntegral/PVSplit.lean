@@ -5,9 +5,6 @@ Authors: Chris Birkbeck
 -/
 import Tengoku.Leanmodularforms.LeanModularForms.ForMathlib.ClassicalCPV
 import Tengoku
-import Tengoku.Std
-import Tengoku.Tactic.Aesop
-import Tengoku.Meta.Qq
 
 /-!
 # PV Integral Splitting at Crossings

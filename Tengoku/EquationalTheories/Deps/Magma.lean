@@ -1,6 +1,6 @@
 -- EquationalTheories/Deps/Magma: verbatim from equational_theories.Magma (imports mapped, corpus bookkeeping attributes stripped)
 
-import Tengoku.Init
+import Tengoku.Seed.Init
 
 set_option linter.all false
 

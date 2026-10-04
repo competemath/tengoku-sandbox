@@ -13,9 +13,6 @@ public import Tengoku.Primenumbertheoremand.PrimeNumberTheoremAnd.Mathlib.Analys
 public import Tengoku.Primenumbertheoremand.PrimeNumberTheoremAnd.Mathlib.MeasureTheory.Integral.IntervalIntegral.Basic
 public import Tengoku.Primenumbertheoremand.PrimeNumberTheoremAnd.Mathlib.MeasureTheory.Integral.IntegrableOn
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-!
 # Fractional-part kernel for the Abel zeta formula

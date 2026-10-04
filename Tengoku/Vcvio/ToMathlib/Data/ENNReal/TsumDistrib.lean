@@ -6,9 +6,6 @@ Authors: Quang Dao
 module
 
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-!
 # Distributivity of weighted `tsum`s over addition in `ℝ≥0∞`

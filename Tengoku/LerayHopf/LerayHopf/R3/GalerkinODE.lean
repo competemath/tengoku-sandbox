@@ -1,8 +1,5 @@
 import Tengoku.LerayHopf.LerayHopf.R3.SolutionInterfaces
 import Tengoku
-import Tengoku.Std
-import Tengoku.Tactic.Aesop
-import Tengoku.Meta.Qq
 
 /-!
 # Galerkin ODE on ℝ³: axiom-free energy/dissipation/regularity payoff (milestone `ode-galerkin-r3`)

@@ -6,9 +6,6 @@ Authors: Yuanhe Zhang, Jason D. Lee, Fanghui Liu
 import Tengoku.Leanslt.SLT.GaussianSobolevDense.Defs
 import Tengoku.Leanslt.SLT.GaussianSobolevDense.Cutoff
 import Tengoku
-import Tengoku.Std
-import Tengoku.Tactic.Aesop
-import Tengoku.Meta.Qq
 
 /-!
 # Mollification Lemmas for Gaussian Sobolev Density

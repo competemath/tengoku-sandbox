@@ -1,7 +1,4 @@
 import Tengoku
-import Tengoku.Std
-import Tengoku.Tactic.Aesop
-import Tengoku.Meta.Qq
 
 /-!
 Upper and lower bounds on the series S = Σₙ (log 2)^(n+1) / ((n+1) · (n+1)!)

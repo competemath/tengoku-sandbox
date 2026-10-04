@@ -1,10 +1,10 @@
 -- Tengoku.EquationalTheories.Generated.MagmaEgg.small._005: verified translations of equational_theories/Generated/MagmaEgg/small/_005.lean (52 theorems)
 import Tengoku.EquationalTheories.Deps.Magma
 import Lean
-import Tengoku.Data.FunLike.Basic
-import Tengoku.Logic.Equiv.Basic
-import Tengoku.Data.List.NodupEquivFin
-import Tengoku.Data.Set.Defs
+import Tengoku.Seed.Data.FunLike.Basic
+import Tengoku.Seed.Logic.Equiv.Basic
+import Tengoku.Seed.Data.List.NodupEquivFin
+import Tengoku.Seed.Data.Set.Defs
 import Lean.Elab.Exception
 import Lean.Elab.Declaration
 import Lean.Util.CollectAxioms

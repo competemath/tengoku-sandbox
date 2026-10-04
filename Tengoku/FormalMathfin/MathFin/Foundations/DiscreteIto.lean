@@ -24,9 +24,6 @@ Released under Apache 2.0 license as described in the file LICENSE.
 module
 
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-!
 # Discrete Itô formula (phase 35, after Nagy 2026)

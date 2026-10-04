@@ -7,9 +7,6 @@ import Tengoku.Aperiodicmonotiles.AM.Mathlib.Combinatorics.Tiling.Function.Basic
 import Tengoku.Aperiodicmonotiles.AM.Mathlib.Combinatorics.Tiling.Patch
 import Tengoku.Aperiodicmonotiles.AM.Mathlib.Combinatorics.Tiling.TileSetCard
 import Tengoku
-import Tengoku.Std
-import Tengoku.Tactic.Aesop
-import Tengoku.Meta.Qq
 
 /-!
 # Finite local complexity

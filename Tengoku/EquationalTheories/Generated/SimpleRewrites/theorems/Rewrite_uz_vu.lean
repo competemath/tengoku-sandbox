@@ -1,11 +1,11 @@
 -- Tengoku.EquationalTheories.Generated.SimpleRewrites.theorems.Rewrite_uz_vu: verified translations of equational_theories/Generated/SimpleRewrites/theorems/Rewrite_uz_vu.lean (10 theorems)
-import Tengoku.Tactic
+import Tengoku.Seed.Tactic
 import Tengoku.EquationalTheories.Deps.Magma
 import Lean
-import Tengoku.Data.FunLike.Basic
-import Tengoku.Logic.Equiv.Basic
-import Tengoku.Data.List.NodupEquivFin
-import Tengoku.Data.Set.Defs
+import Tengoku.Seed.Data.FunLike.Basic
+import Tengoku.Seed.Logic.Equiv.Basic
+import Tengoku.Seed.Data.List.NodupEquivFin
+import Tengoku.Seed.Data.Set.Defs
 import Lean.Elab.Exception
 import Lean.Elab.Declaration
 import Lean.Util.CollectAxioms

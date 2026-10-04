@@ -55,10 +55,7 @@ added.
 import Tengoku.LerayHopf.LerayHopf.Bochner.TimeConvolution
 import Tengoku.LerayHopf.LerayHopf.Bochner.TimeSobolev
 import Tengoku
-import Tengoku.Std
-import Tengoku.Tactic.Aesop
-import Tengoku.Meta.Qq
-import Tengoku.Data.Real.Sign
+import Tengoku.Seed.Data.Real.Sign
 
 namespace LerayHopf.Bochner
 

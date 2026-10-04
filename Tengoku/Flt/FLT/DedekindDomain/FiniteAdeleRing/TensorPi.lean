@@ -6,9 +6,6 @@ Authors: Madison Crim
 module
 
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 /-!
 
 # Tensor product commutes with direct product when tensoring with a finite free module

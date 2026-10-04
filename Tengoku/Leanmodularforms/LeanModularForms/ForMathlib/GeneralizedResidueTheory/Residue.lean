@@ -9,9 +9,6 @@ import Tengoku.Leanmodularforms.LeanModularForms.ForMathlib.GeneralizedResidueTh
 import Tengoku.Leanmodularforms.LeanModularForms.ForMathlib.GeneralizedResidueTheory.Homotopy.Invariance
 import Tengoku.Leanmodularforms.LeanModularForms.ForMathlib.Residue
 import Tengoku
-import Tengoku.Std
-import Tengoku.Tactic.Aesop
-import Tengoku.Meta.Qq
 
 /-!
 # Residue Theory

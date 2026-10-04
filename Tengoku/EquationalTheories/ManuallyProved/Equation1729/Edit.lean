@@ -1,6 +1,6 @@
 -- Tengoku.EquationalTheories.ManuallyProved.Equation1729.Edit: verified translations of equational_theories/ManuallyProved/Equation1729/Edit.lean (4 theorems)
-import Tengoku.Data.Fintype.Basic
-import Tengoku.Logic.Embedding.Basic
+import Tengoku.Seed.Data.Fintype.Basic
+import Tengoku.Seed.Logic.Embedding.Basic
 import Init.Classical
 import Init.Prelude
 import Tengoku.EquationalTheories.Deps.Equations

@@ -1,8 +1,5 @@
 import Tengoku.LerayHopf.LerayHopf.R3.Regularity
 import Tengoku
-import Tengoku.Std
-import Tengoku.Tactic.Aesop
-import Tengoku.Meta.Qq
 
 open MeasureTheory FourierTransform TemperedDistribution Complex
 open scoped FourierTransform SchwartzMap RealInnerProductSpace ENNReal

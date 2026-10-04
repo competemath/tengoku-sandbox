@@ -1,7 +1,4 @@
 import Tengoku
-import Tengoku.Std
-import Tengoku.Tactic.Aesop
-import Tengoku.Meta.Qq
 
 open Finset MeasureTheory ProbabilityTheory
 open scoped BigOperators ProbabilityTheory

@@ -17,9 +17,6 @@ No new `axiom`/`opaque`/`constant`. Statements faithful; no hypothesis weakening
 
 import Tengoku.LerayHopf.LerayHopf.Bochner.TimeSobolev
 import Tengoku
-import Tengoku.Std
-import Tengoku.Tactic.Aesop
-import Tengoku.Meta.Qq
 
 namespace LerayHopf.Bochner
 

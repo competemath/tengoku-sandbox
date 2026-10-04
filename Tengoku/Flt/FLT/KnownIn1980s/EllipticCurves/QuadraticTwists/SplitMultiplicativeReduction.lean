@@ -12,9 +12,6 @@ public import Tengoku.Flt.FLT.Mathlib.RingTheory.Norm.Quotient
 
 import Tengoku.Flt.FLT.Mathlib.RingTheory.Unramified.LocalRing
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-!
 # Multiplicative reduction becomes split after a quadratic twist

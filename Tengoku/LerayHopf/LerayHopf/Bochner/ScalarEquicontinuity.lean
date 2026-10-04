@@ -27,9 +27,6 @@ Scaffold sorry count: 0.
 -- `ℝ` with ordered-field, metric, and uniform-space instances
 -- (`Topology.Instances.Rat` → `Topology.Algebra.Ring.Real` → `Topology.UniformSpace.Real`)
 import Tengoku
-import Tengoku.Std
-import Tengoku.Tactic.Aesop
-import Tengoku.Meta.Qq
 -- `TendstoUniformlyOn`, `TendstoUniformlyOnFilter`, uniform-space API
 -- `atTop` filter on ordered types (`Filter.atTop`) and `StrictMono`
 -- Sequential compactness of compact first-countable spaces (`IsCompact.tendsto_subseq`)

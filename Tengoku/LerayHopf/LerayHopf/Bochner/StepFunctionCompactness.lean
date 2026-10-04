@@ -45,14 +45,14 @@ No axioms are introduced by this file (`axiom` count: 0), and the file is
 discharged by `lean-prover`.
 -/
 
-import Tengoku.MeasureTheory.Function.LpSpace.Basic
+import Tengoku.Seed.MeasureTheory.Function.LpSpace.Basic
 -- Deviation from the scaffold's import list (recorded per task instruction): A6's proof
 -- upgrades the totally bounded closure to a COMPACT set, which needs the completeness
 -- instance `Lp.instCompleteSpace` — that instance lives in `LpSpace.Complete`, not in
 -- `LpSpace.Basic`.  Mathlib-only, so the file stays domain-neutral (header contract intact).
-import Tengoku.MeasureTheory.Function.LpSpace.Complete
-import Tengoku.MeasureTheory.Measure.Lebesgue.Basic
-import Tengoku.Topology.Sequences
+import Tengoku.Seed.MeasureTheory.Function.LpSpace.Complete
+import Tengoku.Seed.MeasureTheory.Measure.Lebesgue.Basic
+import Tengoku.Seed.Topology.Sequences
 
 namespace LerayHopf
 

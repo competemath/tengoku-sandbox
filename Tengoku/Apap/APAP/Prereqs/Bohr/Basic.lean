@@ -1,9 +1,6 @@
 module
 
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 import Tengoku.Apap.APAP.Mathlib.Analysis.Normed.Ring.Basic
 

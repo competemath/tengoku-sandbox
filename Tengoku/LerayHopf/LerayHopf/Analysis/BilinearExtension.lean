@@ -1,8 +1,5 @@
 import Tengoku
-import Tengoku.Std
-import Tengoku.Tactic.Aesop
-import Tengoku.Meta.Qq
-import Tengoku.Analysis.Normed.Operator.Bilinear
+import Tengoku.Seed.Analysis.Normed.Operator.Bilinear
 
 /-!
 # BilinearExtension — extend a bounded bilinear form from a dense submodule (issue #111 PR-4)

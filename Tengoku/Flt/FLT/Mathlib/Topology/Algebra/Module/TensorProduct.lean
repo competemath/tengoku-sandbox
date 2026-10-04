@@ -7,9 +7,6 @@ module
 
 public import Tengoku.Flt.FLT.Mathlib.LinearAlgebra.TensorProduct.FiniteFree
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 
 /-!
 # Tensor Product

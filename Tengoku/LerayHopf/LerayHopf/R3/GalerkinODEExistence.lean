@@ -1,9 +1,6 @@
 import Tengoku.LerayHopf.LerayHopf.R3.GalerkinODE
 import Tengoku.LerayHopf.LerayHopf.R3.GalerkinScheme
 import Tengoku
-import Tengoku.Std
-import Tengoku.Tactic.Aesop
-import Tengoku.Meta.Qq
 import Tengoku.LerayHopf.LerayHopf.Galerkin.QuadraticField
 
 /-!

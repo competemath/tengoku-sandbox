@@ -1,21 +1,21 @@
 -- Tengoku.EquationalTheories.InfModel: verified translations of equational_theories/InfModel.lean (3 theorems)
 import Tengoku.EquationalTheories.Deps.Magma
 import Lean
-import Tengoku.Data.FunLike.Basic
-import Tengoku.Logic.Equiv.Basic
-import Tengoku.Data.List.NodupEquivFin
-import Tengoku.Data.Set.Defs
+import Tengoku.Seed.Data.FunLike.Basic
+import Tengoku.Seed.Logic.Equiv.Basic
+import Tengoku.Seed.Data.List.NodupEquivFin
+import Tengoku.Seed.Data.Set.Defs
 import Lean.Elab.Exception
 import Lean.Elab.Declaration
 import Lean.Util.CollectAxioms
 import Lean.Environment
 import Lean.Meta.Basic
 import Lean.Util
-import Tengoku.Algebra.Polynomial.Roots
-import Tengoku.Data.Nat.Bitwise
-import Tengoku.Data.ZMod.Basic
-import Tengoku.NumberTheory.Padics.PadicVal.Basic
-import Tengoku.Tactic.ComputeDegree
+import Tengoku.Seed.Algebra.Polynomial.Roots
+import Tengoku.Seed.Data.Nat.Bitwise
+import Tengoku.Seed.Data.ZMod.Basic
+import Tengoku.Seed.NumberTheory.Padics.PadicVal.Basic
+import Tengoku.Seed.Tactic.ComputeDegree
 import Tengoku.EquationalTheories.Deps.Equations
 
 set_option linter.all false

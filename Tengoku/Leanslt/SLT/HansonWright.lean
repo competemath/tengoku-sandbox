@@ -5,9 +5,6 @@ Authors: Yuanhe Zhang, Jason D. Lee, Fanghui Liu
 -/
 import Tengoku.Leanslt.SLT.SubGaussian
 import Tengoku
-import Tengoku.Std
-import Tengoku.Tactic.Aesop
-import Tengoku.Meta.Qq
 
 /-!
 # Hanson-Wright Inequality

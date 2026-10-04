@@ -1,10 +1,10 @@
 -- Tengoku.EquationalTheories.PartialMagma: verified translations of equational_theories/PartialMagma.lean (3 theorems)
-import Tengoku.Data.Finset.Basic
-import Tengoku.Data.Set.Basic
-import Tengoku.Data.Set.Finite.Lattice
-import Tengoku.Data.Countable.Defs
-import Tengoku.Data.Sum.Basic
-import Tengoku.SetTheory.Cardinal.Arithmetic
+import Tengoku.Seed.Data.Finset.Basic
+import Tengoku.Seed.Data.Set.Basic
+import Tengoku.Seed.Data.Set.Finite.Lattice
+import Tengoku.Seed.Data.Countable.Defs
+import Tengoku.Seed.Data.Sum.Basic
+import Tengoku.Seed.SetTheory.Cardinal.Arithmetic
 import Tengoku.EquationalTheories.Deps.Equations
 import Tengoku.EquationalTheories.Deps.Magma
 

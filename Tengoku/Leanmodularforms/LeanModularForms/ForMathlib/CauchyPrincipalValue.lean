@@ -5,9 +5,6 @@ Authors: Chris Birkbeck
 -/
 import Tengoku.Leanmodularforms.LeanModularForms.ForMathlib.PiecewiseContourIntegral
 import Tengoku
-import Tengoku.Std
-import Tengoku.Tactic.Aesop
-import Tengoku.Meta.Qq
 
 /-!
 # Cauchy Principal Value Integrals along Piecewise C¹ Paths

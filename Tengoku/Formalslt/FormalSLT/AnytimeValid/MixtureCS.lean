@@ -5,9 +5,6 @@ Authors: Robby Sneiderman
 -/
 import Tengoku.Formalslt.FormalSLT.AnytimeValid.AtTopCS
 import Tengoku
-import Tengoku.Std
-import Tengoku.Tactic.Aesop
-import Tengoku.Meta.Qq
 
 /-!
 # Mixture confidence sequences

@@ -2,9 +2,6 @@ import Tengoku.Formalslt.FormalSLT.Covering.GuardedDudleyIntegral
 import Tengoku.Formalslt.FormalSLT.Covering.TotalBoundedDudley
 import Tengoku.Formalslt.FormalSLT.Covering.UnitIntervalDudley
 import Tengoku
-import Tengoku.Std
-import Tengoku.Tactic.Aesop
-import Tengoku.Meta.Qq
 
 /-!
 # Total-bounded dyadic covering-number staircase

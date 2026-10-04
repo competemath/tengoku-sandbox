@@ -12,9 +12,6 @@ public import Tengoku.Physlib.Physlib.Electromagnetism.Charge.ChargeUnit
 public import Tengoku.Physlib.Physlib.Thermodynamics.Temperature.TemperatureUnits
 public import Tengoku.Physlib.Physlib.Units.LTMCTDimensionBase
 public import Tengoku
-public import Tengoku.Std
-public import Tengoku.Tactic.Aesop
-public import Tengoku.Meta.Qq
 /-!
 
 # Dimensions and unit
