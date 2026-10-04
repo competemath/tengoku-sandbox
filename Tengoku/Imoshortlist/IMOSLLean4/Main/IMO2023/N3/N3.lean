@@ -88,7 +88,7 @@ lemma padicValNat_prime_mul_factorial_of_lt
     padicValNat (p * q) n.factorial = padicValNat q n.factorial := by
   rw [padicValNat_prime_mul_left h.ne, min_eq_right (padicValNat_factorial_prime_le h.le n)]
 
-local instance : Fact (Nat.Prime 5) := ⟨Nat.prime_five⟩
+instance : Fact (Nat.Prime 5) := ⟨Nat.prime_five⟩
 
 lemma padicValNat_9_eq (n : ℕ) : padicValNat 9 n = padicValNat 3 n / 2 :=
   padicValNat_pow_left 3 n 2
@@ -175,4 +175,3 @@ theorem final_solution_part2 (N : ℕ) :
     _ > 2 * N + 1 := Nat.lt_pow_self (by norm_num)
     _ > 2 * N := (2 * N).lt_succ_self
     _ ≥ N := Nat.le_mul_of_pos_left N Nat.two_pos
--- Tengoku: 1 registration(s) of this module made local so they do not change other libraries (generated)

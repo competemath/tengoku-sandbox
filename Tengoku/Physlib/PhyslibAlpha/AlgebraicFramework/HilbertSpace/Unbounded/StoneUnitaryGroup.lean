@@ -35,8 +35,6 @@ itself to produce the generator's spectral measure in the first place, and is no
 -/
 
 @[expose] public section
-attribute [local instance] QuantumMechanics.instIsAddTorsionFreeContinuousLinearMapWOTComplexIdOfCompleteSpace
-
 
 noncomputable section
 

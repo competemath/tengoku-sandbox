@@ -2,6 +2,7 @@
 Copyright (c) 2023 Kim Morrison. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Kim Morrison
+Changed for Tengoku: copied from import-graph (leanprover-community/import-graph at d8823026ac7e); import paths rewritten.
 -/
 module
 

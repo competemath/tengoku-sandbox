@@ -83,7 +83,7 @@ lemma insertIdx_eq_take_drop {I : Type} (i : I) : (r : List I) → (n : Fin r.le
       List.cons.injEq, true_and]
     exact insertIdx_eq_take_drop i as ⟨n, Nat.succ_lt_succ_iff.mp h⟩
 
-@[local simp]
+@[simp]
 lemma insertIdx_length_fin {I : Type} (i : I) :
     (r : List I) → (n : Fin r.length.succ) →
     (List.insertIdx r n i).length = r.length.succ
@@ -182,4 +182,3 @@ lemma take_insert_let {I : Type} (i : I) :
     exact take_insert_let i n m (Nat.le_of_succ_le_succ h) as (Nat.le_of_succ_le_succ hm)
 
 end Physlib.List
--- Tengoku: 1 registration(s) of this module made local so they do not change other libraries (generated)

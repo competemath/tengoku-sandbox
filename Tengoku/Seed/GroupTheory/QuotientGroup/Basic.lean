@@ -2,6 +2,7 @@
 Copyright (c) 2018 Kevin Buzzard, Patrick Massot. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Kevin Buzzard, Patrick Massot
+Changed for Tengoku: copied from Mathlib (leanprover-community/mathlib4 at 85e3a25e006c); import paths rewritten.
 -/
 -- This file is to a certain extent based on `quotient_module.lean` by Johannes Hölzl.
 module

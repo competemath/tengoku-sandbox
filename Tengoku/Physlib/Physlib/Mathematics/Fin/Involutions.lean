@@ -380,7 +380,7 @@ def involutionNoFixedZeroEquivProd {n : ℕ} :
 -/
 
 /-- The type of fixed-point free involutions of `Fin n` is finite. -/
-local instance {n : ℕ} : Fintype { f // Function.Involutive f ∧ ∀ (i : Fin n), f i ≠ i } := by
+instance {n : ℕ} : Fintype { f // Function.Involutive f ∧ ∀ (i : Fin n), f i ≠ i } := by
   have : DecidablePred fun x ↦ Function.Involutive x :=
     fun f ↦ Fintype.decidableForallFintype (α := Fin n)
   exact Subtype.fintype ..
@@ -424,4 +424,3 @@ lemma involutionNoFixed_card_odd : (n : ℕ) → (ho : Odd n) →
   exact involutionNoFixed_card_mul_two_plus_one r
 
 end Physlib.Fin
--- Tengoku: 1 registration(s) of this module made local so they do not change other libraries (generated)

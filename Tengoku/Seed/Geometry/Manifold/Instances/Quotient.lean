@@ -3,6 +3,7 @@ Copyright (c) 2025 Michael Rothgang, Pepa Montero, Archibald Browne, Enrique Dí
 Juan José Madrigal. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Michael Rothgang, Pepa Montero, Archibald Browne, Enrique Díaz, Juan José Madrigal
+Changed for Tengoku: copied from Mathlib (leanprover-community/mathlib4 at 85e3a25e006c); import paths rewritten.
 -/
 module
 

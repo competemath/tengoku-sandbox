@@ -1,4 +1,4 @@
--- Tengoku.EquationalTheories.Equations.LawsComplete: verified translations of equational_theories/Equations/LawsComplete.lean (7 theorems)
+-- Tengoku.EquationalTheories.Equations.LawsComplete: verified translations of equational_theories/Equations/LawsComplete.lean (8 theorems)
 import Tengoku
 import Lean.ToExpr
 import Tengoku.Seed.Data.FunLike.Basic
@@ -74,5 +74,12 @@ theorem TestAllSplits.start {n P} (h1 : TestAllSplits' n 0 P) (h2 : P n 0) : Tes
   intro i j eq
   cases Nat.eq_sub_of_add_eq' eq
   exact this _ (by omega)
+
+theorem TestAllSplits'.succ {i j P}
+    (h1 : TestAllSplits' i (j+1) P) (h2 : P i (j+1)) : TestAllSplits' (i+1) j P
+:= by
+  simp only [TestAllSplits', Nat.lt_succ_iff_lt_or_eq, or_imp, forall_and, forall_eq,
+    Nat.add_sub_cancel_left] at *
+  exact ⟨fun i' h => by convert h1 i' h using 1; omega, h2⟩
 
 end EquationalTheories

@@ -28,7 +28,7 @@ open Matrix
 @[coe]
 def coeFunctionInt2Real {α : Type*} (f : α → ℤ) : (α → ℝ) := fun x => (f x).cast
 
-local instance {α : Type*} : Coe (α → ℤ) (α → ℝ) := {
+instance {α : Type*} : Coe (α → ℤ) (α → ℝ) := {
   coe := coeFunctionInt2Real
 }
 
@@ -44,4 +44,3 @@ def example_16 : Fin 16 → ℝ := (example_16_int : Fin 16 → ℝ)
 abbrev max_num_terms : ℕ := 16
 
 end Imo1977P2
--- Tengoku: 1 registration(s) of this module made local so they do not change other libraries (generated)

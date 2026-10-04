@@ -2,6 +2,7 @@
 Copyright (c) 2022 Microsoft Corporation. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Gabriel Ebner
+Changed for Tengoku: copied from Batteries (leanprover-community/batteries at d54dddc581e0); import paths rewritten.
 -/
 module
 

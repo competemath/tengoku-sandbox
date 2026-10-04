@@ -2,6 +2,7 @@
 Copyright (c) 2026 Lean FRO, LLC. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Wojciech Nawrocki
+Changed for Tengoku: copied from ProofWidgets (leanprover-community/ProofWidgets4 at a8acbfd87375); import paths rewritten.
 -/
 
 module

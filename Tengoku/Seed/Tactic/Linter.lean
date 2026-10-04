@@ -1,4 +1,7 @@
 /-
+Changed for Tengoku: copied from Mathlib (leanprover-community/mathlib4 at 85e3a25e006c); import paths rewritten.
+-/
+/-
 This is the `Linter`s file: it imports files defining linters.
 Most syntax linters, in particular the ones enabled by default, are imported in `Mathlib.Init`;
 this file contains all linters not imported in that file.

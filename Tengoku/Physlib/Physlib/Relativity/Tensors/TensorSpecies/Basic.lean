@@ -20,8 +20,6 @@ public import Tengoku.Physlib.Physlib.Mathematics.PiTensorProduct
 -/
 
 @[expose] public section
-attribute [local instance] Physlib.PiTensorProduct.instAddCommMonoidElim
-
 
 open Module
 open scoped TensorProduct

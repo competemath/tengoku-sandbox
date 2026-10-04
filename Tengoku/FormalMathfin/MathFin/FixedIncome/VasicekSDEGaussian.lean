@@ -58,7 +58,7 @@ variable {Ω : Type*} {mΩ : MeasurableSpace Ω}
 noncomputable def vasicekKernel (κ T : ℝ) : ℝ → ℝ := fun s ↦ Real.exp (-(κ * (T - s)))
 
 /-- The restricted volume measure on `(0, T]` is finite. -/
-private local instance vasicek_finite_restrict (T : ℝ≥0) :
+private instance vasicek_finite_restrict (T : ℝ≥0) :
     IsFiniteMeasure (volume.restrict (Set.Ioc (0 : ℝ) (T : ℝ))) :=
   ⟨by rw [Measure.restrict_apply MeasurableSet.univ, Set.univ_inter, Real.volume_Ioc];
       exact ENNReal.ofReal_lt_top⟩
@@ -168,4 +168,3 @@ theorem vasicekShortRate_hasLaw_gaussian (hB : IsPreBrownianReal B μ)
     ring
 
 end MathFin
--- Tengoku: 1 registration(s) of this module made local so they do not change other libraries (generated)

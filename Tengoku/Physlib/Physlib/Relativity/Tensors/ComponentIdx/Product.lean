@@ -32,8 +32,6 @@ of component indices for each side of the append.
 -/
 
 @[expose] public section
-attribute [local instance] Physlib.PiTensorProduct.instAddCommMonoidElim
-
 
 namespace TensorSpecies
 

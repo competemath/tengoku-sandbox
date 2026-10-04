@@ -1,3 +1,6 @@
+/-
+Changed for Tengoku: copied from ProofWidgets (leanprover-community/ProofWidgets4 at a8acbfd87375); import paths rewritten.
+-/
 module
 
 public import Tengoku.Seed.Widgets.Data.Html

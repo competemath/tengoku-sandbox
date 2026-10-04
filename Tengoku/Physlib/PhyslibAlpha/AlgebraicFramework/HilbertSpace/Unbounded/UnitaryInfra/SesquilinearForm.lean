@@ -25,8 +25,6 @@ existence half of the bounded spectral theorem that `Cayley/Certificate.lean`'s
 -/
 
 @[expose] public section
-attribute [local instance] QuantumMechanics.instIsAddTorsionFreeContinuousLinearMapWOTComplexIdOfCompleteSpace
-
 
 noncomputable section
 

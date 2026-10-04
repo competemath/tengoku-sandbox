@@ -2,6 +2,7 @@
 Copyright (c) 2021 Floris van Doorn. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Arthur Paulino, Floris van Doorn, Jannis Limperg
+Changed for Tengoku: copied from Batteries (leanprover-community/batteries at d54dddc581e0); import paths rewritten.
 -/
 module
 import Tengoku.Seed.Std.Tactic.Alias

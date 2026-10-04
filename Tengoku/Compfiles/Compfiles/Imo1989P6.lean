@@ -33,7 +33,7 @@ We implement Solution 3 from https://artofproblemsolving.com/wiki/index.php/1989
 trying to incorporate as much Perm(utation) machinery from Mathlib as possible.
 -/
 
-local instance instOne [NeZero n] : OfNat ↥(Finset.Icc 1 (2 * n)) 1 := ⟨⟨1, by simpa using NeZero.one_le⟩⟩
+instance instOne [NeZero n] : OfNat ↥(Finset.Icc 1 (2 * n)) 1 := ⟨⟨1, by simpa using NeZero.one_le⟩⟩
 
 noncomputable def A :=
   {x | ¬ T n x}
@@ -53,10 +53,10 @@ def fin_equiv : Finset.Icc 1 (2*n) ≃ Fin (2*n) where
 
 def perm_fin_equiv : Perm (Finset.Icc 1 (2*n)) ≃ Perm (Fin (2*n)) := equivCongr (fin_equiv n) (fin_equiv n)
 
-@[local simp]
+@[simp]
 theorem one_le_val (k : Finset.Icc 1 (2 * n)) : 1 ≤ k.val := by grind
 
-@[local simp]
+@[simp]
 theorem val_le_2n (k : Finset.Icc 1 (2 * n)) : k.val ≤ 2*n := by grind
 
 def partial_cycle (k : Finset.Icc 1 (2 * n)) : Perm $ Perm $ Finset.Icc 1 (2 * n) where
@@ -396,4 +396,3 @@ theorem embed_B.card [NeZero n] : (B n).ncard < {x | T n x}.ncard := by
   apply embed_B.not_Surjective
 
 end Imo1989P6
--- Tengoku: 3 registration(s) of this module made local so they do not change other libraries (generated)

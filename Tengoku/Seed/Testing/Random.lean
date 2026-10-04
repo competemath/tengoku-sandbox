@@ -2,6 +2,7 @@
 Copyright (c) 2024 Lean FRO, LLC. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Henrik Böving
+Changed for Tengoku: copied from Plausible (leanprover-community/plausible at d9598f07b1bc); import paths rewritten.
 -/
 module
 

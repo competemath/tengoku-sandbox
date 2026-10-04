@@ -77,7 +77,7 @@ the library uses), so downstream consumers — and the benchmark snippets that r
 below — get `NormedAddCommGroup`/`NormedSpace (Matrix n n ℝ)` without re-opening the scope. Mathlib
 keeps these `scoped` only because three matrix norms compete upstream; MathFin has no such conflict,
 so promoting them to global instances introduces no diamond. -/
-attribute [local instance] Matrix.linftyOpNormedAddCommGroup Matrix.linftyOpNormedSpace
+attribute [instance] Matrix.linftyOpNormedAddCommGroup Matrix.linftyOpNormedSpace
 
 variable {n : Type*} [Fintype n] [DecidableEq n]
 
@@ -245,4 +245,3 @@ theorem hasDerivAt_mmMatrixValueCoeff
   rw [hLHS, hRHS]
 
 end MathFin
--- Tengoku: 1 registration(s) of this module made local so they do not change other libraries (generated)

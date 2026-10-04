@@ -1,3 +1,6 @@
+/-
+Changed for Tengoku: copied from import-graph (leanprover-community/import-graph at d8823026ac7e); import paths rewritten.
+-/
 module
 
 public meta import Tengoku.Seed.Meta.ImportGraph.Tools

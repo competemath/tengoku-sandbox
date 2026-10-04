@@ -40,7 +40,7 @@ def threeSmallestDivisors (n : ℕ) : List ℕ := (smallDivisors n).take 3
 @[simp] lemma take_smallDivisors_eq_threeSmallestDivisors {n : ℕ} :
     List.take 3 (smallDivisors n) = threeSmallestDivisors n := rfl
 
-@[local simp] lemma mem_divisors_erase_one {d n : ℕ} :
+@[simp] lemma mem_divisors_erase_one {d n : ℕ} :
     d ∈ n.divisors.erase 1 ↔ d ≠ 1 ∧ d ∣ n ∧ n ≠ 0 := by
   rw [mem_erase, Nat.mem_divisors]
 
@@ -666,4 +666,3 @@ lemma answer_necessary : a₁ ∈ {a₁ | ∃ a : ℕ → ℕ, a 0 = a₁ ∧ Va
   exact ⟨j, l, by simpa [ha0] using hl⟩
 
 end Imo2025P4
--- Tengoku: 1 registration(s) of this module made local so they do not change other libraries (generated)

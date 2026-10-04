@@ -2,6 +2,7 @@
  Copyright (c) 2022 E.W.Ayers. All rights reserved.
  Released under Apache 2.0 license as described in the file LICENSE.
  Authors: E.W.Ayers, Mario Carneiro
+Changed for Tengoku: copied from Batteries (leanprover-community/batteries at d54dddc581e0); import paths rewritten.
 -/
 module
 

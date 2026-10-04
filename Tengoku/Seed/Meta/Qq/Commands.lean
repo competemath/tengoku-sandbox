@@ -1,3 +1,6 @@
+/-
+Changed for Tengoku: copied from Qq (leanprover-community/quote4 at 507746ab8f4b); import paths rewritten.
+-/
 module
 
 public import Tengoku.Seed.Meta.Qq.Macro

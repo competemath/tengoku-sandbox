@@ -14,8 +14,6 @@ public import Tengoku
 -/
 
 @[expose] public section
-attribute [local simp] Physlib.List.insertIdx_length_fin
-
 
 namespace FieldStatistic
 

@@ -2,6 +2,7 @@
 Copyright (c) 2024 Siddhartha Gadgil. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Siddhartha Gadgil
+Changed for Tengoku: copied from LeanSearchClient (leanprover-community/LeanSearchClient at ba67e212be11); import paths rewritten.
 -/
 module
 

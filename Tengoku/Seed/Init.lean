@@ -1,3 +1,6 @@
+/-
+Changed for Tengoku: copied from Mathlib (leanprover-community/mathlib4 at 85e3a25e006c); import paths rewritten.
+-/
 module  -- shake: keep-all, shake: keep-downstream
 
 public import Lean.Linter.Sets -- for the definition of linter sets

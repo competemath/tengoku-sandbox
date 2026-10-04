@@ -1,0 +1,1 @@
+-- Tautology: a factory bundle (data/intake/tautology). This file only marks the library for Tengoku/All.lean.

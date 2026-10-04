@@ -1,3 +1,6 @@
+/-
+Changed for Tengoku: copied from Mathlib (leanprover-community/mathlib4 at 85e3a25e006c); import paths rewritten, and imports of the other seeded packages added.
+-/
 -- Tengoku: one self-contained tree. This file imports all of it.
 -- Seeded from the packages listed in SEED.md; grown by verified translations.
 module  -- shake: keep-all --deprecated_module: ignore

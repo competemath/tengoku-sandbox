@@ -1,0 +1,1 @@
+-- Imoshortlist: a factory bundle (data/intake/imoshortlist). This file only marks the library for Tengoku/All.lean.

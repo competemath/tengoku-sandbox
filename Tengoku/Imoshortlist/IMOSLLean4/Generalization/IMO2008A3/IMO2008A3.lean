@@ -51,7 +51,7 @@ theorem StrictMono_conjOrderIso [Preorder α] [Preorder β]
   λ _ _ h ↦ e.strictMono (hf (e.symm.strictMono h))
 
 /-- TODO: Remove this instance once `mathlib` variant appears. -/
-local instance [LT α] [WellFoundedLT α] [LT β] [WellFoundedLT β] : WellFoundedLT (α ⊕ₗ β) :=
+instance [LT α] [WellFoundedLT α] [LT β] [WellFoundedLT β] : WellFoundedLT (α ⊕ₗ β) :=
   ⟨Sum.lex_wf wellFounded_lt wellFounded_lt⟩
 
 section
@@ -285,4 +285,3 @@ theorem Generalization.final_solution {α : Type} [LinearOrder α] [WellFoundedL
   refine ⟨β, by assumption, by assumption, ?_⟩
   rw [← type_LexNatNat, ← type_prod_lex, type_eq] at ho₀
   exact ho₀.map OrderIso.ofRelIsoLT
--- Tengoku: 1 registration(s) of this module made local so they do not change other libraries (generated)

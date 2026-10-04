@@ -42,8 +42,6 @@ directly) is what makes this integral tractable at all. The characteristic-funct
 -/
 
 @[expose] public section
-attribute [local instance] QuantumMechanics.instIsAddTorsionFreeContinuousLinearMapWOTComplexIdOfCompleteSpace
-
 
 noncomputable section
 

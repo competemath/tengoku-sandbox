@@ -2,6 +2,7 @@
 Copyright (c) 2020 Simon Hudon. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Simon Hudon, Kim Morrison
+Changed for Tengoku: copied from Plausible (leanprover-community/plausible at d9598f07b1bc); import paths rewritten.
 -/
 module
 

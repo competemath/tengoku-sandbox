@@ -1,0 +1,1 @@
+-- FormalMathfin: a factory bundle (data/intake/formal-mathfin). This file only marks the library for Tengoku/All.lean.

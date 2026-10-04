@@ -54,7 +54,7 @@ open ContinuousLinearMap ContinuousLinearMapWOT MeasureTheory Set
 namespace QuantumMechanics
 
 @[nolint unusedArguments]
-local instance (H : Type*) [NormedAddCommGroup H] [InnerProductSpace ℂ H] [CompleteSpace H] :
+instance (H : Type*) [NormedAddCommGroup H] [InnerProductSpace ℂ H] [CompleteSpace H] :
     IsAddTorsionFree (H →WOT[ℂ] H) where
   nsmul_right_injective n hn := by
     refine Function.HasLeftInverse.injective ⟨fun f ↦ (n : ℂ)⁻¹ • f, fun x ↦ ?_⟩
@@ -248,4 +248,3 @@ lemma toWOT_apply (μS : SpectralMeasure α H) (A : Set α) : μS.toWOT A =
 end SpectralMeasure
 
 end
--- Tengoku: 1 registration(s) of this module made local so they do not change other libraries (generated)

@@ -2,6 +2,7 @@
 Copyright (c) 2025 Sven Manthe. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Sven Manthe
+Changed for Tengoku: copied from Mathlib (leanprover-community/mathlib4 at 85e3a25e006c); import paths rewritten.
 -/
 module
 

@@ -3,6 +3,7 @@ Copyright (c) 2025 Christian Merten. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Timo Kraenzle, Judith Ludwig, Bryan Wang, Christian Merten,
   Yannis Monbru, Alireza Shavali, Chenyi Yang
+Changed for Tengoku: copied from Mathlib (leanprover-community/mathlib4 at 85e3a25e006c); import paths rewritten.
 -/
 module
 

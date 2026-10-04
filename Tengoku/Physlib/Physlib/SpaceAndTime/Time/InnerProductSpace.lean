@@ -140,7 +140,7 @@ lemma realCast_of_natCast {n : ℕ} : ((n : ℝ) : Time) = n := rfl
 instance : Inhabited Time where
   default := 0
 
-@[local simp]
+@[simp]
 lemma default_eq_zero : default = 0 := rfl
 
 /-!
@@ -443,4 +443,3 @@ lemma fderiv_val (t : Time) : fderiv ℝ Time.val t 1 = 1 := by
   simp [toRealCLM]
 
 end Time
--- Tengoku: 1 registration(s) of this module made local so they do not change other libraries (generated)

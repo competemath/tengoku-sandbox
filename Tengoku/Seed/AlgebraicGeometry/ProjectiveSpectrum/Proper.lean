@@ -3,6 +3,7 @@ Copyright (c) 2024 Andrew Yang. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Patience Ablett, Kevin Buzzard, Harald Carlens, Wayne Ng Kwing King, Michael Schlößer,
   Justus Springer, Andrew Yang, Jujian Zhang
+Changed for Tengoku: copied from Mathlib (leanprover-community/mathlib4 at 85e3a25e006c); import paths rewritten.
 -/
 module
 

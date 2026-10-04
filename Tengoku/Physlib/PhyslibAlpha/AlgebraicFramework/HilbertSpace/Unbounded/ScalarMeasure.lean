@@ -32,8 +32,6 @@ this development.
 -/
 
 @[expose] public section
-attribute [local instance] QuantumMechanics.instIsAddTorsionFreeContinuousLinearMapWOTComplexIdOfCompleteSpace
-
 
 noncomputable section
 

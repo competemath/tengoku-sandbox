@@ -2,6 +2,7 @@
 Copyright (c) 2026 Sihan Su. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Sihan Su, Yongle Hu, Yi Song
+Changed for Tengoku: copied from Mathlib (leanprover-community/mathlib4 at 85e3a25e006c); import paths rewritten.
 -/
 module
 

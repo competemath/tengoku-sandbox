@@ -1643,7 +1643,7 @@ theorem even_card_switch_of_not_fantastic {n : ℕ} {σ : Equiv.Perm (Fin n)}
 namespace usa2018p6_aux
 
 /-- Decidability of being an involution on `Fin n`. -/
-local instance decInvol {n : ℕ} : DecidablePred (Function.Involutive (α := Fin n)) := fun σ =>
+instance decInvol {n : ℕ} : DecidablePred (Function.Involutive (α := Fin n)) := fun σ =>
   inferInstanceAs (Decidable (∀ x, σ (σ x) = x))
 
 /-- Fixed-point-free involutions of `Fin n`. -/
@@ -2349,7 +2349,6 @@ theorem vcard_odd (n : ℕ) : Odd (vcard n) := by
       exact h2.add_even (he.mul_right (vcard n))
 
 end usa2018p6_aux
-attribute [local instance] Usa2018P6.usa2018p6_aux.decInvol
 
 /-- The number of involutions of `Fin n` with at most one fixed point is odd. -/
 theorem odd_card_vertex (n : ℕ) :
@@ -2368,4 +2367,3 @@ lemma sum_modEq_of_forall {ι : Type*} [DecidableEq ι] (s : Finset ι) (f g : �
       (ih (fun i hi => h i (Finset.mem_insert_of_mem hi)))
 
 end Usa2018P6
--- Tengoku: 1 registration(s) of this module made local so they do not change other libraries (generated)

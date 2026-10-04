@@ -3,6 +3,7 @@ Copyright (c) 2025 Hang Lu Su. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Riccardo Brasca, Fabrizio Barroero, Stefano Francaviglia,
   Francesco Milizia, Valerio Proietti, Hang Lu Su, Lawrence Wu, Javier Gómez Zaragoza
+Changed for Tengoku: copied from Mathlib (leanprover-community/mathlib4 at 85e3a25e006c); import paths rewritten.
 -/
 module
 
