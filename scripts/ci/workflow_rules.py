@@ -18,9 +18,12 @@ read from the PR's commit as data. The rules:
                command puts the PR's files in the tree or runs them, and local actions use `$/<path>`: a `./` action is loaded from the workspace, which may hold
                the PR's files. The one exception is `git checkout <pr> -- data…`: the PR's records, as data.
 
-  write-and-pr a job of a pull_request_target, workflow_run or merge_group workflow that holds a write permission never fetches the PR's
-               (or the queue entry's) commits: reading untrusted data and holding a token that can write are split over two jobs, and
-               the one that writes takes only validated outputs. Without this, a later step that ever ran a file of the PR would hold the token.
+  write-and-pr a job of a pull_request_target, workflow_run or merge_group workflow that holds a write permission never reads the PR's
+               (or the queue entry's) commits: no `git fetch`/`checkout`/`merge`/... of a name that can carry them (a ref, `$HEAD`, any
+               env var built from a context outside the base side), no actions/checkout of them, and in a merge_group workflow an
+               actions/checkout always names its `ref` (the default is the queue entry). Reading untrusted data and holding a token that
+               can write are split over two jobs, and the one that writes takes only validated outputs. Without this, a later step that
+               ever ran a file of the PR would hold the token.
 
   --online     genuine pins: the tag named in the comment contains the commit. A repository shares commits with
                all its forks, so a pin can name a commit that exists only in an attacker's fork (an impostor commit).
@@ -77,6 +80,32 @@ BASE_SIDE = {
     "github.workflow_sha",  # the commit of the workflow file itself: the base branch's
     "github.event.repository.default_branch",
 }
+GIT_READS = re.compile(
+    r"\bgit(?:\s+-[Cc]\s+\S+)*\s+(?:fetch|pull|clone|checkout|switch|merge|cherry-pick|worktree|read-tree|restore|archive|apply|am)\b"
+)
+
+
+def untrusted_names(*envs: object) -> set[str]:
+    """The env names whose value can name the PR's or the queue entry's commits: any context outside the base side."""
+    return {
+        str(k)
+        for env in envs
+        for k, v in items(env)
+        if any(c not in BASE_SIDE for m in EXPR.finditer(str(v)) for c in contexts(m.group(1)))
+    }
+
+
+def untrusted_text(text: str, envs: tuple) -> bool:
+    """Can this ref or script name the PR's or the queue entry's commits? By a literal marker, by a context outside the base side, or
+    through an env var built from one (`$HEAD`, `$PR_REF`, whatever a workflow calls it)."""
+    resolved = resolve_env(text, *envs)
+    if UNTRUSTED_REF.search(resolved) or PR_MARK.search(resolved):
+        return True
+    if any(c not in BASE_SIDE for m in EXPR.finditer(resolved) for c in contexts(m.group(1))):
+        return True
+    return any(re.search(r"\$\{?" + re.escape(n) + r"\b", resolved) for n in untrusted_names(*envs))
+
+
 GIT_WRITE = re.compile(
     r"\bgit(?:\s+-[Cc]\s+\S+)*\s+(?:checkout|switch|restore|reset|read-tree|worktree\s+add|merge|pull|cherry-pick|rebase|archive|apply|am|stash)\b"
 )
@@ -191,23 +220,39 @@ class Checker:
             if isinstance(job.get("uses"), str):
                 self.pinned(job["uses"], line)
             self.steps(job.get("steps") or [], job.get("env") or {}, doc.get("env") or {}, on)
-            self.write_and_pr(name, job, on)
+            self.write_and_pr(name, job, on, doc.get("env") or {})
         return self
 
-    def write_and_pr(self, name: str, job: dict, on: set[str]) -> None:
-        """A job that can write never fetches the commits of the PR or of the queue entry."""
+    def write_and_pr(self, name: str, job: dict, on: set[str], wf_env: object) -> None:
+        """A job that can write never reads the commits of the PR or of the queue entry."""
         writes = [k for k, v in items(job.get("permissions")) if str(v).lower() == "write"]
         if not writes or not on & (PRIVILEGED | {"merge_group"}):
             return
         for step in job.get("steps") or []:
-            run = step.get("run") if isinstance(step, dict) else None
-            if isinstance(run, str) and "git fetch" in run and UNTRUSTED_REF.search(run):
+            if not isinstance(step, dict):
+                continue
+            what = self.reads_untrusted(step, on, (step.get("env") or {}, job.get("env") or {}, wf_env))
+            if what:
                 self.add(
                     step.get(LINE, 1),
                     "write-and-pr",
-                    f"job `{name}` holds `{writes[0]}: write` and fetches the PR's commits: read them in a job without a write permission "
+                    f"job `{name}` holds `{writes[0]}: write` and {what}: read them in a job without a write permission "
                     "and pass only validated outputs to this one",
                 )
+
+    def reads_untrusted(self, step: dict, on: set[str], envs: tuple) -> str:
+        """What a step does with the PR's or the queue entry's commits, in words; '' when it does nothing of the kind."""
+        uses = step.get("uses") if isinstance(step.get("uses"), str) else ""
+        if uses.lower().startswith("actions/checkout@"):
+            with_ = {str(k).lower(): v for k, v in items(step.get("with"))}
+            if "merge_group" in on and with_.get("ref") is None:
+                return "checks out the queue entry (an actions/checkout without a `ref` in a merge_group workflow)"
+            if with_.get("ref") is not None and untrusted_text(str(with_["ref"]), envs):
+                return f"checks out `ref: {with_['ref']}`"
+        run = step.get("run")
+        if isinstance(run, str) and GIT_READS.search(run) and untrusted_text(run, envs):
+            return "runs git on a name that can carry the PR's commits"
+        return ""
 
     def steps(self, steps: list, job_env: dict, wf_env: dict, on: set[str]) -> None:
         for step in steps if isinstance(steps, list) else []:  # `steps: 5` used to end the check in a traceback (scripts/ci/fuzz)

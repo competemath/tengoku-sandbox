@@ -371,3 +371,60 @@ jobs:
     def test_odd_shapes_do_not_crash(self):
         for perms in ("write-all", "5", "{}"):
             rules(self.wf(perms, f"'{self.FETCH}'"))
+
+    # The next cases are the findings of the review of this rule: each asserts the rule list is exactly ["write-and-pr"], so another
+    # rule firing cannot hide that this one missed.
+    def custom(self, on: str, env: str, steps: str, perms: str = "{ pull-requests: write }") -> str:
+        return f"""name: t
+on:
+  {on}:
+permissions: {{}}
+env:
+{env}
+jobs:
+  a:
+    runs-on: ubuntu-latest
+    permissions: {perms}
+    steps:
+{steps}
+"""
+
+    ALIASES = "  HEAD: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha }}\n  BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}"
+
+    def test_the_head_alias_is_recognised(self):
+        steps = '      - run: git fetch -q origin "$HEAD"'
+        self.assertEqual(rules(self.custom("pull_request_target", self.ALIASES, steps)), ["write-and-pr"])
+        self.assertEqual(rules(self.custom("merge_group", self.ALIASES, steps)), ["write-and-pr"])
+
+    def test_any_env_name_built_from_the_prs_commit_is_recognised(self):
+        env = "  ENTRY: ${{ github.event.merge_group.head_sha }}"
+        for run in ('git fetch origin "$ENTRY"', "git fetch origin ${ENTRY}", 'git -C . checkout "$ENTRY"'):
+            self.assertEqual(rules(self.custom("merge_group", env, f"      - run: {run}")), ["write-and-pr"], run)
+
+    def test_a_job_or_step_env_alias_is_recognised_too(self):
+        steps = '      - env: { C: "${{ github.event.pull_request.head.sha }}" }\n        run: git fetch origin "$C"'
+        self.assertEqual(rules(self.custom("pull_request_target", "  X: 1", steps)), ["write-and-pr"])
+
+    def test_the_base_side_may_be_fetched_by_a_write_job(self):
+        steps = '      - run: git fetch -q origin "$BASE"'
+        self.assertEqual(rules(self.custom("merge_group", self.ALIASES, steps)), [])
+
+    def test_a_default_checkout_in_a_merge_group_write_job_is_the_queue_entry(self):
+        steps = f"      - uses: {CO}\n        with: {{ persist-credentials: false }}\n      - run: python3 scripts/anything.py"
+        self.assertEqual(rules(self.custom("merge_group", "  X: 1", steps)), ["write-and-pr"])
+
+    def test_a_merge_group_checkout_of_the_entry_by_name_is_refused_and_of_the_base_is_not(self):
+        entry = f'      - uses: {CO}\n        with: {{ ref: "${{{{ github.event.merge_group.head_sha }}}}", persist-credentials: false }}'
+        alias = f'      - uses: {CO}\n        with: {{ ref: "${{{{ env.HEAD }}}}", persist-credentials: false }}'
+        base = f'      - uses: {CO}\n        with: {{ ref: "${{{{ env.BASE }}}}", persist-credentials: false }}'
+        self.assertEqual(rules(self.custom("merge_group", self.ALIASES, entry)), ["write-and-pr"])
+        self.assertEqual(rules(self.custom("merge_group", self.ALIASES, alias)), ["write-and-pr"])
+        self.assertEqual(rules(self.custom("merge_group", self.ALIASES, base)), [])
+
+    def test_a_default_checkout_in_a_pull_request_target_write_job_is_the_base(self):
+        steps = f"      - uses: {CO}\n        with: {{ persist-credentials: false }}"
+        self.assertEqual(rules(self.custom("pull_request_target", "  X: 1", steps)), [])
+
+    def test_a_read_only_job_may_do_all_of_it(self):
+        steps = f'      - uses: {CO}\n        with: {{ persist-credentials: false }}\n      - run: git fetch origin "$HEAD"'
+        self.assertEqual(rules(self.custom("merge_group", self.ALIASES, steps, perms="{ contents: read }")), [])

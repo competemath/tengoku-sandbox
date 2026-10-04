@@ -31,7 +31,7 @@ jobs:
   queue-build:
     runs-on: ubuntu-latest
     timeout-minutes: 90   # a pipeline staging group can carry dozens of candidate modules
-    permissions: { contents: read, pull-requests: write, actions: read }   # actions: read — to see a running cache build
+    permissions: { contents: read, pull-requests: read, actions: read }   # actions: read — to see a running cache build. No write permission: this job runs the group's Lean code
     outputs:
       topup: ${{ steps.topup.outputs.state }}
     steps:
@@ -242,11 +242,17 @@ jobs:
       - if: github.event_name == 'merge_group'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with: { name: topup, path: topup-out/, retention-days: 1, if-no-files-found: error }
-      - name: Explain the failure to the authors
+      # What went wrong, as data for the job that may write (queue-gate below): this job ran the group's code, so it holds no token and
+      # its output is only read, never run. The first Lean error, its source line, its record and the PRs of the group.
+      - name: What went wrong, as facts
         if: failure() && github.event_name == 'merge_group'
-        # TENGOKU_REARM: whether rearm.yml can put the PR back (it needs the bot's token); only a yes or no reaches the job
-        env: { GH_TOKEN: "${{ github.token }}", TENGOKU_REARM: "${{ secrets.TENGOKU_BOT_TOKEN != '' && '1' || '' }}" }
-        run: python3 scripts/ci/queue_comment.py build.log "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" "${{ github.event.merge_group.base_sha }}"
+        env:
+          RUN_URL: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          BASE_SHA: "${{ github.event.merge_group.base_sha }}"
+        run: mkdir -p failure-out && python3 scripts/ci/queue_comment.py --facts failure-out/facts.json build.log "$RUN_URL" "$BASE_SHA"
+      - if: failure() && github.event_name == 'merge_group'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with: { name: queue-failure, path: failure-out/, retention-days: 1, if-no-files-found: ignore }
 
   # The required check. On a pull request it passes at once; in the queue it is green only when the group
   # compiled AND its top-up is published, so a merge can never outrun the services' cache. It holds the write
@@ -284,6 +290,27 @@ jobs:
             echo "upload attempt $attempt failed; retrying"; sleep $((attempt * 15))
           done
           echo "error: the cache top-up could not be published"; exit 1
+      # The group failed to build: tell its author. The facts come from the job that ran the group's code and are data here; the script is
+      # main's (the base commit, with plain git: the repository is public, so no token is written into the checkout), and it checks
+      # the shape of every fact before it renders the comment.
+      - name: The base commit (the script that writes is main's)
+        if: github.event_name == 'merge_group' && needs.queue-build.result == 'failure'
+        env: { BASE_SHA: "${{ github.event.merge_group.base_sha }}" }
+        run: |
+          git init -q .
+          git remote add origin "https://github.com/$GITHUB_REPOSITORY"
+          git fetch -q --no-tags --filter=blob:none origin "$BASE_SHA"
+          git checkout -q --detach "$BASE_SHA"
+      - name: The facts of the failure
+        if: github.event_name == 'merge_group' && needs.queue-build.result == 'failure'
+        continue-on-error: true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with: { name: queue-failure, path: failure-in }
+      - name: Explain the failure to the authors
+        if: github.event_name == 'merge_group' && needs.queue-build.result == 'failure' && hashFiles('failure-in/facts.json') != ''
+        # TENGOKU_REARM: whether rearm.yml can put the PR back (it needs the bot's token); only a yes or no reaches the job
+        env: { GH_TOKEN: "${{ github.token }}", TENGOKU_REARM: "${{ secrets.TENGOKU_BOT_TOKEN != '' && '1' || '' }}" }
+        run: python3 scripts/ci/queue_comment.py --post failure-in/facts.json
       - name: Verdict
         if: ${{ !cancelled() }}
         env:
