@@ -29,7 +29,9 @@ jobs:
         run: |
           df -k / | tail -1 | awk '{print "free before (KB):", $4}'
           start=$(date +%s)
-          scripts/cache.sh get
+          commit="$(curl -sSfL https://github.com/competemath/tengoku/releases/download/cache-latest/cache-latest.json | python3 -c 'import json,sys; print(json.load(sys.stdin)["commit"])')"
+          echo "the published cache is for $commit"
+          scripts/cache.sh get "$commit"
           echo "unpack took $(( $(date +%s) - start )) s"
           df -k / | tail -1 | awk '{print "free after (KB):", $4}'
       - name: Weigh it
