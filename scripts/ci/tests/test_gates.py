@@ -314,6 +314,20 @@ class Gates(unittest.TestCase):
         self.assertIn("unsolved goals", out.lower())
         self.assertIn("What to do", out)
 
+    def test_queue_comment_says_a_stale_cache_is_not_the_authors_fault(self):
+        r = Repo()
+        r.write(
+            "build.log",
+            "FAIL: the newest published cache (cache-20261004T0923Z, for a28ea8c80) is 9992 modules behind this group's base (limit 1000): a change that touches many modules has merged\n",
+        )
+        rc, out = r.gate("queue_comment.py", "build.log", "https://example/run/1")
+        self.assertEqual(rc, 0, out)
+        self.assertIn("This is not your change", out)
+        self.assertIn("9992 modules behind", out)
+        # the PR is not re-queued by itself after this kind of ejection (only a push re-arms it): the comment must say whose move it is
+        self.assertIn("put it back into the queue yourself", out)
+        self.assertNotIn("goes back into the queue", out)
+
 
 class ScopeFix(unittest.TestCase):
     """A scope-fix PR: existing modules of an intake library, a registration made local, nothing else (scope_fix_check.py judges every line)."""
