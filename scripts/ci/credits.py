@@ -13,7 +13,7 @@ import json
 import re
 import sys
 
-from _git import added_lines, changed_files, deregistered, fail, match, removed_lines
+from _git import added_lines, blob, changed_files, deregistered, fail, match, removed_lines
 
 EXEMPT = ["scripts/*", ".github/*", "schemas/*", "*.py", "*.sh", "*.toml", "*.yml", "*.yaml", "*.json"]
 CREDIT = re.compile(r"(Authors?:|@author|\bCredit|Copyright|\"source_url\"|\"added_by\"|\"author\"|\"authors\")", re.I)
@@ -22,6 +22,9 @@ CREDIT = re.compile(r"(Authors?:|@author|\bCredit|Copyright|\"source_url\"|\"add
 CREDIT_MD = re.compile(r"(Authors?:|@author|Copyright)", re.I)
 base, head = sys.argv[1], sys.argv[2]
 promotion = "--promotion" in sys.argv  # the bot moves staging records to trusted: the credit travels with them
+restructure = (
+    "--restructure" in sys.argv
+)  # the seed moves into Tengoku/Seed/: a credit line is not removed while it is in the file at its new path
 # A record whose credit line still exists anywhere at HEAD is fine, even if the exact bytes
 # changed (the promote bot rewrites a staging file's remaining records when it lifts one out,
 # which can reorder or reformat lines it never touched content-wise — found live: two records
@@ -40,13 +43,22 @@ if promotion:
                 moved.add((str(r.get("name")), str(r.get("source_url"))))
 
 
+def moved_lines(path: str) -> set[str]:
+    """The lines of a seeded file at its new place, Tengoku/Seed/<same path> (nothing for any other path)."""
+    if not (restructure and path.startswith("Tengoku/")):
+        return set()
+    text = blob(head, "Tengoku/Seed/" + path[len("Tengoku/") :])
+    return set(text.decode("utf-8", "replace").split("\n")) if text is not None else set()
+
+
 hits = []
 for st, p in changed_files(base, head):
     if st == "A" or match(p, EXEMPT) or (st == "D" and deregistered(base, p)):
         continue
     rx = CREDIT_MD if p.endswith(".md") else CREDIT
+    kept = moved_lines(p) if st == "D" else set()
     for no, text in removed_lines(base, head, p):
-        if not rx.search(text):
+        if not rx.search(text) or text in kept:
             continue
         if promotion and match(p, ["data/staging/*.jsonl", "data/staging/*/*.jsonl"]):
             try:
