@@ -111,20 +111,33 @@ tentative or staging file whose records all come from a source no longer on the 
   `FltAnthropic001` to rule 1. The validator's size message suggests `<library>.NN.jsonl`, which its own
   library check would also reject.
 
-## 5. The move of the seed (history)
+## 5. The restructure class
 
-The seeded upstream code (Mathlib, Batteries, Aesop, …) sits in `Tengoku/Seed/`, so that the origin of a module is visible from its path.
-It was moved in one change, [#278](https://github.com/competemath/tengoku/pull/278), which had a class of its own, `restructure`: no diff was
-judged, the gate ran `scripts/restructure.py` of the base commit on the base tree and accepted only a PR equal to its output, byte for byte
-(and the merge queue repeated that on the entry's base). The class was a rehearsal-proven, one-time exemption: the move touches
-every seeded file, which the credit, banked-content and derived-file gates would each refuse as a diff. Once the nightly cache build had
-compiled the moved tree it was removed again (no job of the gate holds the exemption any more); the script stays, because it is how the
-move is repeated and checked:
+One change in the life of the tree has a class of its own, `restructure`: the one that moves every seeded file into
+`Tengoku/Seed/`, so that the seed is one folder and the origin of a module is visible from its path. The class is
+structural (the base has no `Tengoku/Seed` and the head has), the PR must come from `TENGOKU_BOT`, and no diff is judged.
+`scripts/ci/restructure_check.py` runs `scripts/restructure.py` of the base commit on the base tree and accepts the PR only
+if it is exactly that output: every file under `Tengoku/` and the root `Tengoku.lean`, `SEED.md` and
+`LICENSE-THIRD-PARTY.md`, byte for byte and executable bit for executable bit, and nothing else. Then `restructure.py verify` checks
+that every `import Tengoku…` and every `include_str` path of the result resolves.
+
+The script changes only imports and `include_str` paths. Seeded files: `import Tengoku.X` becomes `import Tengoku.Seed.X` (in the header
+and in the code examples of doc comments), and an
+`include_str` path that leaves the tree gains one `..`. Library modules: the umbrella imports that the root `Tengoku` re-exports
+(`Tengoku.Std`, `Tengoku.Tactic.Aesop`, `Tengoku.Meta.Qq`, …) are dropped, any other seeded import is renamed. Anyone can repeat it:
 
 ```bash
-python3 scripts/restructure.py apply     # on a tree that has no Tengoku/Seed (a tree that has it is left alone)
-python3 scripts/restructure.py verify    # every `import Tengoku…` and every `include_str` path resolves
+python3 scripts/restructure.py apply     # in a clean checkout; a tree that has Tengoku/Seed is left alone
+python3 scripts/restructure.py verify
 ```
 
-A later move of the tree (the `Native/` folder, say) is a new change with its own proof, not this class: reintroduce the class from the history of
-`scripts/ci/restructure_check.py` (git log of this repository) in a rehearsed PR of its own, and remove it again afterwards.
+The merge queue repeats the check on the entry's base (a library that arrived meanwhile has headers the script must rewrite) and builds
+nothing for it: every module name changes, so the nightly cache build compiles the moved tree, and the services stay on the last
+complete cache until it has.
+
+**The class stays.** The tree may be restructured again (the `Native/` folder, say), and the exemption is only ever granted to a PR that is
+recomputed from the base. What is specific to the move of the seed is its detection (`restructure_check.is_restructure`: the base has no
+`Tengoku/Seed`, the head has) and its script, `restructure.py`; the next move needs its own script and its own detection rule. What carries over is the
+shape: the check from the base commit's script, byte for byte and executable bit for executable bit; the credit and banked-lint carve-outs, which apply only
+to that class; the queue's recomputation on the entry's base; and the rule that the change is rehearsed in `tengoku-sandbox` (a full build of the moved tree) before
+it reaches production.

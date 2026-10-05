@@ -30,9 +30,15 @@ from _git import (
     run,
     unplaced,
 )
+from restructure_check import is_restructure
 
 base, head = sys.argv[1], sys.argv[2]
 regenerate = "--regenerate" in sys.argv
+if is_restructure(
+    base, head
+):  # the move of the seed (scripts/restructure.py): the PR gate recomputed it; the cache build compiles it, not the queue
+    print("restructure group: nothing for the queue to build or regenerate", file=sys.stderr)
+    sys.exit(0)
 corpora = load_schema("sources.json").get("corpora", {})
 
 
