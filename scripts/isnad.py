@@ -423,7 +423,7 @@ def tagtest(exe: str | None = None) -> int:
         if identities(recs2) != before:
             problems.append("tagging changed the identity of a theorem")
         tag_of = {r.name: format_tag(r, "seed") for r in recs2}
-        if any(tag_of[n] not in tagged for n in before if n not in FIXTURE_NOT_TAGGED):
+        if any(tag_of[n] not in tagged for n in before if n not in FIXTURE_NOT_TAGGED | FIXTURE_NO_RANGE):
             problems.append("a tag in the file is not the one recomputed from the compiled statement")
 
         plan2, _ = plan_tags(recs2, ranges2, "seed")
