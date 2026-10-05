@@ -361,6 +361,10 @@ def strip_files(paths: list[Path], write: bool) -> int:
 
 TAGGER_DIR = ROOT / "tools" / "isnad" / "tagger"
 FIXTURE_MODULE = "IsnadFixture"
+# the fixture's theorems the tagger must leave alone, each for a reason of its own: `ext` makes two theorems nobody wrote, a structure's fields are theorems whose
+# range is only their name (one of them behind `protected`, one with a docstring of its own)
+FIXTURE_NOT_TAGGED = {"Fx.Pt.ext", "Fx.Pt.ext_iff", "Fx.Cancel.left_zero", "Fx.Cancel.right_zero", "Fx.Cancel.both"}
+FIXTURE_NO_RANGE = {"Fx.Pt.mk.inj"}  # a theorem `structure` generates and Lean gives no position
 
 
 def compile_fixture(d: Path) -> None:
@@ -407,21 +411,24 @@ def tagtest(exe: str | None = None) -> int:
         plan, skipped = plan_tags(recs, ranges, "seed")
         counts, more = tag_files(plan, d, write=True)
         tagged = read_source(path)
-        if skipped or more or counts["added"] + counts["replaced"] + counts["created"] != len(pinned):
-            problems.append(f"tagging did not tag all {len(pinned)} theorems: {counts}, skipped {skipped + more}")
-        if tagged.count(TAG_PREFIX + VERSION + " id=") != len(pinned) or not tg.equivalent(original, tagged):
+        wanted = len(pinned) - len(FIXTURE_NOT_TAGGED)
+        if {n for n, _ in skipped + more} != FIXTURE_NOT_TAGGED | FIXTURE_NO_RANGE or counts["added"] + counts["replaced"] + counts[
+            "created"
+        ] != wanted:
+            problems.append(f"tagging did not tag exactly the {wanted} theorems it should: {counts}, skipped {skipped + more}")
+        if tagged.count(TAG_PREFIX + VERSION + " id=") != wanted or not tg.equivalent(original, tagged):
             problems.append("the tagged file is not the original plus tags")
         compile_fixture(d)
         recs2, ranges2 = fixture_facts(d, exe)
         if identities(recs2) != before:
             problems.append("tagging changed the identity of a theorem")
         tag_of = {r.name: format_tag(r, "seed") for r in recs2}
-        if any(tag_of[n] not in tagged for n in before):
+        if any(tag_of[n] not in tagged for n in before if n not in FIXTURE_NOT_TAGGED):
             problems.append("a tag in the file is not the one recomputed from the compiled statement")
 
         plan2, _ = plan_tags(recs2, ranges2, "seed")
         counts2, _ = tag_files(plan2, d, write=True)
-        if read_source(path) != tagged or counts2["same"] != len(pinned):
+        if read_source(path) != tagged or counts2["same"] != wanted:
             problems.append(f"tagging a tagged file is not a no-op: {counts2}")
 
         strip_files([d], write=True)
@@ -434,7 +441,7 @@ def tagtest(exe: str | None = None) -> int:
     for msg in problems:
         print(f"FAIL {msg}")
     print(
-        f"isnad tagtest: {len(pinned)} theorems tagged, tagged again, stripped"
+        f"isnad tagtest: {wanted} theorems tagged, tagged again, stripped"
         + (" — all as expected" if not problems else f" — {len(problems)} problem(s)")
     )
     return 1 if problems else 0

@@ -27,6 +27,12 @@ TAG = "@isnad1 id=eq.0h2v.s4.05598c1b76c4 from=seed src=0 shape=900bc7c0 vocab=f
 OTHER = "@isnad1 id=eq.0h0v.s0.000000000000 from=novel src=0 shape=00000000 vocab=00000000"
 
 
+# what the tagger must leave alone in the fixture, and why: `ext` writes two theorems (one named by the attribute), a structure's fields are theorems whose range is only
+# their name; `tengoku-isnad --ranges` lists exactly the theorems below, `Fx.Pt.ext_iff` is the one whose selection range is not its name
+NOT_TAGGED = isnad.FIXTURE_NOT_TAGGED
+TAGGED = [n for n in RANGES if n not in NOT_TAGGED]
+
+
 def items(names=None, the_tag=TAG):
     return [tag.Item(n, tuple(v["range"]), tuple(v["sel"]), the_tag) for n, v in RANGES.items() if names is None or n in names]
 
@@ -40,13 +46,21 @@ def block(text, name):
 
 class Fixture(unittest.TestCase):
     def test_every_range_points_at_its_theorem_name(self):
-        # the fixture and its ranges belong together: the text at each selection range is the declared name
+        # the fixture and its ranges belong together: the text at each selection range is the declared name (but for the twin `ext` generated, which points at `ext`)
         for name, v in RANGES.items():
             s0, s1 = tag.offset_of(FIXTURE, v["sel"][0], v["sel"][1]), tag.offset_of(FIXTURE, v["sel"][2], v["sel"][3])
-            self.assertTrue(tag.declared_name_matches(name, FIXTURE[s0:s1]), (name, FIXTURE[s0:s1]))
+            self.assertEqual(tag.declared_name_matches(name, FIXTURE[s0:s1]), name != "Fx.Pt.ext_iff", (name, FIXTURE[s0:s1]))
+
+    def test_the_not_tagged_ones_are_the_fields_and_the_ext_theorems(self):
+        for name in NOT_TAGGED:
+            self.assertTrue(name.startswith(("Fx.Pt.", "Fx.Cancel.")), name)
+        for name, v in RANGES.items():
+            self.assertEqual(v["range"] == v["sel"] or name == "Fx.Pt.ext_iff", name in NOT_TAGGED, name)
 
     def test_every_command_range_starts_at_its_docstring_attribute_or_keyword(self):
         for name, v in RANGES.items():
+            if name in NOT_TAGGED:
+                continue
             p = tag.offset_of(FIXTURE, v["range"][0], v["range"][1])
             self.assertTrue(
                 FIXTURE.startswith(("/--", "@[", "theorem", "protected theorem"), p),
@@ -58,8 +72,12 @@ class Tagging(unittest.TestCase):
     def setUp(self):
         self.new, self.counts, self.skipped = tag.tag_text(FIXTURE, items())
 
-    def test_all_twelve_are_tagged_none_skipped(self):
-        self.assertEqual(self.skipped, [])
+    def test_the_twelve_are_tagged_and_the_five_left_alone_with_a_reason_each(self):
+        self.assertEqual({n for n, _ in self.skipped}, NOT_TAGGED)
+        why = dict(self.skipped)
+        self.assertIn("generated", why["Fx.Pt.ext_iff"])
+        for name in NOT_TAGGED - {"Fx.Pt.ext_iff"}:
+            self.assertIn("range is only its name", why[name], name)
         self.assertEqual(self.counts, {"added": 5, "replaced": 1, "same": 0, "created": 6})
         self.assertEqual(self.new.count("@isnad1 id="), 12)
 
@@ -183,7 +201,7 @@ class Skips(unittest.TestCase):
         crlf = FIXTURE.replace("\n", "\r\n")
         new, counts, skipped = tag.tag_text(crlf, items())
         self.assertEqual(new, crlf)
-        self.assertEqual(len(skipped), 12)
+        self.assertEqual(len(skipped), len(RANGES))
         self.assertEqual(sum(counts.values()), 0)
         self.assertIn("CRLF", skipped[0][1])
 
@@ -199,6 +217,14 @@ class Skips(unittest.TestCase):
         new, _, skipped = tag.tag_text(text, [it])
         self.assertEqual(new, text)
         self.assertIn("never closed", skipped[0][1])
+
+    def test_a_twin_named_inside_its_attribute_is_skipped_as_generated(self):
+        # real positions (Leak IV, Group.Defs of the tree): `@[to_additive (attr := simp) sub_self]` makes `sub_self`, whose command Lean places at the `to_additive` inside the brackets
+        text = "@[to_additive (attr := simp) sub_self]\ntheorem div_self' (a : G) : a / a = 1 := by simp\n"
+        it = tag.Item("sub_self", (1, 2, 1, 37), (1, 29, 1, 37), TAG)
+        new, _, skipped = tag.tag_text(text, [it])
+        self.assertEqual(new, text)
+        self.assertEqual(skipped, [("sub_self", "generated: the command starts inside an attribute")])
 
     def test_a_command_that_does_not_start_its_line_is_skipped(self):
         text = "namespace A theorem t : True := trivial\n"
@@ -391,7 +417,7 @@ class Cli(unittest.TestCase):
         plan, skipped = isnad.plan_tags(*fixture_inputs("Tengoku.Seed.X"))
         self.assertEqual((list(plan), skipped), (["Tengoku.Seed.X"], []))
         items = plan["Tengoku.Seed.X"]
-        self.assertEqual(len(items), 12)
+        self.assertEqual(len(items), len(RANGES))
         self.assertTrue(all(" from=seed src=0 " in i.tag for i in items))
         self.assertEqual(items[0].rng, tuple(RANGES[items[0].name]["range"]))
         self.assertEqual(items[0].sel, tuple(RANGES[items[0].name]["sel"]))
@@ -414,22 +440,23 @@ class Cli(unittest.TestCase):
         recs, ranges = fixture_inputs()
         plan, skipped = isnad.plan_tags(recs, ranges[1:])
         self.assertEqual(skipped, [("Fx.one_line", "Lean recorded no position for it")])
-        self.assertEqual(len(plan["IsnadFixture"]), 11)
+        self.assertEqual(len(plan["IsnadFixture"]), len(RANGES) - 1)
 
     def test_a_dry_run_writes_nothing(self):
         plan, _ = isnad.plan_tags(*fixture_inputs())
         counts, skipped = isnad.tag_files(plan, self.root, write=False)
-        self.assertEqual((skipped, counts["added"] + counts["created"] + counts["replaced"]), ([], 12))
+        self.assertEqual({n for n, _ in skipped}, NOT_TAGGED)
+        self.assertEqual(counts["added"] + counts["created"] + counts["replaced"], len(TAGGED))
         self.assertEqual(self.file(), FIXTURE)
 
     def test_writing_tags_the_file_and_it_is_equivalent(self):
         plan, _ = isnad.plan_tags(*fixture_inputs())
         isnad.tag_files(plan, self.root, write=True)
         written = self.file()
-        self.assertEqual(written.count("@isnad1 id="), 12)
+        self.assertEqual(written.count("@isnad1 id="), len(TAGGED))
         self.assertTrue(tag.equivalent(FIXTURE, written))
         for i in plan["IsnadFixture"]:
-            self.assertIn(i.tag, written)
+            self.assertEqual(i.tag in written, i.name in TAGGED, i.name)
 
     def test_a_result_that_would_change_more_than_tags_is_never_written(self):
         plan, _ = isnad.plan_tags(*fixture_inputs())
@@ -442,7 +469,7 @@ class Cli(unittest.TestCase):
     def test_a_missing_file_is_reported_per_theorem(self):
         plan, _ = isnad.plan_tags(*fixture_inputs("Nope.Missing"))
         _, skipped = isnad.tag_files(plan, self.root, write=True)
-        self.assertEqual(len(skipped), 12)
+        self.assertEqual(len(skipped), len(RANGES))
         self.assertIn("does not exist", skipped[0][1])
 
     def test_a_crlf_file_stays_byte_for_byte_and_is_skipped(self):
@@ -451,7 +478,7 @@ class Cli(unittest.TestCase):
         plan, _ = isnad.plan_tags(*fixture_inputs())
         _, skipped = isnad.tag_files(plan, self.root, write=True)
         self.assertEqual((self.root / "IsnadFixture.lean").read_bytes(), crlf)
-        self.assertEqual(len(skipped), 12)
+        self.assertEqual(len(skipped), len(RANGES))
 
     def test_strip_takes_the_tags_out_of_a_file_and_a_directory(self):
         plan, _ = isnad.plan_tags(*fixture_inputs())

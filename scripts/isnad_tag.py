@@ -147,6 +147,11 @@ def tag_text(text: str, items: list[Item]) -> tuple[str, dict[str, int], list[tu
         if not declared_name_matches(it.name, text[s0:s1]):
             skipped.append((it.name, f"generated: the text at its name's position is {text[s0:s1]!r}"))
             continue
+        if it.rng == it.sel:
+            skipped.append(
+                (it.name, "its range is only its name (a structure field, or a name inside an attribute): there is no command to tag")
+            )
+            continue
         starts.setdefault(p, []).append(it)
     for p, group in starts.items():
         if len(group) > 1:
@@ -166,7 +171,10 @@ def tag_text(text: str, items: list[Item]) -> tuple[str, dict[str, int], list[tu
         else:
             indent = text[text.rfind("\n", 0, p) + 1 : p]
             if indent.strip():  # something other than indentation before the command on its line
-                skipped.append((it.name, "the command does not start its line"))
+                inside = indent.rstrip().endswith("@[")  # `@[to_additive name]`: Lean gives the twin the attribute's position
+                skipped.append(
+                    (it.name, "generated: the command starts inside an attribute" if inside else "the command does not start its line")
+                )
                 continue
             counts["created"] += 1
             text = text[:p] + f"/--\n{indent}{it.tag}\n{indent}-/\n{indent}" + text[p:]

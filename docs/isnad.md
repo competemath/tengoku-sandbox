@@ -114,9 +114,12 @@ python3 scripts/isnad.py tagtest                                             # t
 
 *Where* a theorem is written is not guessed: Lean records the range of every declaration (its docstring and attributes included, and the declared name),
 and `tengoku-isnad --ranges` prints them. The tagger reads text only to skip comments and strings, so a `/--` inside a string or a comment is never taken for a
-docstring. It leaves a theorem alone, and says why, when the text at the name's position is not its name (a theorem a macro generated, like
-`to_additive`'s twin), when several theorems start at one command, when the file has Windows line endings, when a docstring is never closed, or when the command
-does not start its line. The tag text is the same for `from=seed` (anything under `Tengoku/Seed/`), `from=novel` (`Tengoku/Native/`) and `from=translated`
+docstring. It leaves a theorem alone, and says why, when the text at the name's position is not its name or the command starts inside an attribute (a theorem
+a macro generated: `to_additive`'s twin, `ext_iff`), when its range is only its name (a structure's field, `ext`'s theorem), when several theorems start at one
+command, when the file has Windows line endings, when a docstring is never closed, or when the command does not start its line. A twin has no place in the
+source to carry a tag (its docstring is not copied from the original either: measured), so its id goes in the module's list instead. On ten real modules of
+the tree (1,392 theorems: Mathlib's group, order, set and logic basics, and two of Carleson's) the tagger tags 997, leaves 383 twins, 11 fields and 1 other alone,
+and every result passes the rule below. The tag text is the same for `from=seed` (anything under `Tengoku/Seed/`), `from=novel` (`Tengoku/Native/`) and `from=translated`
 (every other library); `--origin` and `--src` override it.
 
 The rule that makes it safe (`equivalent` in `scripts/isnad_tag.py`): after the tags are taken out of both versions, the code is byte for byte the same and every
@@ -125,7 +128,8 @@ docstring has the same words. Two things are allowed to differ: the whitespace i
 tagger made for a theorem that had none, or an empty `/-- -/`: they look the same once tagged). `tag --write` never writes a result that breaks the rule.
 
 `tagtest` compiles `tools/isnad/tagger/Fixture.lean` (twelve theorems in the shapes that break naive taggers: one-line and many-line docstrings, an attribute
-before or after the docstring, a nested comment inside a docstring, a dotted protected name, guillemets, unicode, indentation, a tag already there) and checks that
+before or after the docstring, a nested comment inside a docstring, a dotted protected name, guillemets, unicode, indentation, a tag already there; and the shapes
+it must leave alone: `ext`'s two theorems and the fields of a structure, one of them with a docstring of its own) and checks that
 Lean's ranges are the ones pinned in `ranges.json`, that tagging, tagging again and stripping each leave every theorem's id, shape and vocab as they were
 (the statements are compiled again after each step), that the second tag changes nothing, and that the stripped file is equivalent to the original. The unit tests
 (`scripts/tests/test_isnad_tag.py`) run the same shapes on the pinned ranges, 300 random files, and every function of the tagger was checked against deliberately
