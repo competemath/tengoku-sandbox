@@ -77,6 +77,7 @@ on failed or was cancelled (a skipped job is fine), or when classification faile
 | vacuity (PR runs only) | ✓ | | | | |
 | lint-python, tooling-tests | | | ✓ | | |
 | credits, dco, secrets | ✓ | ✓ | ✓ | ✓ | ✓ |
+| imports (every `import Tengoku…` resolves; PR runs, and again on the merged result in the queue) | ✓ | ✓ | ✓ | ✓ | ✓ |
 | depends (PR runs only) | ✓ | ✓ | ✓ | ✓ | ✓ |
 | sorry-advisory (advisory, never blocks) | ✓ | | ✓ | | |
 

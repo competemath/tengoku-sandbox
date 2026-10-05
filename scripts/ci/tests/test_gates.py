@@ -549,6 +549,120 @@ class ScopeFixUnits(unittest.TestCase):
             self.assertEqual(sf.intake_namespaces(), {"FxLib", "Other"})
 
 
+class ImportsResolve(unittest.TestCase):
+    """Every `import Tengoku…` names a module that exists once the change is merged (imports_resolve.py). Regression of 2026-10-05: the seed moved into
+    Tengoku/Seed/ and five open intake PRs kept the old four-line header: green at the PR, broken only in the merge queue's multi-hour build."""
+
+    OLD_HEADER = "import Tengoku\nimport Tengoku.Std\nimport Tengoku.Tactic.Aesop\nimport Tengoku.Meta.Qq\n"
+
+    @staticmethod
+    def start_pr(r):
+        """The current commit becomes `main`; a fresh branch `pr` starts from it."""
+        r.git("checkout", "-q", "-B", "main")
+        r.git("branch", "-q", "-D", "pr")
+        r.git("checkout", "-q", "-b", "pr")
+
+    def seeded(self):
+        r = Repo()
+        r.write("Tengoku.lean", "public import Tengoku.Seed.Std\n")
+        r.write("Tengoku/Seed/Std.lean", "module\n")
+        r.write("Tengoku/Seed/Tactic/Aesop.lean", "module\n")
+        r.write("Tengoku/Seed/Meta/Qq.lean", "module\n")
+        r.write("Tengoku/Lib.lean", "import Tengoku.Lib.Basic\n")
+        r.commit("a tree whose seed is in Tengoku/Seed/")
+        self.start_pr(r)
+        return r
+
+    def test_an_old_header_bundle_after_the_seed_move_is_refused(self):
+        r = self.seeded()
+        r.write("Tengoku/Lib/Basic.lean", self.OLD_HEADER + "\ntheorem x : True := trivial\n")
+        r.commit("a bundle cut before the move")
+        rc, out = r.gate("imports_resolve.py")
+        self.assertEqual(rc, 1, out)
+        for mod in ("Tengoku.Std", "Tengoku.Tactic.Aesop", "Tengoku.Meta.Qq"):
+            self.assertIn(f"imports {mod}, which is not a module", out)
+        self.assertIn("did you mean Tengoku.Seed.Std", out)
+        self.assertNotIn("imports Tengoku,", out)  # the root is still there
+
+    def test_the_new_header_passes(self):
+        r = self.seeded()
+        r.write("Tengoku/Lib/Basic.lean", "module\n\npublic import Tengoku\n\ntheorem x : True := trivial\n")
+        r.commit("a bundle cut after the move")
+        rc, out = r.gate("imports_resolve.py")
+        self.assertEqual(rc, 0, out)
+        self.assertIn("imports OK", out)
+
+    def test_a_pr_that_removes_a_module_is_checked_against_every_importer(self):
+        r = self.seeded()
+        r.write("Tengoku/Lib/Basic.lean", "public import Tengoku.Seed.Meta.Qq\n\ntheorem x : True := trivial\n")
+        r.commit("an importer of a seeded module")
+        self.start_pr(r)
+        r.git("rm", "-q", "Tengoku/Seed/Meta/Qq.lean")
+        r.commit("remove the module (the importer is not in the diff)")
+        rc, out = r.gate("imports_resolve.py")
+        self.assertEqual(rc, 1, out)
+        self.assertIn("Tengoku/Lib/Basic.lean: imports Tengoku.Seed.Meta.Qq", out)
+
+    def test_a_moved_module_whose_importers_follow_passes(self):
+        r = self.seeded()
+        r.write("Tengoku/Lib/Basic.lean", "public import Tengoku.Seed.Meta.Qq\n\ntheorem x : True := trivial\n")
+        r.commit("an importer")
+        self.start_pr(r)
+        r.git("mv", "Tengoku/Seed/Meta/Qq.lean", "Tengoku/Seed/Meta/Quote.lean")
+        r.write("Tengoku/Lib/Basic.lean", "public import Tengoku.Seed.Meta.Quote\n\ntheorem x : True := trivial\n")
+        r.commit("move it and update the importer")
+        rc, out = r.gate("imports_resolve.py")
+        self.assertEqual(rc, 0, out)
+        self.assertIn("every module of the tree", out)
+
+    def test_modules_added_together_may_import_each_other(self):
+        r = self.seeded()
+        r.write("Tengoku/Lib/Basic.lean", "public import Tengoku\n")
+        r.write("Tengoku/Lib/More.lean", "import Tengoku.Lib.Basic\n")
+        r.commit("two new modules")
+        rc, out = r.gate("imports_resolve.py")
+        self.assertEqual(rc, 0, out)
+
+    def test_only_a_header_import_counts(self):
+        r = self.seeded()
+        r.write(
+            "Tengoku/Lib/Basic.lean",
+            "/-!\n# doc\n```lean\nimport Tengoku.Gone\n```\n-/\nimport Tengoku\n-- import Tengoku.AlsoGone\n\n/-- import Tengoku.Std -/\ntheorem x : True := trivial\n",
+        )
+        r.commit("imports named only in comments and after the first command")
+        rc, out = r.gate("imports_resolve.py")
+        self.assertEqual(rc, 0, out)
+
+    def test_a_closed_comment_before_an_import_on_the_same_line_does_not_hide_it(self):
+        # regression (CodeRabbit, 2026-10-05): a header line was skipped whole when it began with `/-`; Lean reads a closed comment as whitespace
+        r = self.seeded()
+        r.write(
+            "Tengoku/Lib/Basic.lean",
+            "/- note -/ import Tengoku.Gone\n/-- a\n  multi-line comment -/ import Tengoku.AlsoGone\nimport Tengoku /- trailing -/\n",
+        )
+        r.commit("imports behind closed comments")
+        rc, out = r.gate("imports_resolve.py")
+        self.assertEqual(rc, 1, out)
+        self.assertIn("imports Tengoku.Gone,", out)
+        self.assertIn("imports Tengoku.AlsoGone,", out)
+        self.assertNotIn("imports Tengoku,", out)
+
+    def test_lean_and_core_imports_are_not_this_gates_business(self):
+        r = self.seeded()
+        r.write("Tengoku/Lib/Basic.lean", "import Lean\nimport Std.Data.HashMap\nimport Init.Core\nimport Tengoku -- a trailing comment\n")
+        r.commit("toolchain imports")
+        rc, out = r.gate("imports_resolve.py")
+        self.assertEqual(rc, 0, out)
+
+    def test_a_change_with_no_lean_module_has_nothing_to_check(self):
+        r = Repo()
+        r.write("scripts/x.py", "print(2)\n")
+        r.commit("tooling")
+        rc, out = r.gate("imports_resolve.py")
+        self.assertEqual(rc, 0, out)
+        self.assertIn("no Lean module changed", out)
+
+
 if __name__ == "__main__":
     unittest.main()
 
