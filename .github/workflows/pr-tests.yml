@@ -74,7 +74,7 @@ jobs:
         name: Does this PR touch the isnad recipe?
         run: |
           files="$(git diff --name-only HEAD^1 HEAD)"
-          if grep -qE '^(TengokuIsnad\.lean|lakefile\.toml|lean-toolchain|scripts/isnad\.py|tools/isnad/|docs/isnad\.md)' <<< "$files"; then
+          if grep -qE '^(TengokuIsnad\.lean|lakefile\.toml|lean-toolchain|scripts/isnad(_tag)?\.py|tools/isnad/|docs/isnad\.md|\.github/workflows/pr-tests\.yml)' <<< "$files"; then
             echo "run=yes" >> "$GITHUB_OUTPUT"
           else
             echo "run=no" >> "$GITHUB_OUTPUT"; echo "no file of the isnad recipe changed"
@@ -95,3 +95,6 @@ jobs:
       - name: Laws
         if: steps.touched.outputs.run == 'yes'
         run: python3 scripts/isnad.py laws
+      - name: The tagger on a real compile
+        if: steps.touched.outputs.run == 'yes'
+        run: python3 scripts/isnad.py tagtest

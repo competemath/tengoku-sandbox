@@ -4,6 +4,7 @@
 import hashlib
 import importlib.util
 import os
+import re
 import stat
 import subprocess
 import sys
@@ -256,6 +257,45 @@ class Commands(unittest.TestCase):
         self.assertIn("FAIL Nat.mul_comm", r.stdout)
         self.assertNotIn("FAIL Nat.add_comm", r.stdout)
         self.assertIn("the recipe or the toolchain changed", r.stdout)
+
+
+class CiJob(unittest.TestCase):
+    """The pr-tests job `isnad` runs only when a file of the recipe changes: the list must cover every file the job depends on, the workflow file included
+    (CodeRabbit, 2026-10-05: a later PR that changed only the job's steps would have set run=no and never run them)."""
+
+    def trigger(self) -> re.Pattern:
+        text = (ROOT / ".github" / "workflows" / "pr-tests.yml").read_text(encoding="utf-8")
+        m = re.search(r"grep -qE '(\^\(.*?\))' <<< \"\$files\"", text)
+        self.assertIsNotNone(m, "the touched step of the isnad job was not found")
+        return re.compile(m.group(1))
+
+    def test_every_file_the_job_depends_on_triggers_it(self):
+        rx = self.trigger()
+        for path in (
+            "TengokuIsnad.lean",
+            "lakefile.toml",
+            "lean-toolchain",
+            "scripts/isnad.py",
+            "scripts/isnad_tag.py",
+            "tools/isnad/golden.tsv",
+            "tools/isnad/tagger/Fixture.lean",
+            "tools/isnad/tagger/ranges.json",
+            "tools/isnad/laws_body.lean",
+            "docs/isnad.md",
+            ".github/workflows/pr-tests.yml",
+        ):
+            self.assertRegex(path, rx, path)
+
+    def test_unrelated_files_do_not_trigger_it(self):
+        rx = self.trigger()
+        for path in (
+            "scripts/seed.py",
+            "Tengoku/Seed/Logic/Basic.lean",
+            "data/staging/x.jsonl",
+            ".github/workflows/pr-gate.yml",
+            "docs/testing.md",
+        ):
+            self.assertNotRegex(path, rx, path)
 
 
 class LawsCommand(unittest.TestCase):
