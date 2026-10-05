@@ -271,10 +271,10 @@ def checked_path(arg: str) -> Path:
     return p
 
 
-def main(argv: list[str]) -> int:
+def main(argv: list[str]) -> None:
     if argv[:1] == ["--post"]:
         announce(json.loads(checked_path(argv[1]).read_text(errors="replace")), strict=True)
-        return 0
+        return
     out = None
     if argv[:1] == ["--facts"]:
         out, argv = checked_path(argv[1]), argv[2:]
@@ -284,8 +284,7 @@ def main(argv: list[str]) -> int:
         out.write_text(json.dumps(facts, ensure_ascii=False))
     else:
         announce(facts)
-    return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1:]))
+    main(sys.argv[1:])
