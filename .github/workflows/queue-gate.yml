@@ -102,11 +102,13 @@ jobs:
           df -h / | tail -1
       # The queue seeds from the newest published cache and compiles the difference. After a change that touches many modules (the seed's move renamed every one)
       # and before its cache build publishes, the difference is most of the tree: hours against a 40-minute limit, and runners taken from the very build the
-      # group waits for (2026-10-05). scripts/ci/cache_fresh.py waits while a cache build runs, capped below the limit, and otherwise says what happened.
+      # group waits for (2026-10-05). scripts/ci/cache_fresh.py waits while a cache build runs, and otherwise says what happened. The wait comes out of the same 40
+      # minutes as everything after it (CodeRabbit): about 3 before it (checkout, disk), then the seed (up to 4), candidates and axioms (up to 6), the build (its
+      # own 20-minute cap) and the pack (2), so 5 minutes of waiting is what is left. test_cache_fresh.py pins the arithmetic against this file.
       - name: A cache close enough to this group's base
         if: github.event_name == 'merge_group'
         env: { GH_TOKEN: "${{ github.token }}", BASE: "${{ github.event.merge_group.base_sha }}", TENGOKU_STALE_LIMIT: "${{ vars.TENGOKU_STALE_LIMIT }}" }
-        run: python3 scripts/ci/cache_fresh.py "$BASE" --wait 25 2>&1 | tee -a build.log   # the ejection comment reads build.log
+        run: python3 scripts/ci/cache_fresh.py "$BASE" --wait 5 2>&1 | tee -a build.log   # the ejection comment reads build.log
       - name: Seed from the newest published cache (verified)
         if: github.event_name == 'merge_group'
         env: { GH_TOKEN: "${{ github.token }}" }
