@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""intake_check.py <base> <head> [--lint strict|proposed] [--tar OUT.tar] — the checks of an INTAKE PR.
+"""intake_check.py <base> <head> [--lint strict|proposed|wide] [--tar OUT.tar] — the checks of an INTAKE PR.
 
 An intake PR carries a factory bundle (competemath/emissary-archangel, scripts/bump): the Lean modules of ONE library that was not in the
 tree, cut down to what the factory verified (Gate 2: each theorem's statement entails the original's, kernel-checked; no sorry, no
@@ -12,7 +12,11 @@ git objects only:
               and not already a trusted record of the tree or a theorem of an intake bundle in it
   lint        every module passes the content allow-list (scripts/ci/allowlist.py: known-inert commands, attributes, options; no code that
               runs while compiling) after its header; the header may only import the tree (Tengoku.*) and Lean/Std/Init.
-              `--lint proposed` additionally allows notation commands (notation, infix, prefix, postfix, notation3, scoped, local)
+              `--lint proposed` additionally allows notation commands (notation, infix, prefix, postfix, notation3, scoped, local);
+              `--lint wide` also allows the macro family (macro, macro_rules, syntax, declare_syntax_cat): they run in Lean's pure macro monad, which cannot reach IO,
+              and every word that does (unsafe, IO., run_cmd, #eval, elab, initialize, implemented_by, extern, native_decide, ...) stays refused wherever it appears.
+              In every mode a word at column 0 starts a command only if it is a command keyword of the tree's Lean (schemas/command-keywords.json): any other word
+              continues the command above (termination_by, by, fun, a proof term) and Lean itself refuses it if it does not parse
   provenance  with --tar, the bundle archive is rebuilt from the PR's files (the factory's own reproducible tar) for the workflow to
               check against the factory's build attestation: the bytes the factory built are the bytes in this PR
 
@@ -46,6 +50,8 @@ tar_out = args[args.index("--tar") + 1] if "--tar" in args else ""
 MAX_FILES, MAX_BYTES = 20000, 400 * 1024 * 1024
 ALL = "Tengoku/All.lean"
 NOTATION_OK = re.compile(r"`(?:notation3?|infix[lr]?|prefix|postfix|scoped|local)`")
+MACRO_OK = re.compile(r"`(?:macro|macro_rules|syntax|declare_syntax_cat)`")  # `--lint wide`
+LINT_MODES = ("strict", "proposed", "wide")
 IMPORT_LINE = re.compile(r"^\s*(?:(?:public|private|meta)\s+)*import\s+(?:all\s+)?(\S+)\s*$")
 MODULE_LINE = re.compile(r"^\s*(?:module|prelude)\s*$")
 TREE_IMPORT = re.compile(r"(?:Tengoku|Lean|Std|Init)(?:\.|$)")
@@ -200,6 +206,9 @@ for i, r in enumerate(manifest, 1):
 
 # lint
 allowed_options = set(json.loads((ROOT / "schemas" / "allowed-options.json").read_text())["allowed"])
+command_keywords = set(json.loads((ROOT / "schemas" / "command-keywords.json").read_text())["commands"])
+if lint_mode not in LINT_MODES:
+    fail(f"--lint is one of {', '.join(LINT_MODES)}, not {lint_mode!r}")
 total = 0
 for p in sorted(p for _, p in files if p.endswith(".lean") and p != ALL):
     try:
@@ -214,9 +223,11 @@ for p in sorted(p for _, p in files if p.endswith(".lean") and p != ALL):
         if m and not TREE_IMPORT.match(m.group(1)):
             errors.append(f"{p}: imports {m.group(1)}, which is not the tree")
         body.append("" if m or MODULE_LINE.match(ln) else ln)
-    vs = violations("\n".join(body), allowed_options)
-    if lint_mode == "proposed":
+    vs = violations("\n".join(body), allowed_options, command_keywords)
+    if lint_mode in ("proposed", "wide"):
         vs = [v for v in vs if not NOTATION_OK.search(v)]
+    if lint_mode == "wide":
+        vs = [v for v in vs if not MACRO_OK.search(v)]
     for v in vs[:3]:
         errors.append(f"{p}: {v}")
 if total > MAX_BYTES:

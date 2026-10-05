@@ -62,9 +62,9 @@ SET_OPTION = re.compile(r"set_option\s+([A-Za-z_][\w.]*)")
 
 
 def intake_modules(base: str, head: str) -> tuple[str, ...]:
-    """The module paths of an intake bundle in this diff, when the repository's intake lint is `proposed` (variable TENGOKU_INTAKE_LINT):
+    """The module paths of an intake bundle in this diff, when the repository's intake lint is `proposed` or `wide` (variable TENGOKU_INTAKE_LINT):
     notation commands are allowed there, as in scripts/ci/intake_check.py (the allow-list lint of the bundle). Nowhere else."""
-    if os.environ.get("TENGOKU_INTAKE_LINT") != "proposed":
+    if os.environ.get("TENGOKU_INTAKE_LINT") not in ("proposed", "wide"):
         return ()
     libs = {m.group(1) for _, p in changed_files(base, head) if (m := re.fullmatch(r"data/intake/([^/]+)/manifest\.jsonl", p))}
     return tuple(x for lib in libs for x in (f"Tengoku/{pascal(lib)}/", f"Tengoku/{pascal(lib)}.lean"))

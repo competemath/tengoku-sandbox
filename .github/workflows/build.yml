@@ -137,6 +137,13 @@ jobs:
             echo "complete=true" >> "$GITHUB_OUTPUT"
           fi
 
+      # The content lint reads a word at column 0 as a command only if it is a command keyword of the tree's Lean (schemas/command-keywords.json). A seed update that
+      # adds one makes the list stale; this says so. It never blocks the cache: the build above is the verdict on the tree, this is a reminder about the list.
+      - name: The command keywords of the tree against the lint's list
+        if: steps.build.outputs.complete == 'true'
+        continue-on-error: true
+        run: lake env lean --run tools/CommandKeywords.lean | python3 scripts/ci/cmdkw_check.py
+
       - name: Save partial/complete build
         if: always()
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
