@@ -32,3 +32,9 @@ supportInterpreter = true
 name = "tengoku-leakscan"
 root = "TengokuLeak"
 supportInterpreter = true
+
+# The identity of a theorem (docs/isnad.md): canonical form of the elaborated statement, hashed by scripts/isnad.py. Imports only Lean.
+[[lean_exe]]
+name = "tengoku-isnad"
+root = "TengokuIsnad"
+supportInterpreter = true
