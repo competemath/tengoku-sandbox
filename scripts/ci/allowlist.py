@@ -54,6 +54,12 @@ COMMANDS = {
     "assert_not_exists",
 }
 MODIFIERS = {"private", "protected", "noncomputable", "nonrec", "scoped", "local", "public"}
+# Words that may stand at column 0 as the CONTINUATION of the command above: the clauses of a definition (`termination_by`, `decreasing_by`) and the term keywords
+# of an unindented body (`by`, `fun`, `match`): exactly the ones the factory's reports show being refused, no more. None of them can begin a command, so the line is not a new one; what it
+# says is still scanned like every other line (the code-running words, `#` commands and options are refused wherever they stand). Before this list a
+# definition with its `termination_by` at column 0 was refused as "does not start an allowed command": 4,163 of the theorems the factory could not bundle
+# (compfiles, imoshortlist, lean-pool). Deliberately a short list, not "any unknown word": `run_cmd` or a library's own command must stay refused.
+CONTINUATIONS = {"termination_by", "decreasing_by", "by", "fun", "match"}
 # attributes that register nothing of the record's own to run: simp sets, lemma tags for the tree's tactics,
 # generators whose code is the tree's (to_additive, simps, reassoc), documentation tags
 ATTRIBUTES = {
@@ -296,7 +302,7 @@ def _command_start_violations(stripped: str) -> list[str]:
         while words and words[0] in MODIFIERS:
             words = words[1:]
         lead = _LEAD.match(words[0]).group(0) if words else ""
-        if lead and lead not in COMMANDS:
+        if lead and lead not in COMMANDS and lead not in CONTINUATIONS:
             out.append(f"`{lead}` does not start an allowed command")
     return out
 
