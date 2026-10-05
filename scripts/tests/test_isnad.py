@@ -110,6 +110,55 @@ class Tags(unittest.TestCase):
         self.assertRegex(line, r"^[ -~]+$")
 
 
+class CraftedTags(unittest.TestCase):
+    """A tag is read from a docstring, so it is untrusted text. Regression (SonarCloud, 2026-10-05): the first parser was a regex with nested repetition,
+    `(?:[a-z]+=\\S+ ?)+`, and `@isnad1 id=x ` + `a=b` * 20 + a vertical tab took 3 s, `* 22` about 17 s, and sixty characters would hang the tool."""
+
+    def parse_in_a_child(self, text: str, seconds: int = 5) -> str:
+        code = "import sys; sys.path.insert(0, sys.argv[1]); import isnad\ntry:\n    isnad.parse_tag(sys.argv[2]); print('parsed')\nexcept ValueError: print('refused')"
+        try:
+            r = subprocess.run(
+                [sys.executable, "-c", code, str(ROOT / "scripts"), text], capture_output=True, text=True, timeout=seconds, check=False
+            )
+        except subprocess.TimeoutExpired:
+            self.fail(f"parse_tag did not finish in {seconds} s on a crafted tag of {len(text)} characters")
+        return r.stdout.strip()
+
+    def test_a_crafted_tag_is_refused_quickly(self):
+        for n in (20, 64, 5000):
+            self.assertEqual(self.parse_in_a_child("@isnad1 id=x " + "a=b" * n + "\x0bx=y"), "refused", n)
+
+    def test_other_shapes_that_make_a_backtracking_parser_work_hard(self):
+        for text in (
+            "@isnad1 " + "a=" * 4000 + "!",
+            "@isnad1 " + "a=b " * 4000 + "\t",
+            "@isnad1 " + "=" * 100000,
+            "@isnad1" + " " * 100000 + "x",
+            "@isnad" + "9" * 100000,
+            "@isnad1 id=" + "é" * 50000,
+        ):
+            self.assertEqual(self.parse_in_a_child(text), "refused", text[:30])
+
+    def test_every_crafted_shape_is_refused_with_a_reason(self):
+        good = Tags.TAG
+        for bad in (
+            good.replace(" ", "  ", 1),  # two spaces
+            good + " ",  # a trailing space survives only strip(): still a tag
+            "\t" + good.replace(" id=", "\tid=", 1),  # a tab inside
+            good.replace("id=", "id=\x00"),  # a control character
+            good.replace("from=translated", "from=translatéd"),  # non-ASCII
+            "@isnad " + good.split(" ", 1)[1],  # no digits after @isnad
+            "@isnad1",  # nothing after
+            good + " extra",  # a token that is not key=value
+            good.replace("id=", "id="),  # unchanged: control, must parse
+        ):
+            if bad.strip() == good:
+                self.assertEqual(isnad.parse_tag(bad)["id"], "eq.1h3v.s4.01215b3d171d")
+                continue
+            with self.assertRaises(ValueError, msg=repr(bad)):
+                isnad.parse_tag(bad)
+
+
 class Explain(unittest.TestCase):
     def test_id(self):
         text = isnad.explain_id("eq.1h3v.s4.01215b3d171d")
@@ -207,6 +256,39 @@ class Commands(unittest.TestCase):
         self.assertIn("FAIL Nat.mul_comm", r.stdout)
         self.assertNotIn("FAIL Nat.add_comm", r.stdout)
         self.assertIn("the recipe or the toolchain changed", r.stdout)
+
+
+class LawsCommand(unittest.TestCase):
+    """`laws` hands the script to Lean on stdin (no file, no path: a path built from anything is what a security scan flags), and says so when it fails."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        d = Path(self.tmp.name)
+        lake = d / "lake"
+        # a stand-in for `lake env lean --stdin`: it succeeds, and reports, only when the script arrives on stdin
+        lake.write_text(
+            '#!/bin/sh\nif [ "$3" = "--stdin" ] && grep -q "#isnad_laws" -; then echo "isnad laws: 21 checks passed"; else echo "no script on stdin" >&2; exit 1; fi\n'
+        )
+        lake.chmod(lake.stat().st_mode | stat.S_IEXEC)
+        self.env = {**os.environ, "PATH": f"{d}:{os.environ['PATH']}"}
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_the_script_arrives_on_stdin(self):
+        r = subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "isnad.py"), "laws"], capture_output=True, text=True, env=self.env, check=False
+        )
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("21 checks passed", r.stdout)
+
+    def test_a_failure_of_lean_is_a_failure_of_the_command(self):
+        (Path(self.tmp.name) / "lake").write_text("#!/bin/sh\necho 'error: boom' >&2; exit 1\n")
+        r = subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "isnad.py"), "laws"], capture_output=True, text=True, env=self.env, check=False
+        )
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("boom", r.stdout)
 
 
 class Laws(unittest.TestCase):

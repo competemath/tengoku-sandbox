@@ -47,7 +47,6 @@ KINDS = {
     "other": "something else",
 }
 ID_RE = re.compile(r"(?P<kind>[a-z0-9]{1,8})\.(?P<hyps>\d+)h(?P<vars>\d+)v\.s(?P<size>\d+)\.(?P<sig>[0-9a-f]{12})")
-TAG_RE = re.compile(r"@isnad(?P<version>\d+) (?P<fields>(?:[a-z]+=\S+ ?)+)")
 FIELDS = ("id", "from", "src", "shape", "vocab")
 HEX = re.compile(r"[0-9a-f]+")
 
@@ -88,26 +87,35 @@ class Record:
         return sha(self.vocabulary, 8)
 
 
-def parse_tag(line: str) -> dict[str, str]:
-    """The fields of a tag line, with `version`. Raises ValueError for anything that is not exactly one well-formed tag."""
-    m = TAG_RE.fullmatch(line.strip())
-    if not m:
-        raise ValueError(f"not an isnad tag: {line.strip()[:80]!r}")
-    if m.group("version") != VERSION:
-        raise ValueError(
-            f"isnad format {m.group('version')} is not implemented here (this tool is format {VERSION}): its recipe is not known"
-        )
-    out = {"version": m.group("version")}
-    for pair in m.group("fields").split():
-        k, _, v = pair.partition("=")
-        if k in out:
-            raise ValueError(f"field {k} twice")
-        out[k] = v
+def split_tag(line: str) -> dict[str, str]:
+    """The `key=value` fields of a tag line and its `version`: the line is split on single spaces, not matched by a pattern (a pattern with nested repetition
+    backtracks exponentially on a crafted line: sixty characters in a docstring would hang the tool). Anything that is not exactly one line of printable
+    ASCII, one space between tokens, `@isnad<digits>` first and distinct known `key=value` pairs after it is refused."""
+    text = line.strip()
+    if not text.isascii() or not text.isprintable():
+        raise ValueError(f"not an isnad tag: {text[:80]!r}")
+    head, *pairs = text.split(" ")
+    if not (head.startswith("@isnad") and head[len("@isnad") :].isdigit()) or "" in pairs:
+        raise ValueError(f"not an isnad tag: {text[:80]!r}")
+    version = head[len("@isnad") :]
+    if version != VERSION:
+        raise ValueError(f"isnad format {version} is not implemented here (this tool is format {VERSION}): its recipe is not known")
+    out = {"version": version}
+    for pair in pairs:
+        key, eq, value = pair.partition("=")
+        if not eq or not value or key not in FIELDS:
+            raise ValueError(f"a tag has exactly the fields {', '.join(FIELDS)}, as key=value: {pair[:40]!r}")
+        if key in out:
+            raise ValueError(f"field {key} twice")
+        out[key] = value
     missing = [f for f in FIELDS if f not in out]
-    if missing or set(out) - set(FIELDS) - {"version"}:
-        raise ValueError(
-            f"a tag has exactly the fields {', '.join(FIELDS)} (missing {missing}, extra {sorted(set(out) - set(FIELDS) - {'version'})})"
-        )
+    if missing:
+        raise ValueError(f"a tag has exactly the fields {', '.join(FIELDS)} (missing {missing})")
+    return out
+
+
+def check_values(out: dict[str, str]) -> None:
+    """The values of a split tag: the id's shape, `from`, `src`, and the two 8-digit hashes, and `from` with `src` as one claim."""
     if not ID_RE.fullmatch(out["id"]):
         raise ValueError(f"malformed id {out['id']!r}")
     if out["from"] not in FROM:
@@ -120,6 +128,12 @@ def parse_tag(line: str) -> dict[str, str]:
     # from= and src= are one claim: only a translation has a source side (`-`: not available, or its 12-digit sig); seed and novel content has none
     if (out["from"] == "translated") == (out["src"] == "0"):
         raise ValueError("from=translated needs src=- or a 12-digit source id; from=seed and from=novel need src=0")
+
+
+def parse_tag(line: str) -> dict[str, str]:
+    """The fields of a tag line, with `version`. Raises ValueError for anything that is not exactly one well-formed tag."""
+    out = split_tag(line)
+    check_values(out)
     return out
 
 
@@ -127,7 +141,9 @@ def format_tag(rec: Record, origin: str, src: str | None = None) -> str:
     """The tag line of a theorem. `src` defaults by origin: `0` for seed and novel content, `-` (source side not available) for a translation."""
     if origin not in FROM:
         raise ValueError(f"from= is one of {', '.join(FROM)}")
-    line = f"@isnad{VERSION} id={rec.id} from={origin} src={src if src is not None else ('-' if origin == 'translated' else '0')} shape={rec.shape} vocab={rec.vocab}"
+    if src is None:
+        src = "-" if origin == "translated" else "0"
+    line = f"@isnad{VERSION} id={rec.id} from={origin} src={src} shape={rec.shape} vocab={rec.vocab}"
     parse_tag(line)  # never write a tag that the reader would refuse
     return line
 
@@ -211,21 +227,33 @@ def laws_script() -> str:
 
 
 def run_laws() -> int:
-    import tempfile
-
-    with tempfile.TemporaryDirectory() as d:
-        f = Path(d) / "IsnadLaws.lean"
-        f.write_text(laws_script(), encoding="utf-8")
-        r = subprocess.run(["lake", "env", "lean", str(f)], cwd=ROOT, capture_output=True, text=True, check=False)
-        print((r.stdout + r.stderr).strip())
-        return 0 if r.returncode == 0 and "isnad laws:" in r.stdout + r.stderr else 1
+    """The laws, with plain Lean: the script goes in through stdin, so there is no file and no path to name."""
+    r = subprocess.run(["lake", "env", "lean", "--stdin"], input=laws_script(), cwd=ROOT, capture_output=True, text=True, check=False)
+    print((r.stdout + r.stderr).strip())
+    return 0 if r.returncode == 0 and "isnad laws:" in r.stdout + r.stderr else 1
 
 
-def main(argv: list[str]) -> int:
+def cmd_id(recs: list[Record]) -> int:
+    for r in recs:
+        print(f"{r.name}\t{r.id}\tshape={r.shape}\tvocab={r.vocab}")
+    return 0
+
+
+def cmd_verify(tag_line: str, recs: list[Record]) -> int:
+    tag = parse_tag(tag_line)
+    if len(recs) != 1:
+        print(f"verify needs exactly one theorem (--name), got {len(recs)}")
+        return 2
+    r = recs[0]
+    diffs = [f"{k}: tag {tag[k]}, recomputed {v}" for k, v in (("id", r.id), ("shape", r.shape), ("vocab", r.vocab)) if tag[k] != v]
+    print("\n".join(diffs) if diffs else f"{r.name}: the tag matches the compiled statement")
+    return 1 if diffs else 0
+
+
+def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
-    e = sub.add_parser("explain")
-    e.add_argument("what")
+    sub.add_parser("explain").add_argument("what")
     for name in ("id", "verify"):
         s = sub.add_parser(name)
         if name == "verify":
@@ -233,11 +261,13 @@ def main(argv: list[str]) -> int:
         s.add_argument("--module", action="append", required=True)
         s.add_argument("--name", action="append", default=[])
         s.add_argument("--exe")
-    t = sub.add_parser("selftest")
-    t.add_argument("--exe")
-    lw = sub.add_parser("laws")
-    lw.add_argument("--emit", action="store_true")
-    a = ap.parse_args(argv)
+    sub.add_parser("selftest").add_argument("--exe")
+    sub.add_parser("laws").add_argument("--emit", action="store_true")
+    return ap
+
+
+def main(argv: list[str]) -> int:
+    a = build_parser().parse_args(argv)
     if a.cmd == "explain":
         print(explain_tag(a.what) if a.what.lstrip().startswith("@isnad") else explain_id(a.what))
         return 0
@@ -248,20 +278,8 @@ def main(argv: list[str]) -> int:
             print(laws_script())
             return 0
         return run_laws()
-    args = [x for m in a.module for x in ("--module", m)] + [x for n in a.name for x in ("--name", n)]
-    recs = run_exe(args, a.exe)
-    if a.cmd == "id":
-        for r in recs:
-            print(f"{r.name}\t{r.id}\tshape={r.shape}\tvocab={r.vocab}")
-        return 0
-    tag = parse_tag(a.tag)
-    if len(recs) != 1:
-        print(f"verify needs exactly one theorem (--name), got {len(recs)}")
-        return 2
-    r = recs[0]
-    diffs = [f"{k}: tag {tag[k]}, recomputed {v}" for k, v in (("id", r.id), ("shape", r.shape), ("vocab", r.vocab)) if tag[k] != v]
-    print("\n".join(diffs) if diffs else f"{r.name}: the tag matches the compiled statement")
-    return 1 if diffs else 0
+    recs = run_exe([x for m in a.module for x in ("--module", m)] + [x for n in a.name for x in ("--name", n)], a.exe)
+    return cmd_id(recs) if a.cmd == "id" else cmd_verify(a.tag, recs)
 
 
 if __name__ == "__main__":
