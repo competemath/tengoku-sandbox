@@ -59,7 +59,8 @@ COMMANDS = {
     "recommended_spelling",
     "deprecated_module",
 }
-MODIFIERS = {"private", "protected", "noncomputable", "nonrec", "scoped", "local", "public", "meta"}  # `meta` is the module system's: `meta def`, `meta section`
+# `meta` is the module system's: `meta def`, `meta section`
+MODIFIERS = {"private", "protected", "noncomputable", "nonrec", "scoped", "local", "public", "meta"}
 # attributes that register nothing of the record's own to run: simp sets, lemma tags for the tree's tactics,
 # generators whose code is the tree's (to_additive, simps, reassoc), documentation tags
 ATTRIBUTES = {

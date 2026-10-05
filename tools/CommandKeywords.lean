@@ -10,6 +10,7 @@ import Lean
 open Lean Parser
 
 unsafe def main (args : List String) : IO UInt32 := do
+  enableInitializersExecution  -- `lean --run` interprets this file: the initializers of the imported modules must be allowed to run
   initSearchPath (← findSysroot)
   let mod := (args.head?.getD "Tengoku").toName
   let env ← importModules #[{ module := mod }] {} (trustLevel := 0) (loadExts := true)
