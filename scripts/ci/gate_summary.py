@@ -103,6 +103,11 @@ ADVICE: dict[str, tuple[str, str, str]] = {
         "the gate scripts' own unit tests and `actionlint` on workflows",
         "run `python3 -m unittest scripts.ci.tests.test_gates` and `actionlint` locally",
     ),
+    "imports": (
+        "medium",
+        "every `import Tengoku…` of the modules you add or edit (of every module, when you remove or move one) names a module that exists after the change",
+        "fix the import the message names; after the seed moved into `Tengoku/Seed/` a library header is a single `import Tengoku`, a bundle cut earlier needs a re-cut",
+    ),
     "data-rules": ("medium", "append-only, record validation and content lint", "see the step named below"),
 }
 

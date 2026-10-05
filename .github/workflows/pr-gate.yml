@@ -196,6 +196,29 @@ jobs:
       - name: scope-fix checks
         run: python3 scripts/ci/scope_fix_check.py "$BASE" "$HEAD"
 
+  # Every `import Tengoku…` of a module this PR adds or edits (or, when it removes or moves a module, of the whole tree) names a module that exists after the
+  # change (scripts/ci/imports_resolve.py). No Lean runs: it is files and header lines, read as git objects; nothing of the PR runs. It exists because a PR
+  # that was green when opened can be broken by what merged after it, and that used to show only in the merge queue's multi-hour build.
+  imports:
+    needs: classify
+    if: github.event_name == 'pull_request_target'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions: { contents: read }
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
+        with: { egress-policy: audit }
+      - name: The base commit (the checks are main's)
+        run: |
+          git init -q .
+          git remote add origin "https://github.com/$GITHUB_REPOSITORY"
+          git fetch -q --no-tags --filter=blob:none origin "$BASE"
+          git checkout -q --detach "$BASE"
+      - name: The PR's commits, as data (the checks are main's)
+        run: git fetch -q --no-tags --filter=blob:none origin "+$PR_REF:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
+      - name: every import resolves
+        run: python3 scripts/ci/imports_resolve.py "$BASE" "$HEAD"
+
   # A restructure PR (the seed moved into Tengoku/Seed/) is not read, it is recomputed: scripts/restructure.py of the base commit runs on the base
   # tree and the PR must equal its output byte for byte. Nothing of the PR runs; it is read as git objects only.
   restructure:
@@ -392,6 +415,13 @@ jobs:
           TENGOKU_BOT: "${{ vars.TENGOKU_BOT || 'tengoku-bot' }}"
           TENGOKU_ACTOR_CHECKED: "1"   # the PR's own gate verified the actor
         run: python3 scripts/ci/classify.py "$BASE" "$HEAD"
+      - name: Every import still resolves, on the merged result
+        if: github.event_name == 'merge_group'
+        run: |
+          # The checks are main's: this job has the base's files only. The group that introduces the script has no copy of it here (the sandbox ejected such a
+          # group on 2026-10-05); once main has it, it always runs, even in a group that deletes it.
+          if [ ! -f scripts/ci/imports_resolve.py ]; then echo "imports_resolve.py is introduced by this group: main has no copy to run yet"; exit 0; fi
+          python3 scripts/ci/imports_resolve.py "$BASE" "$HEAD"
       - name: The records, or the move of the seed, against everything merged ahead of them
         if: github.event_name == 'merge_group' && contains(fromJSON('["content","tombstone","promotion","restructure"]'), steps.c.outputs.class)
         env: { CLASS: "${{ steps.c.outputs.class }}", TENGOKU_INTAKE_LINT: "${{ vars.TENGOKU_INTAKE_LINT || 'strict' }}" }
@@ -405,7 +435,7 @@ jobs:
           python3 scripts/ci/lint_banked.py "$BASE" "$HEAD"
 
   pr-gate:
-    needs: [classify, data-rules, credits, dco, secrets, workflows, depends, vacuity, goals, intake, scope-fix, restructure, sorry-advisory, queue-recheck]
+    needs: [classify, data-rules, credits, dco, secrets, workflows, depends, vacuity, goals, intake, scope-fix, restructure, imports, sorry-advisory, queue-recheck]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 10
