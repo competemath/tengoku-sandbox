@@ -4,6 +4,7 @@ Its own file, so that tests of other gates added at the end of test_gates.py do 
 from __future__ import annotations
 
 import json
+import re
 import sys
 import unittest
 from pathlib import Path
@@ -11,6 +12,27 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 from test_gates import Repo  # noqa: E402
+
+
+class TimeBudget(unittest.TestCase):
+    """The wait comes out of the queue's 40-minute check, with everything after it still to run (CodeRabbit, 2026-10-05: a 25-minute wait left 15 minutes for a seed
+    of up to 4, candidates and axioms of up to 6, a build capped at 20 and a pack of 2). The durations are those of the real queue runs of 2026-10-05
+    (seed 133 to 219 s, candidates 96 s, axioms 201 s, build 56 to 103 s, checkout and disk 150 to 170 s)."""
+
+    LIMIT = 40
+    BEFORE, SEED, CANDIDATES, PACK = 3, 4, 6, 2  # minutes, worst cases of the real runs
+    WORKFLOW = HERE.parent.parent.parent / ".github" / "workflows" / "queue-gate.yml"
+
+    def test_the_wait_and_what_follows_fit_the_queue_limit(self):
+        text = self.WORKFLOW.read_text(encoding="utf-8")
+        waits = re.findall(r"cache_fresh\.py \"\$BASE\" --wait (\d+)", text)
+        caps = re.findall(r"timeout -k \d+ (\d+)m lake build Tengoku\.All", text)
+        self.assertEqual((len(waits), len(caps)), (1, 1), "the step or the build's own cap was not found")
+        wait, cap = int(waits[0]), int(caps[0])
+        worst = self.BEFORE + wait + self.SEED + self.CANDIDATES + cap + self.PACK
+        self.assertLessEqual(
+            worst, self.LIMIT, f"waiting {wait} min, then a build capped at {cap}, can take {worst} min of the queue's {self.LIMIT}"
+        )
 
 
 class CacheFresh(unittest.TestCase):
