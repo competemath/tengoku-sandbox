@@ -77,8 +77,11 @@ if "intake" in by:
         fail(f"an intake PR is one library's bundle and nothing else (libraries: {sorted(intake_libs)}; also touches: {others})")
     if not actor_ok:
         fail(f"an intake PR comes from the factory's account ({bot}), not from {actor or 'nobody'}")
-    print(f"class=intake ({len(files)} files, library {sorted(intake_libs)[0]})")
-    gh_output("class", "intake")
+    # the next part of a library that arrived in parts (scripts/bump/bundle_layers.py in the factory): the part's report is a new file data/intake/<library>/parts/NNN.json
+    lib = sorted(intake_libs)[0]
+    cls = "extend" if any(re.fullmatch(rf"data/intake/{re.escape(lib)}/parts/\d{{3}}\.json", p) for _, p in files) else "intake"
+    print(f"class={cls} ({len(files)} files, library {lib})")
+    gh_output("class", cls)
     gh_output("files", " ".join(p for _, p in files))
     sys.exit(0)
 if derived:
