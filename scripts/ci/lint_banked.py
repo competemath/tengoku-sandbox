@@ -19,7 +19,6 @@ from pathlib import Path
 from _git import added_lines, blob, changed_files, fail, load_schema, match, pascal
 from allowlist import violations
 from lean_lex import code_only
-from restructure_check import is_restructure
 
 IMPORT_START = r"^\s*import\b"
 NOTATION = "syntax/macro/elab/notation declarations"
@@ -149,12 +148,7 @@ def main() -> None:
     else:
         base, head = sys.argv[1], sys.argv[2]
         intake = intake_modules(base, head)
-        moved_seed = is_restructure(
-            base, head
-        )  # the seed's move is recomputed by restructure_check.py; it is upstream code, never banked content
         for st, p in changed_files(base, head):
-            if moved_seed and p.startswith("Tengoku/Seed/"):
-                continue
             if match(p, RECORD_FILES):
                 errors += lint_record_file(base, head, p, allowed)
             elif p.endswith(".lean") and p.startswith(

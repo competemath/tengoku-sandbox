@@ -12,8 +12,8 @@ the origin of a module is visible from its path, and rewrites what names the mov
   - the root aggregator Tengoku.lean, and the two documents that list the seed's paths (SEED.md, LICENSE-THIRD-PARTY.md).
 
 A library is a name in data/: data/<tier>/<library>.jsonl or folder, or data/intake/<library>/. `--libs a,b` takes them,
-and without it the working tree's data/ is read. Nothing else is guessed. The change is a pure function of the tree: the merge gate (scripts/ci/restructure_check.py) runs it on the
-base commit and accepts only a PR equal to its output, and anyone can repeat it in a clean checkout:
+and without it the working tree's data/ is read. Nothing else is guessed. The change is a pure function of the tree: the PR that moved the seed (tengoku#278) was checked by recomputing it on the
+base commit and requiring equality, and anyone can repeat it in a clean checkout:
 
     python3 scripts/restructure.py apply     # idempotent: a tree that has Tengoku/Seed is left alone
     python3 scripts/restructure.py verify    # every `import Tengoku…` and every `include_str` path resolves

@@ -66,9 +66,9 @@ jobs:
       - name: Label the PR with its class
         env: { GH_TOKEN: "${{ github.token }}", CLASS: "${{ needs.classify.outputs.class }}", PR: "${{ github.event.pull_request.number }}" }
         run: |
-          case "$CLASS" in content|tombstone|tooling|docs|promotion|derived|intake|scope-fix|restructure) ;; *) echo "::error::not a class name"; exit 1 ;; esac
+          case "$CLASS" in content|tombstone|tooling|docs|promotion|derived|intake|scope-fix) ;; *) echo "::error::not a class name"; exit 1 ;; esac
           # one class label at a time: a PR whose class changes (docs, then content) loses the old one
-          old=$(gh pr view "$PR" -R "$GITHUB_REPOSITORY" --json labels --jq '.labels[].name' | grep -xE 'content|tombstone|tooling|docs|promotion|derived|intake|scope-fix|restructure' | grep -vxF "$CLASS" | paste -sd, - || true)
+          old=$(gh pr view "$PR" -R "$GITHUB_REPOSITORY" --json labels --jq '.labels[].name' | grep -xE 'content|tombstone|tooling|docs|promotion|derived|intake|scope-fix' | grep -vxF "$CLASS" | paste -sd, - || true)
           args=(--add-label "$CLASS"); [ -n "$old" ] && args+=(--remove-label "$old")
           gh pr edit "$PR" -R "$GITHUB_REPOSITORY" "${args[@]}" || echo "::warning::could not label the PR '$CLASS' (scripts/ci/labels.sh creates the class labels)"
 
@@ -106,7 +106,7 @@ jobs:
       - name: The PR's commits, as data (the checks are main's)
         run: git fetch -q --no-tags --filter=blob:none origin "+$PR_REF:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
       - name: credits
-        run: python3 scripts/ci/credits.py "$BASE" "$HEAD" ${{ needs.classify.outputs.class == 'promotion' && '--promotion' || '' }} ${{ needs.classify.outputs.class == 'restructure' && '--restructure' || '' }}
+        run: python3 scripts/ci/credits.py "$BASE" "$HEAD" ${{ needs.classify.outputs.class == 'promotion' && '--promotion' || '' }}
 
   # GOALS.md: its shape, real references, and the AI reviewer writing only Suggestions (docs/goals.md).
   goals:
@@ -196,32 +196,10 @@ jobs:
       - name: scope-fix checks
         run: python3 scripts/ci/scope_fix_check.py "$BASE" "$HEAD"
 
-  # A restructure PR (the seed moved into Tengoku/Seed/) is not read, it is recomputed: scripts/restructure.py of the base commit runs on the base
-  # tree and the PR must equal its output byte for byte. Nothing of the PR runs; it is read as git objects only.
-  restructure:
-    needs: classify
-    if: github.event_name == 'pull_request_target' && needs.classify.outputs.class == 'restructure'
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    permissions: { contents: read }
-    steps:
-      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
-        with: { egress-policy: audit }
-      - name: The base commit (the checks are main's)
-        run: |
-          git init -q .
-          git remote add origin "https://github.com/$GITHUB_REPOSITORY"
-          git fetch -q --no-tags --filter=blob:none origin "$BASE"
-          git checkout -q --detach "$BASE"
-      - name: The PR's commits, as data (the checks are main's)
-        run: git fetch -q --no-tags --filter=blob:none origin "+$PR_REF:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
-      - name: restructure checks
-        run: python3 scripts/ci/restructure_check.py "$BASE" "$HEAD"
-
   secrets:
     needs: classify
     runs-on: ubuntu-latest
-    timeout-minutes: 30   # a restructure PR moves the whole seed: TruffleHog reads it all as added lines
+    timeout-minutes: 10
     permissions: { contents: read }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -375,7 +353,7 @@ jobs:
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
         with: { egress-policy: audit }
       # The base commit with plain git, not actions/checkout: the repository is public, so nothing needs a token and none is ever written into
-      # the checkout (the same as the scope-fix and restructure jobs). The entry is read as git objects.
+      # the checkout (the same as the scope-fix job). The entry is read as git objects.
       - name: The base commit (the checks are main's)
         run: |
           git init -q .
@@ -392,20 +370,17 @@ jobs:
           TENGOKU_BOT: "${{ vars.TENGOKU_BOT || 'tengoku-bot' }}"
           TENGOKU_ACTOR_CHECKED: "1"   # the PR's own gate verified the actor
         run: python3 scripts/ci/classify.py "$BASE" "$HEAD"
-      - name: The records, or the move of the seed, against everything merged ahead of them
-        if: github.event_name == 'merge_group' && contains(fromJSON('["content","tombstone","promotion","restructure"]'), steps.c.outputs.class)
+      - name: The records against everything merged ahead of them
+        if: github.event_name == 'merge_group' && contains(fromJSON('["content","tombstone","promotion"]'), steps.c.outputs.class)
         env: { CLASS: "${{ steps.c.outputs.class }}", TENGOKU_INTAKE_LINT: "${{ vars.TENGOKU_INTAKE_LINT || 'strict' }}" }
         run: |
-          # The move of the seed (docs/pr-classes.md, section 5) depends on everything merged ahead of it: a library that arrived meanwhile has
-          # headers the script must rewrite. It is recomputed on the entry's base.
-          if [ "$CLASS" = restructure ]; then python3 scripts/ci/restructure_check.py "$BASE" "$HEAD"; exit 0; fi
           promotion=(); [ "$CLASS" = promotion ] && promotion=(--promotion)
           python3 scripts/ci/append_only.py "$BASE" "$HEAD" "${promotion[@]}"
           python3 scripts/ci/validate_records.py "$BASE" "$HEAD"
           python3 scripts/ci/lint_banked.py "$BASE" "$HEAD"
 
   pr-gate:
-    needs: [classify, data-rules, credits, dco, secrets, workflows, depends, vacuity, goals, intake, scope-fix, restructure, sorry-advisory, queue-recheck]
+    needs: [classify, data-rules, credits, dco, secrets, workflows, depends, vacuity, goals, intake, scope-fix, sorry-advisory, queue-recheck]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 10
