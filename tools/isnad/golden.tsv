@@ -1,0 +1,16 @@
+# The golden identities of the isnad v1 recipe: theorems of Lean's own core library, whose statements (and so ids) do not depend on Mathlib or on this tree.
+# Computed on Leak IV (Lean 4.34.0-rc2, the tree's toolchain) and reproduced by `scripts/isnad.py selftest` on any machine with that toolchain.
+# columns: module to import, theorem, id, shape.vocab (8 hex each)
+Init.Data.Nat.Basic	Nat.add_comm	eq.0h2v.s4.05598c1b76c4	900bc7c0.fc0e7020
+Init.Data.Nat.Basic	Nat.mul_comm	eq.0h2v.s4.ee23d8d1a7ee	900bc7c0.662b3218
+Init.Data.Nat.Basic	Nat.add_assoc	eq.0h3v.s5.f250a1ad0481	03a6b791.fc0e7020
+Init.Data.Nat.Basic	Nat.sub_add_cancel	eq.1h2v.s4.8da48ad640e9	ad6b3cf7.8577ebb4
+Init.Data.Nat.Basic	Nat.succ_ne_zero	ne.0h1v.s3.01b77448a18d	b14ee516.7ce81e8c
+Init.Data.Nat.Basic	Nat.zero_add	eq.0h1v.s4.ff5b08ffa696	bbd74598.fc0e7020
+Init.Prelude	Nat.lt_irrefl	not.0h1v.s3.b4f26276d3b8	80bcc7a6.7f9bb019
+Init.Prelude	Nat.le_refl	le.0h1v.s2.23652d415a6f	b554ad9b.58b355c3
+Init.Prelude	Eq.symm	eq.1h3v.s3.76d04091d08f	7e100390.e3b0c442
+Init.Data.List.Basic	List.length_append	eq.0h3v.s5.28afac2e47d2	105d0824.e8a7b882
+Init.Core	And.comm	iff.0h2v.s3.a18ba1e57a50	47df8360.e3b0c442
+Init.Core	Iff.comm	iff.0h2v.s3.b3be50cc0ac5	ee82d987.e3b0c442
+Init.Classical	Classical.not_not	iff.0h1v.s2.db64e44e1b36	071aeecd.e3b0c442
