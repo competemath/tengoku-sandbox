@@ -8,6 +8,9 @@ except `id`, `verify` and `selftest`, which run the Lean program.
   isnad.py explain <id | tag line>              decode an id or a tag into words (offline)
   isnad.py id --module M [--name N ...]         the id lines of a module's theorems (needs a built tree: lake build tengoku-isnad)
   isnad.py verify '<tag line>' --module M --name N      recompute and compare id, shape and vocab of one theorem
+  isnad.py tag --module M [--write]             write each theorem's tag into its source file (a dry run without --write; docs/isnad.md, "The tagger")
+  isnad.py strip PATH... [--write]              take the tags out again
+  isnad.py tagtest                              the tagger on a real compile: tag, tag again, strip; every identity unchanged (CI)
   isnad.py selftest                             the golden ids of the Lean core theorems (any Lean install gives the same bytes)
   isnad.py laws [--emit]                        the laws of the recipe (renaming changes nothing, a different statement does) on real
                                                 elaborated statements, with plain Lean: no Mathlib, no tree; --emit prints the Lean script
@@ -20,14 +23,17 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import re
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 VERSION = "1"
 EXE = ".lake/build/bin/tengoku-isnad"
+TAG_PREFIX = "@isnad"  # a tag line starts with it, followed by the format version
 GOLDEN = ROOT / "tools" / "isnad" / "golden.tsv"
 LAWS = ROOT / "tools" / "isnad" / "laws_body.lean"
 LEAN_SOURCE = ROOT / "TengokuIsnad.lean"
@@ -95,9 +101,9 @@ def split_tag(line: str) -> dict[str, str]:
     if not text.isascii() or not text.isprintable():
         raise ValueError(f"not an isnad tag: {text[:80]!r}")
     head, *pairs = text.split(" ")
-    if not (head.startswith("@isnad") and head[len("@isnad") :].isdigit()) or "" in pairs:
+    if not (head.startswith(TAG_PREFIX) and head[len(TAG_PREFIX) :].isdigit()) or "" in pairs:
         raise ValueError(f"not an isnad tag: {text[:80]!r}")
-    version = head[len("@isnad") :]
+    version = head[len(TAG_PREFIX) :]
     if version != VERSION:
         raise ValueError(f"isnad format {version} is not implemented here (this tool is format {VERSION}): its recipe is not known")
     out = {"version": version}
@@ -143,7 +149,7 @@ def format_tag(rec: Record, origin: str, src: str | None = None) -> str:
         raise ValueError(f"from= is one of {', '.join(FROM)}")
     if src is None:
         src = "-" if origin == "translated" else "0"
-    line = f"@isnad{VERSION} id={rec.id} from={origin} src={src} shape={rec.shape} vocab={rec.vocab}"
+    line = f"{TAG_PREFIX}{VERSION} id={rec.id} from={origin} src={src} shape={rec.shape} vocab={rec.vocab}"
     parse_tag(line)  # never write a tag that the reader would refuse
     return line
 
@@ -183,12 +189,19 @@ def explain_tag(line: str) -> str:
     )
 
 
-def run_exe(args: list[str], exe: str | None = None, cwd: Path = ROOT) -> list[Record]:
+def run_exe_lines(args: list[str], exe: str | None = None, cwd: Path = ROOT, extra_path: Path | None = None) -> list[str]:
+    """The output lines of `tengoku-isnad`; `extra_path` is a directory of compiled modules that its imports may name (added to the tree's LEAN_PATH)."""
     cmd = ["lake", "env", exe or EXE, *args]
+    if extra_path is not None:
+        cmd = ["lake", "env", "sh", "-c", 'LEAN_PATH="$1:$LEAN_PATH"; export LEAN_PATH; shift; exec "$@"', "sh", str(extra_path), exe or EXE, *args]
     r = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, check=False)
     if r.returncode not in (0, 1) or (r.returncode == 1 and not r.stdout):
         sys.exit(f"{' '.join(cmd)}: {r.stderr.strip()[-400:] or r.stdout.strip()[-400:]}\n(build it first: lake build tengoku-isnad)")
-    return [Record(ln) for ln in r.stdout.splitlines() if ln.strip()]
+    return [ln for ln in r.stdout.splitlines() if ln.strip()]
+
+
+def run_exe(args: list[str], exe: str | None = None, cwd: Path = ROOT, extra_path: Path | None = None) -> list[Record]:
+    return [Record(ln) for ln in run_exe_lines(args, exe, cwd, extra_path)]
 
 
 def golden() -> list[tuple[str, str, str, str]]:
@@ -233,6 +246,201 @@ def run_laws() -> int:
     return 0 if r.returncode == 0 and "isnad laws:" in r.stdout + r.stderr else 1
 
 
+RANGE_TAG = "isnad1-range"
+Range = tuple[int, int, int, int]
+
+
+def parse_range_line(line: str) -> tuple[str, str, Range, Range]:
+    """`isnad1-range <name> <module> <l:c> <l:c> <l:c> <l:c>` (`tengoku-isnad --ranges`) as (name, module, command range, name range)."""
+    parts = line.rstrip("\n").split("\t")
+    if len(parts) != 7 or parts[0] != RANGE_TAG:
+        raise ValueError(f"not an {RANGE_TAG} line: {line[:80]!r}")
+
+    def pos(a: str, b: str) -> Range:
+        (l1, c1), (l2, c2) = a.split(":"), b.split(":")
+        return int(l1), int(c1), int(l2), int(c2)
+
+    return parts[1], parts[2], pos(parts[3], parts[4]), pos(parts[5], parts[6])
+
+
+def origin_of(module: str) -> str:
+    """Where a module's theorems come from: the seed (Mathlib, Batteries, …), CompeteMath's own (Native), or a translation (every library under Tengoku/)."""
+    for prefix, origin in (("Tengoku.Seed", "seed"), ("Tengoku.Native", "novel")):
+        if module == prefix or module.startswith(prefix + "."):
+            return origin
+    return "translated"
+
+
+def module_file(module: str, root: Path = ROOT) -> Path:
+    return root / (module.replace(".", "/") + ".lean")
+
+
+def _tagger():
+    """scripts/isnad_tag.py (imported on use: the identity commands do not need it)."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import isnad_tag
+
+    return isnad_tag
+
+
+def read_source(path: Path) -> str:
+    return path.read_bytes().decode("utf-8")  # bytes: a CRLF file must stay visible as one, not be turned into LF by a text read
+
+
+def plan_tags(recs: list[Record], ranges: list[str], origin: str | None = None, src: str | None = None):
+    """Per module, the items to tag (record joined to range by module and name), and (name, reason) for what cannot be: a name two theorems share, a record Lean gave no range."""
+    tg = _tagger()
+    where: dict[tuple[str, str], list[tuple[Range, Range]]] = {}
+    for ln in ranges:
+        name, module, rng, sel = parse_range_line(ln)
+        where.setdefault((module, name), []).append((rng, sel))
+    seen: dict[tuple[str, str], int] = {}
+    for r in recs:
+        seen[(r.module, r.name)] = seen.get((r.module, r.name), 0) + 1
+    plan: dict[str, list] = {}
+    skipped: list[tuple[str, str]] = []
+    for r in recs:
+        key = (r.module, r.name)
+        if seen[key] > 1 or len(where.get(key, [])) > 1:
+            skipped.append((r.name, "the same name for two theorems of the module"))
+        elif key not in where:
+            skipped.append((r.name, "Lean recorded no position for it"))
+        else:
+            rng, sel = where[key][0]
+            plan.setdefault(r.module, []).append(tg.Item(r.name, rng, sel, format_tag(r, origin or origin_of(r.module), src)))
+    return plan, skipped
+
+
+def tag_files(plan: dict[str, list], root: Path, write: bool) -> tuple[dict[str, int], list[tuple[str, str]]]:
+    """Tag each module's file; a result that is not equivalent to what was there is never written. Returns the counts and the (name or file, reason) skipped."""
+    tg = _tagger()
+    total = {"added": 0, "replaced": 0, "same": 0, "created": 0}
+    skipped: list[tuple[str, str]] = []
+    for module, items in sorted(plan.items()):
+        path = module_file(module, root)
+        if not path.is_file():
+            skipped += [(it.name, f"{path} does not exist") for it in items]
+            continue
+        old = read_source(path)
+        new, counts, why = tg.tag_text(old, items)
+        skipped += why
+        if not tg.equivalent(old, new):
+            skipped.append((str(path), "tagging would change more than tags: left alone"))
+            continue
+        for k, v in counts.items():
+            total[k] += v
+        if write and new != old:
+            path.write_bytes(new.encode("utf-8"))
+    return total, skipped
+
+
+def strip_files(paths: list[Path], write: bool) -> int:
+    """Take the tags out of these files (a directory: its *.lean files); returns how many files had any."""
+    tg = _tagger()
+    files = [f for p in paths for f in (sorted(p.rglob("*.lean")) if p.is_dir() else [p])]
+    changed = 0
+    for f in files:
+        old = read_source(f)
+        new = tg.strip_text(old)
+        if new != old:
+            changed += 1
+            if write:
+                f.write_bytes(new.encode("utf-8"))
+    return changed
+
+
+TAGGER_DIR = ROOT / "tools" / "isnad" / "tagger"
+FIXTURE_MODULE = "IsnadFixture"
+
+
+def compile_fixture(d: Path) -> None:
+    """Compile `d/IsnadFixture.lean` to an olean next to it (the module name comes from the path under --root), with the tree's toolchain."""
+    r = subprocess.run(
+        ["lake", "env", "lean", f"--root={d}", "-o", str(d / f"{FIXTURE_MODULE}.olean"), str(d / f"{FIXTURE_MODULE}.lean")],
+        cwd=ROOT, capture_output=True, text=True, check=False,
+    )
+    if r.returncode != 0:
+        sys.exit(f"the fixture does not compile:\n{(r.stdout + r.stderr)[-800:]}")
+
+
+def fixture_facts(d: Path, exe: str | None) -> tuple[list[Record], list[str]]:
+    args = ["--import", FIXTURE_MODULE, "--module", FIXTURE_MODULE]
+    return run_exe(args, exe, extra_path=d), run_exe_lines(["--ranges", *args], exe, extra_path=d)
+
+
+def identities(recs: list[Record]) -> dict[str, tuple[str, str, str]]:
+    return {r.name: (r.id, r.shape, r.vocab) for r in recs}
+
+
+def tagtest(exe: str | None = None) -> int:
+    """The tagger on a real compile (CI, job isnad): Lean's ranges for the fixture are the ones the repository pins; tagging, tagging again and stripping each
+    leave every theorem's identity as it was (the statements are compiled again after each step); the second tag is a no-op; the stripped file is equivalent to the
+    original. Anything else is a bug in the tagger or in the ranges, and the first one found is reported."""
+    tg = _tagger()
+    original = read_source(TAGGER_DIR / "Fixture.lean")
+    pinned = json.loads((TAGGER_DIR / "ranges.json").read_text(encoding="utf-8"))
+    problems: list[str] = []
+    with tempfile.TemporaryDirectory() as tmp:
+        d = Path(tmp)
+        path = d / f"{FIXTURE_MODULE}.lean"
+        path.write_bytes(original.encode("utf-8"))
+        compile_fixture(d)
+        recs, ranges = fixture_facts(d, exe)
+        fresh = {name: [list(r), list(s)] for name, _, r, s in map(parse_range_line, ranges)}
+        if fresh != {n: [v["range"], v["sel"]] for n, v in pinned.items()}:
+            problems.append("Lean's ranges for the fixture are not the ones in tools/isnad/tagger/ranges.json")
+        before = identities(recs)
+
+        plan, skipped = plan_tags(recs, ranges, "seed")
+        counts, more = tag_files(plan, d, write=True)
+        tagged = read_source(path)
+        if skipped or more or counts["added"] + counts["replaced"] + counts["created"] != len(pinned):
+            problems.append(f"tagging did not tag all {len(pinned)} theorems: {counts}, skipped {skipped + more}")
+        if tagged.count(TAG_PREFIX + VERSION + " id=") != len(pinned) or not tg.equivalent(original, tagged):
+            problems.append("the tagged file is not the original plus tags")
+        compile_fixture(d)
+        recs2, ranges2 = fixture_facts(d, exe)
+        if identities(recs2) != before:
+            problems.append("tagging changed the identity of a theorem")
+        tag_of = {r.name: format_tag(r, "seed") for r in recs2}
+        if any(tag_of[n] not in tagged for n in before):
+            problems.append("a tag in the file is not the one recomputed from the compiled statement")
+
+        plan2, _ = plan_tags(recs2, ranges2, "seed")
+        counts2, _ = tag_files(plan2, d, write=True)
+        if read_source(path) != tagged or counts2["same"] != len(pinned):
+            problems.append(f"tagging a tagged file is not a no-op: {counts2}")
+
+        strip_files([d], write=True)
+        stripped = read_source(path)
+        if "@isnad" in stripped or not tg.equivalent(original, stripped):
+            problems.append("the stripped file is not the original")
+        compile_fixture(d)
+        if identities(fixture_facts(d, exe)[0]) != before:
+            problems.append("stripping changed the identity of a theorem")
+    for msg in problems:
+        print(f"FAIL {msg}")
+    print(f"isnad tagtest: {len(pinned)} theorems tagged, tagged again, stripped" + (" — all as expected" if not problems else f" — {len(problems)} problem(s)"))
+    return 1 if problems else 0
+
+
+def cmd_tag(a: argparse.Namespace) -> int:
+    mods = [x for m in a.module for x in ("--module", m)] + [x for n in a.name for x in ("--name", n)]
+    plan, skipped = plan_tags(run_exe(mods, a.exe), run_exe_lines(["--ranges", *mods], a.exe), a.origin, a.src)
+    counts, more = tag_files(plan, Path(a.root), a.write)
+    for name, why in skipped + more:
+        print(f"skipped {name}: {why}")
+    print(f"isnad tag: {counts['added']} added, {counts['replaced']} replaced, {counts['same']} already right, {counts['created']} docstrings created; {len(skipped + more)} skipped")
+    print("" if a.write else "dry run: nothing written (add --write)")
+    return 0
+
+
+def cmd_strip(a: argparse.Namespace) -> int:
+    n = strip_files([Path(p) for p in a.paths], a.write)
+    print(f"isnad strip: tags in {n} file(s)" + ("" if a.write else " (dry run: nothing written; add --write)"))
+    return 0
+
+
 def cmd_id(recs: list[Record]) -> int:
     for r in recs:
         print(f"{r.name}\t{r.id}\tshape={r.shape}\tvocab={r.vocab}")
@@ -261,6 +469,18 @@ def build_parser() -> argparse.ArgumentParser:
         s.add_argument("--module", action="append", required=True)
         s.add_argument("--name", action="append", default=[])
         s.add_argument("--exe")
+    s = sub.add_parser("tag")
+    s.add_argument("--module", action="append", required=True)
+    s.add_argument("--name", action="append", default=[])
+    s.add_argument("--origin", choices=FROM, help="default: by where the module lives (Tengoku.Seed -> seed, Tengoku.Native -> novel, else translated)")
+    s.add_argument("--src", help="default: 0 for seed and novel, - for translated")
+    s.add_argument("--root", default=str(ROOT))
+    s.add_argument("--write", action="store_true")
+    s.add_argument("--exe")
+    s = sub.add_parser("strip")
+    s.add_argument("paths", nargs="+")
+    s.add_argument("--write", action="store_true")
+    sub.add_parser("tagtest").add_argument("--exe")
     sub.add_parser("selftest").add_argument("--exe")
     sub.add_parser("laws").add_argument("--emit", action="store_true")
     return ap
@@ -269,8 +489,14 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str]) -> int:
     a = build_parser().parse_args(argv)
     if a.cmd == "explain":
-        print(explain_tag(a.what) if a.what.lstrip().startswith("@isnad") else explain_id(a.what))
+        print(explain_tag(a.what) if a.what.lstrip().startswith(TAG_PREFIX) else explain_id(a.what))
         return 0
+    if a.cmd == "tag":
+        return cmd_tag(a)
+    if a.cmd == "strip":
+        return cmd_strip(a)
+    if a.cmd == "tagtest":
+        return tagtest(a.exe)
     if a.cmd == "selftest":
         return selftest(a.exe)
     if a.cmd == "laws":

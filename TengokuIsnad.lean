@@ -11,6 +11,7 @@ independent of Lean's `String.hash`. Records are sorted by (module, name): two r
   lake build tengoku-isnad
   lake env .lake/build/bin/tengoku-isnad --module Tengoku.Seed.Logic.Basic
   lake env .lake/build/bin/tengoku-isnad --import Init.Data.Nat.Basic --module Init.Data.Nat.Basic --name Nat.add_comm
+  lake env .lake/build/bin/tengoku-isnad --ranges --module Tengoku.Seed.Logic.Basic       # where each theorem is written (for the tagger)
 
 The canonical form (version 1) is an S-expression and a pure function of the elaborated statement: bound variables are de Bruijn indices, universe
 parameters are numbered by first appearance, constants are quoted strings of their cleaned name (macro scopes and `private` prefixes removed), proof
@@ -210,9 +211,10 @@ def line (env : Environment) (n : Name) (modName : String) (t : Expr) : String :
   "\t".intercalate ("isnad1" :: fields env n modName t)
 -- END CANON
 
-/-- The records of the theorems of `mods` (module prefixes), or only those called `names` when given, sorted by (module, name). -/
-def records (env : Environment) (mods : List Name) (names : List Name) : Array (String × String × String) := Id.run do
-  let mut out : Array (String × String × String) := #[]
+/-- The theorems the program talks about: those of `mods` (module prefixes), or only those called `names` when given, without the generated and internal ones,
+sorted by (module, name). Both outputs use it, so they list the same theorems in the same order. -/
+def selected (env : Environment) (mods : List Name) (names : List Name) : Array (String × Name × ConstantInfo) := Id.run do
+  let mut out : Array (String × Name × ConstantInfo) := #[]
   for (n, ci) in env.constants.toList do
     let .thmInfo _ := ci | continue
     let some idx := env.getModuleIdxFor? n | continue
@@ -220,8 +222,24 @@ def records (env : Environment) (mods : List Name) (names : List Name) : Array (
     if !mods.isEmpty && !mods.any (·.isPrefixOf m) then continue
     if !okName n then continue
     if !names.isEmpty && !names.contains n then continue
-    out := out.push (m.toString, n.toString, line env n m.toString ci.type)
-  return out.qsort fun a b => a.1 < b.1 || (a.1 == b.1 && a.2.1 < b.2.1)
+    out := out.push (m.toString, n, ci)
+  return out.qsort fun a b => a.1 < b.1 || (a.1 == b.1 && a.2.1.toString < b.2.1.toString)
+
+/-- The records, one line per theorem. -/
+def records (env : Environment) (mods : List Name) (names : List Name) : Array String :=
+  (selected env mods names).map fun (m, n, ci) => line env n m ci.type
+
+/-- Where each theorem is written, as Lean recorded it: `isnad1-range <name> <module> <line:col> <line:col> <line:col> <line:col>`, the whole command (its docstring and
+attributes included) and then the declared name (lines from 1, columns from 0, in code points). A theorem a macro generated (`to_additive`'s twin) has a range that
+points at the attribute that made it, not at a name: the reader of this line checks the text at the name's position. -/
+def rangeLines (mods : List Name) (names : List Name) : CoreM (Array String) := do
+  let env ← getEnv
+  let mut out : Array String := #[]
+  for (m, n, _) in selected env mods names do
+    let some dr ← findDeclarationRanges? n | continue
+    let p (r : DeclarationRange) := s!"{r.pos.line}:{r.pos.column}\t{r.endPos.line}:{r.endPos.column}"
+    out := out.push s!"isnad1-range\t{cleanName n}\t{m}\t{p dr.range}\t{p dr.selectionRange}"
+  return out
 
 end Isnad
 
@@ -236,7 +254,10 @@ unsafe def main (argv : List String) : IO UInt32 := do
     return 2
   initSearchPath (← findSysroot)
   let env ← importModules (imports.eraseDups.toArray.map fun m => { module := m }) {} (trustLevel := 0) (loadExts := true)
-  let rs := Isnad.records env mods names
-  for (_, _, l) in rs do IO.println l
+  let rs ← if argv.contains "--ranges" then
+      let ctx : Core.Context := { fileName := "<tengoku-isnad>", fileMap := default, maxHeartbeats := 0 }
+      pure ((← (Isnad.rangeLines mods names).toIO ctx { env }).1)
+    else pure (Isnad.records env mods names)
+  for l in rs do IO.println l
   IO.eprintln s!"isnad: {rs.size} theorems"
   return (if !names.isEmpty && rs.size < names.length then 1 else 0)

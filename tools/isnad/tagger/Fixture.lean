@@ -1,0 +1,41 @@
+import Lean
+
+namespace Fx
+
+/-- one line -/
+theorem one_line (a : Nat) : a + 0 = a := by simp
+
+/-- many
+lines of doc
+-/
+theorem many_lines (a : Nat) : 0 + a = a := by simp
+
+/-- ends with text. -/
+@[simp]
+theorem with_attr (a : Nat) : a * 1 = a := by simp
+
+theorem no_doc (a : Nat) : 1 * a = a := by simp
+
+@[simp] theorem inline_attr (a b : Nat) : a + b = b + a := Nat.add_comm a b
+
+/-- nested /- comment -/ inside the doc -/
+theorem nested (a : Nat) : a = a := rfl
+
+protected theorem Nat'.dotted (a : Nat) : a ≤ a := Nat.le_refl a
+
+section
+  /-- indented doc -/
+  theorem indented (a : Nat) : a - 0 = a := by simp
+
+  theorem indented_nodoc (a : Nat) : a - a = 0 := by simp
+end
+
+theorem «weird name» : True := trivial
+theorem unicode_τ (x : Nat) : x = x := rfl
+
+/-- a docstring with a tag line already:
+@isnad1 id=eq.0h0v.s0.000000000000 from=novel src=0 shape=00000000 vocab=00000000
+-/
+theorem already_tagged (a : Nat) : a + 0 = a := by simp
+
+end Fx

@@ -2,8 +2,8 @@
 
 *Isnad* is the chain of transmission that vouches for a report. Here it is the name of Tengoku's theorem identity system: what a theorem *is*
 (its statement, not its name or its proof), where it came from, and, later, how many independent chains agree on it (*tawatur*).
-This document is the specification of format version 1 and of the tool that computes it. Nothing here changes a Lean file yet: no theorem
-carries a tag today. What exists is the recipe, the program that computes it, and the checks that pin it.
+This document is the specification of format version 1 and of the tools that compute it and write it down. No theorem of the tree carries a tag
+yet: what exists is the recipe, the program that computes it, the tagger that writes the tags, and the checks that pin all three.
 
 ## 1. What is computed
 
@@ -21,8 +21,7 @@ vocab = sha256(vocabulary)[:8]                        b27e40a1
 | `hyps` / `vars` | binders whose type is a proposition / all other binders; typeclass binders are not counted. A heuristic and part of the recipe: a binder whose type is a propositional *variable* (`hp : p`) counts as a variable |
 | `size` | `floor(log2 n)` of the number of expression nodes `n`: `s4` is 16 to 31 nodes |
 | `sig` | the first 12 hex digits of the **sha256 of the canonical form** (below) |
-| `shape` | the canonical form with every constant replaced by `c<order of first appearance>/<arity>`, numerals and strings masked, instance arguments dropped (the arguments at the instance-implicit parameters of the applied constant, a bound instance
-variable included): the same shape is the same pattern over different objects (`a+b=b+a` over ℕ and over ℝ) |
+| `shape` | the canonical form with every constant replaced by `c<order of first appearance>/<arity>`, numerals and strings masked, instance arguments dropped (the arguments at the instance-implicit parameters of the applied constant, a bound instance variable included): the same shape is the same pattern over different objects (`a+b=b+a` over ℕ and over ℝ) |
 | `vocab` | the sorted, distinct, quoted names of the constants mentioned, without `Eq And Or Not Iff Exists True False OfNat.ofNat Ne` and without instances: the same vocab is the same objects arranged differently |
 
 The tag, the last line of a theorem's docstring (machine-owned, plain ASCII, no `-/`, no `/-`):
@@ -94,13 +93,51 @@ says so (and the right answer is a new recipe version, not a silent edit of the 
 `laws` runs the same code as the executable: the script is generated from the `BEGIN CANON … END CANON` block of `TengokuIsnad.lean`, so there is one
 source of truth. The laws were also run on Leak IV (Lean 4.34.0-rc2) with a negative control: a law deliberately broken is reported.
 
+### The tagger
+
+`isnad.py tag` writes each theorem's tag into the file the theorem is written in, as the last line of its docstring (a theorem that has no docstring gets a
+new one that holds only the tag):
+
+```lean
+/-- Addition of natural numbers is commutative.
+@isnad1 id=eq.0h2v.s4.… from=seed src=0 shape=… vocab=…
+-/
+theorem Nat.add_comm …
+```
+
+```bash
+python3 scripts/isnad.py tag --module Tengoku.Seed.Logic.Basic              # a dry run: what would be written, what is skipped and why
+python3 scripts/isnad.py tag --module Tengoku.Seed.Logic.Basic --write
+python3 scripts/isnad.py strip Tengoku/Seed/Logic/Basic.lean --write         # the tags out again (a directory: all its *.lean files)
+python3 scripts/isnad.py tagtest                                             # the tagger on a real compile (CI)
+```
+
+*Where* a theorem is written is not guessed: Lean records the range of every declaration (its docstring and attributes included, and the declared name),
+and `tengoku-isnad --ranges` prints them. The tagger reads text only to skip comments and strings, so a `/--` inside a string or a comment is never taken for a
+docstring. It leaves a theorem alone, and says why, when the text at the name's position is not its name (a theorem a macro generated, like
+`to_additive`'s twin), when several theorems start at one command, when the file has Windows line endings, when a docstring is never closed, or when the command
+does not start its line. The tag text is the same for `from=seed` (anything under `Tengoku/Seed/`), `from=novel` (`Tengoku/Native/`) and `from=translated`
+(every other library); `--origin` and `--src` override it.
+
+The rule that makes it safe (`equivalent` in `scripts/isnad_tag.py`): after the tags are taken out of both versions, the code is byte for byte the same and every
+docstring has the same words. Two things are allowed to differ: the whitespace in front of a docstring's closing `-/` (`/-- text -/` becomes
+`/-- text` and the tag and `-/` on their own lines, and pure insertion cannot put it back), and a docstring with no words left, which goes with the tags (the one the
+tagger made for a theorem that had none, or an empty `/-- -/`: they look the same once tagged). `tag --write` never writes a result that breaks the rule.
+
+`tagtest` compiles `tools/isnad/tagger/Fixture.lean` (twelve theorems in the shapes that break naive taggers: one-line and many-line docstrings, an attribute
+before or after the docstring, a nested comment inside a docstring, a dotted protected name, guillemets, unicode, indentation, a tag already there) and checks that
+Lean's ranges are the ones pinned in `ranges.json`, that tagging, tagging again and stripping each leave every theorem's id, shape and vocab as they were
+(the statements are compiled again after each step), that the second tag changes nothing, and that the stripped file is equivalent to the original. The unit tests
+(`scripts/tests/test_isnad_tag.py`) run the same shapes on the pinned ranges, 300 random files, and every function of the tagger was checked against deliberately
+broken versions of itself.
+
 ## 4. What is not built yet
 
 | Piece | State |
 |---|---|
 | the recipe, the executable `tengoku-isnad`, `scripts/isnad.py`, golden ids, laws, CI job | **done** (this change) |
 | module block `@isnad1-module` (per-module list of ids, `mh` = hash of the list, `edit=` notice) | designed, not implemented |
-| the tagger (writes tags with Lean's declaration ranges; stripping the tags must restore every module byte for byte) | not built |
+| the tagger (`tag`, `strip`, `tagtest`: writes tags with Lean's declaration ranges; stripping restores the code byte for byte) | **done**; not yet run on the tree |
 | a `tag` PR class and the queue's recomputation (a tag that differs from the recomputed value ejects the PR) | not built |
 | the bundle factory writes tags (born tagged); the sweep of the landed libraries; `src` backfill from the factory's exports | not built |
 | `@isnad-runtime` (the dynamic layer: an external index joined per request, shown in the infoview and on the website) | not built |
