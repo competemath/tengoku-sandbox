@@ -100,6 +100,13 @@ jobs:
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/local/share/boost /usr/share/swift || true
           df -h / | tail -1
+      # The queue seeds from the newest published cache and compiles the difference. After a change that touches many modules (the seed's move renamed every one)
+      # and before its cache build publishes, the difference is most of the tree: hours against a 40-minute limit, and runners taken from the very build the
+      # group waits for (2026-10-05). scripts/ci/cache_fresh.py waits while a cache build runs, capped below the limit, and otherwise says what happened.
+      - name: A cache close enough to this group's base
+        if: github.event_name == 'merge_group'
+        env: { GH_TOKEN: "${{ github.token }}", BASE: "${{ github.event.merge_group.base_sha }}", TENGOKU_STALE_LIMIT: "${{ vars.TENGOKU_STALE_LIMIT }}" }
+        run: python3 scripts/ci/cache_fresh.py "$BASE" --wait 25 2>&1 | tee -a build.log   # the ejection comment reads build.log
       - name: Seed from the newest published cache (verified)
         if: github.event_name == 'merge_group'
         env: { GH_TOKEN: "${{ github.token }}" }

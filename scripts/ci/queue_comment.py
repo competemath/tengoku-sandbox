@@ -32,6 +32,10 @@ LIMITS = {"msg": 1500, "src": 300, "where": 200, "err": 300, "file": 200}
 
 HINTS = [
     (
+        r"newest published cache",
+        "This is not your change. A change that touches many modules merged and its cache build has not published yet, so the group would have recompiled them and run out of time. Nothing needs to change in your PR: once the cache build has finished and published, put it back into the queue yourself (nothing re-queues it for you; the `ejected` label only re-queues after a push).",
+    ),
+    (
         r"unknown (identifier|constant)",
         "That name does not exist in the tree at this commit. Check the spelling, or put the definition it needs into `context` (the generator supplies no imports).",
     ),

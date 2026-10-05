@@ -131,6 +131,15 @@ they do not disturb a build. Without this, a busy queue of tooling PRs could
 defeat the nightly's relaunch every night and no cache would ever publish. The
 build itself relaunches on the tip up to twice.
 
+### A cache that matches the base
+
+The queue starts from the newest published cache (and the promoted top-up) and compiles the difference. After a change that touches many modules, and before its
+cache build has published, that difference is most of the tree: a group would build for hours against the 40-minute limit. `scripts/ci/cache_fresh.py` counts the
+Lean modules that differ between what the cache is for and the base (limit 1,000, or the repository variable `TENGOKU_STALE_LIMIT`); over the limit it waits up to
+25 minutes while a cache build is running, and otherwise fails with a message that says it is not the author's change. On the real commits of 2026-10-05
+(cache from before the seed's move, base = the move) it counts 9,992 modules; on a normal day 230 to 305. Its tests are scenario tests on synthetic histories, and
+each rule has a mutation that fails them.
+
 ### The top-up
 
 After the checks above, the queue restores the tree to the group's own commit, builds the whole
