@@ -264,7 +264,11 @@ def ranges_of(text, n):
             if kind == "doc" and b <= start and not text[b:start].strip():
                 start = a
         end = text.index("\n", kw)
-        out.append(tag.Item(f"t{k}", (*position(text, start), *position(text, end)), (*position(text, name), *position(text, name + len(f"t{k}"))), TAG))
+        out.append(
+            tag.Item(
+                f"t{k}", (*position(text, start), *position(text, end)), (*position(text, name), *position(text, name + len(f"t{k}"))), TAG
+            )
+        )
     return out
 
 
@@ -277,7 +281,7 @@ class Fuzz(unittest.TestCase):
         "/-- one\n-/",
         "/--\n  many\n  lines\n  -/",
         "/-- has /- nested -/ comment -/",
-        "/-- has -- dashes and \"quotes\" -/",
+        '/-- has -- dashes and "quotes" -/',
         "/-- -/",
         "/--\n-/",
         f"/-- old\n{OTHER}\n-/",
@@ -311,7 +315,9 @@ class Fuzz(unittest.TestCase):
                 self.assertEqual(skipped, [], text)
                 self.assertEqual(new.count("@isnad1 "), n, new)
                 self.assertTrue(tag.equivalent(text, new), (text, new))
-                self.assertTrue(all(new[b - 2 : b] == "-/" for kind, _, b in tag.scan(new) if kind == "doc"), new)  # every docstring is closed
+                self.assertTrue(
+                    all(new[b - 2 : b] == "-/" for kind, _, b in tag.scan(new) if kind == "doc"), new
+                )  # every docstring is closed
                 # tagging again with the same tag changes nothing; with another tag it replaces and never duplicates
                 same, counts2, skipped2 = tag.tag_text(new, ranges_of(new, n))
                 self.assertEqual((same, skipped2), (new, []), new)
@@ -368,8 +374,13 @@ class Cli(unittest.TestCase):
 
     def test_origin_follows_where_the_module_lives(self):
         for module, want in (
-            ("Tengoku.Seed", "seed"), ("Tengoku.Seed.Logic.Basic", "seed"), ("Tengoku.Native.X", "novel"), ("Tengoku.Flt.Basic", "translated"),
-            ("Tengoku.SeedLike.X", "translated"), ("Tengoku.NativeThings", "translated"), ("Mathlib.Order.Basic", "translated"),
+            ("Tengoku.Seed", "seed"),
+            ("Tengoku.Seed.Logic.Basic", "seed"),
+            ("Tengoku.Native.X", "novel"),
+            ("Tengoku.Flt.Basic", "translated"),
+            ("Tengoku.SeedLike.X", "translated"),
+            ("Tengoku.NativeThings", "translated"),
+            ("Mathlib.Order.Basic", "translated"),
         ):
             self.assertEqual(isnad.origin_of(module), want, module)
 

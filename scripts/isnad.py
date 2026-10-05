@@ -193,7 +193,17 @@ def run_exe_lines(args: list[str], exe: str | None = None, cwd: Path = ROOT, ext
     """The output lines of `tengoku-isnad`; `extra_path` is a directory of compiled modules that its imports may name (added to the tree's LEAN_PATH)."""
     cmd = ["lake", "env", exe or EXE, *args]
     if extra_path is not None:
-        cmd = ["lake", "env", "sh", "-c", 'LEAN_PATH="$1:$LEAN_PATH"; export LEAN_PATH; shift; exec "$@"', "sh", str(extra_path), exe or EXE, *args]
+        cmd = [
+            "lake",
+            "env",
+            "sh",
+            "-c",
+            'LEAN_PATH="$1:$LEAN_PATH"; export LEAN_PATH; shift; exec "$@"',
+            "sh",
+            str(extra_path),
+            exe or EXE,
+            *args,
+        ]
     r = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, check=False)
     if r.returncode not in (0, 1) or (r.returncode == 1 and not r.stdout):
         sys.exit(f"{' '.join(cmd)}: {r.stderr.strip()[-400:] or r.stdout.strip()[-400:]}\n(build it first: lake build tengoku-isnad)")
@@ -357,7 +367,10 @@ def compile_fixture(d: Path) -> None:
     """Compile `d/IsnadFixture.lean` to an olean next to it (the module name comes from the path under --root), with the tree's toolchain."""
     r = subprocess.run(
         ["lake", "env", "lean", f"--root={d}", "-o", str(d / f"{FIXTURE_MODULE}.olean"), str(d / f"{FIXTURE_MODULE}.lean")],
-        cwd=ROOT, capture_output=True, text=True, check=False,
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
     )
     if r.returncode != 0:
         sys.exit(f"the fixture does not compile:\n{(r.stdout + r.stderr)[-800:]}")
@@ -420,7 +433,10 @@ def tagtest(exe: str | None = None) -> int:
             problems.append("stripping changed the identity of a theorem")
     for msg in problems:
         print(f"FAIL {msg}")
-    print(f"isnad tagtest: {len(pinned)} theorems tagged, tagged again, stripped" + (" — all as expected" if not problems else f" — {len(problems)} problem(s)"))
+    print(
+        f"isnad tagtest: {len(pinned)} theorems tagged, tagged again, stripped"
+        + (" — all as expected" if not problems else f" — {len(problems)} problem(s)")
+    )
     return 1 if problems else 0
 
 
@@ -430,7 +446,9 @@ def cmd_tag(a: argparse.Namespace) -> int:
     counts, more = tag_files(plan, Path(a.root), a.write)
     for name, why in skipped + more:
         print(f"skipped {name}: {why}")
-    print(f"isnad tag: {counts['added']} added, {counts['replaced']} replaced, {counts['same']} already right, {counts['created']} docstrings created; {len(skipped + more)} skipped")
+    print(
+        f"isnad tag: {counts['added']} added, {counts['replaced']} replaced, {counts['same']} already right, {counts['created']} docstrings created; {len(skipped + more)} skipped"
+    )
     print("" if a.write else "dry run: nothing written (add --write)")
     return 0
 
@@ -472,7 +490,9 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("tag")
     s.add_argument("--module", action="append", required=True)
     s.add_argument("--name", action="append", default=[])
-    s.add_argument("--origin", choices=FROM, help="default: by where the module lives (Tengoku.Seed -> seed, Tengoku.Native -> novel, else translated)")
+    s.add_argument(
+        "--origin", choices=FROM, help="default: by where the module lives (Tengoku.Seed -> seed, Tengoku.Native -> novel, else translated)"
+    )
     s.add_argument("--src", help="default: 0 for seed and novel, - for translated")
     s.add_argument("--root", default=str(ROOT))
     s.add_argument("--write", action="store_true")
