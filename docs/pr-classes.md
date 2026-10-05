@@ -142,3 +142,28 @@ recomputed from the base. What is specific to the move of the seed is its detect
 shape: the check from the base commit's script, byte for byte and executable bit for executable bit; the credit and banked-lint carve-outs, which apply only
 to that class; the queue's recomputation on the entry's base; and the rule that the change is rehearsed in `tengoku-sandbox` (a full build of the moved tree) before
 it reaches production.
+
+## 6. The extend class
+
+A library of thousands of modules cannot arrive in one intake PR: the merge queue builds what a PR adds inside a 40-minute check, and a module takes about
+three seconds on a four-core runner (lean-pool's 4,186 modules would take three and a half hours). So the factory cuts such a bundle into **parts**
+(`scripts/bump/bundle_layers.py` in competemath/emissary-archangel): consecutive slices of one topological order of the library's modules, at most 300 each, so
+every module imports only the seed, the parts before its own, and its own part, never a later one. Part 1 arrives as an ordinary intake PR. Every later part
+is an `extend` PR:
+
+| Path | Status | What it may hold |
+|---|---|---|
+| `Tengoku/<Library>/**.lean` | added | the part's modules, and no module of the library is ever rewritten |
+| `Tengoku/<Library>.lean` | modified | one `import` line per new module, and nothing else changed |
+| `data/intake/<library>/manifest.jsonl` | modified | lines appended at the end; the tree's lines stay a byte-for-byte prefix |
+| `data/intake/<library>/parts/NNN.json` | added | the part's report; NNN is the next part (the intake PR is part 1) |
+
+The class is recognised by the new `parts/NNN.json` file and must come from `TENGOKU_BOT` like an intake PR. `scripts/ci/intake_check.py` judges it with the
+checks of an intake PR on the new modules and manifest lines (allow-list lint, tree imports only, names unique and not the library's own earlier ones, toolchain)
+and with these: the library is in the tree already, the part number is the next one, `Tengoku/All.lean` is untouched, a part has at most 400 modules, and the
+factory's build attestation matches the part's archive (its modules, the root file, its own manifest lines and its report), rebuilt from the PR's files.
+The `imports` gate checks that every `import` of the part resolves, in the tree it joins. The merge queue builds `Tengoku.<Library>` as for an intake: the
+earlier parts are in the cache, so it compiles the new modules.
+
+Parts merge in order: a part's PR says `Depends-On:` the one before it (the `depends` job waits for it), and the tree accepts part NNN only when part NNN-1 is in.
+Every part is approved like any other PR; the approvals are the point of the human check, the cutting is not.

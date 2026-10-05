@@ -126,7 +126,14 @@ for lib, paths in sorted(work.items()):
 for lib in sorted(touched - set(work)):
     if lib in corpora:
         targets.append(f"Tengoku.{pascal(lib)}")  # tombstones: rebuild the library's modules
-targets += [f"Tengoku.{ns}" for ns in sorted(intake_ns)]
+# An EXTEND PR (the next part of a library that arrived in parts, scripts/ci/intake_check.py): the earlier parts are in the tree and in the cache, so the queue builds
+# and scans the part's own modules. The library's root would re-check every declaration of every earlier part: the cost of the whole library at each part.
+extend_ns = {pascal(m.group(1)) for _, p in changed_files(base, head) if (m := re.fullmatch(r"data/intake/([^/]+)/parts/\d{3}\.json", p))}
+targets += [f"Tengoku.{ns}" for ns in sorted(intake_ns - extend_ns)]
+for st, p in changed_files(base, head):
+    m = re.fullmatch(r"Tengoku/([^/]+)/(.+)\.lean", p)
+    if st == "A" and m and m.group(1) in extend_ns:
+        targets.append(f"Tengoku.{m.group(1)}.{m.group(2).replace('/', '.')}")
 # A scope-fix PR (scripts/ci/scope_fix_check.py) modifies existing modules of an intake library: the queue builds that library again, with its axiom
 # check and leak report, as it did when the library arrived.
 intake_at_base = {

@@ -66,9 +66,9 @@ jobs:
       - name: Label the PR with its class
         env: { GH_TOKEN: "${{ github.token }}", CLASS: "${{ needs.classify.outputs.class }}", PR: "${{ github.event.pull_request.number }}" }
         run: |
-          case "$CLASS" in content|tombstone|tooling|docs|promotion|derived|intake|scope-fix|restructure) ;; *) echo "::error::not a class name"; exit 1 ;; esac
+          case "$CLASS" in content|tombstone|tooling|docs|promotion|derived|intake|extend|scope-fix|restructure) ;; *) echo "::error::not a class name"; exit 1 ;; esac
           # one class label at a time: a PR whose class changes (docs, then content) loses the old one
-          old=$(gh pr view "$PR" -R "$GITHUB_REPOSITORY" --json labels --jq '.labels[].name' | grep -xE 'content|tombstone|tooling|docs|promotion|derived|intake|scope-fix|restructure' | grep -vxF "$CLASS" | paste -sd, - || true)
+          old=$(gh pr view "$PR" -R "$GITHUB_REPOSITORY" --json labels --jq '.labels[].name' | grep -xE 'content|tombstone|tooling|docs|promotion|derived|intake|extend|scope-fix|restructure' | grep -vxF "$CLASS" | paste -sd, - || true)
           args=(--add-label "$CLASS"); [ -n "$old" ] && args+=(--remove-label "$old")
           gh pr edit "$PR" -R "$GITHUB_REPOSITORY" "${args[@]}" || echo "::warning::could not label the PR '$CLASS' (scripts/ci/labels.sh creates the class labels)"
 
@@ -141,9 +141,10 @@ jobs:
 
   # An intake PR (a factory bundle: one library's verified Lean modules) is judged by its shape, its manifest, the content lint on every
   # module and the factory's build attestation over the very bytes of the PR. Nothing of the PR runs; the queue builds the library.
+  # An extend PR is the next part of a library that arrived in parts: the same checks on the part, and that it continues what is in the tree.
   intake:
     needs: classify
-    if: github.event_name == 'pull_request_target' && needs.classify.outputs.class == 'intake'
+    if: github.event_name == 'pull_request_target' && (needs.classify.outputs.class == 'intake' || needs.classify.outputs.class == 'extend')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions: { contents: read, pull-requests: read }
