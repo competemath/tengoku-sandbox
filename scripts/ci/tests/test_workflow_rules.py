@@ -68,6 +68,74 @@ class Clean(unittest.TestCase):
                 self.assertEqual(wr.Checker(str(p), p.read_text()).run().findings, [])
 
 
+CANCELLING = swap("permissions: {}\n", "permissions: {}\nconcurrency:\n  group: g\n  cancel-in-progress: true\n")
+
+
+class Cancelable(unittest.TestCase):
+    """Found 2026-10-05: CodeRabbit rewrites a PR's description after its review, an `edited` event, which cancelled the running pr-gate; the cancelled run's `pr-gate` job (`if: always()`)
+    still ran, failed, and stayed on the commit as the latest `pr-gate` after the newer run had passed, so every PR was blocked until someone re-ran the right run."""
+
+    def test_always_in_a_cancelling_workflow_fails(self):
+        self.assertIn(
+            "cancelable", rules(swap("    runs-on: ubuntu-latest\n", "    runs-on: ubuntu-latest\n    if: always()\n", CANCELLING))
+        )
+        self.assertIn(
+            "cancelable",
+            rules(
+                swap(
+                    "    runs-on: ubuntu-latest\n",
+                    "    runs-on: ubuntu-latest\n    if: ${{ always() && github.event_name == 'pull_request' }}\n",
+                    CANCELLING,
+                )
+            ),
+        )
+        self.assertIn(
+            "cancelable",
+            rules(
+                swap(
+                    "    runs-on: ubuntu-latest\n",
+                    "    runs-on: ubuntu-latest\n    if: always() && needs.x.result != 'skipped'\n",
+                    CANCELLING,
+                )
+            ),
+        )
+
+    def test_an_expression_for_cancel_in_progress_counts_as_cancelling(self):
+        text = swap("cancel-in-progress: true", "cancel-in-progress: ${{ github.event_name == 'pull_request' }}", CANCELLING)
+        self.assertIn("cancelable", rules(swap("    runs-on: ubuntu-latest\n", "    runs-on: ubuntu-latest\n    if: always()\n", text)))
+
+    def test_a_job_level_concurrency_counts_too(self):
+        text = swap(
+            "    runs-on: ubuntu-latest\n",
+            "    runs-on: ubuntu-latest\n    if: always()\n    concurrency: { group: g, cancel-in-progress: true }\n",
+        )
+        self.assertIn("cancelable", rules(text))
+
+    def test_not_cancelled_passes(self):
+        self.assertEqual(
+            rules(swap("    runs-on: ubuntu-latest\n", "    runs-on: ubuntu-latest\n    if: ${{ !cancelled() }}\n", CANCELLING)), []
+        )
+        self.assertEqual(
+            rules(
+                swap(
+                    "    runs-on: ubuntu-latest\n",
+                    "    runs-on: ubuntu-latest\n    if: ${{ !cancelled() && github.event_name == 'pull_request' }}\n",
+                    CANCELLING,
+                )
+            ),
+            [],
+        )
+
+    def test_always_in_a_workflow_that_nobody_cancels_passes(self):
+        self.assertEqual(rules(swap("    runs-on: ubuntu-latest\n", "    runs-on: ubuntu-latest\n    if: always()\n")), [])
+        no_cancel = swap("permissions: {}\n", "permissions: {}\nconcurrency:\n  group: g\n  cancel-in-progress: false\n")
+        self.assertEqual(rules(swap("    runs-on: ubuntu-latest\n", "    runs-on: ubuntu-latest\n    if: always()\n", no_cancel)), [])
+
+    def test_a_step_that_always_runs_is_not_the_rule(self):
+        # a step of a cancelled run does not outlive it as a check; the rule is about jobs
+        self.assertEqual(rules(swap("      - name: work\n", "      - name: work\n        if: always()\n", CANCELLING)), [])
+
+
 class Pinned(unittest.TestCase):
     def test_tag_branch_and_missing_comment_fail(self):
         for uses in [
