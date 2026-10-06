@@ -135,6 +135,26 @@ Lean's ranges are the ones pinned in `ranges.json`, that tagging, tagging again 
 (`scripts/tests/test_isnad_tag.py`) run the same shapes on the pinned ranges, 300 random files, and every function of the tagger was checked against deliberately
 broken versions of itself.
 
+### The sweep
+
+Tagging the tree is a series of tag PRs (`docs/pr-classes.md`, section 7), planned by `scripts/isnad_sweep.py`:
+
+```bash
+python3 scripts/isnad_sweep.py plan --list                 # how many modules are still to tag, how many parts, the first module of each
+python3 scripts/isnad_sweep.py plan --scope seed --max 400 # the next part: module names, one per line
+```
+
+A module is *to do* when it is in scope (the seed, `Tengoku/Native/`, or a library that arrived as an intake bundle), has a `theorem` or `lemma` in code (not in a
+comment, docstring or string) and carries no tag yet. The order is dependents first: a tag changes a docstring, so the olean of the module and of everything that
+imports it, and a module tagged after its importers does not make the merge queue rebuild them a second time. Ties go by name, so one tree always gives the same
+parts. On the tree of 2026-10-06: 9,099 modules to tag, 23 parts of at most 400 (the seed 7,405 in 19, the intake libraries 1,694 in 5); the libraries whose modules
+are generated from records are not tagged by a PR.
+
+The `isnad-tag` workflow (`workflow_dispatch`: `scope`, `prefix`, `max_modules`, `propose`) takes the next part on the attested cache: it tags the modules, runs the tag class's
+gate on the commit, builds the modules and recomputes every tag from the build (`isnad.py check-tags`), and only then, with `propose`, opens the PR as the bot (the
+token is held by a job that never runs the tree's code). Without `propose` it is a dry run: counts and the skipped theorems in the run summary, the patch as an artifact.
+The merge queue builds the PR's modules again and recomputes the tags once more.
+
 ## 4. What is not built yet
 
 | Piece | State |
@@ -143,7 +163,8 @@ broken versions of itself.
 | module block `@isnad1-module` (per-module list of ids, `mh` = hash of the list, `edit=` notice) | designed, not implemented |
 | the tagger (`tag`, `strip`, `tagtest`: writes tags with Lean's declaration ranges; stripping restores the code byte for byte) | **done**; not yet run on the tree |
 | a `tag` PR class (gate: tags only, well formed, right origin; queue: every tag recomputed, `isnad.py check-tags`) | **done** (docs/pr-classes.md, section 7) |
-| the bundle factory writes tags (born tagged); the sweep of the landed libraries; `src` backfill from the factory's exports | not built |
+| the sweep of the landed content (`scripts/isnad_sweep.py`, the `isnad-tag` workflow) | **done**; no part has been run on the real tree yet |
+| the bundle factory writes tags (born tagged); `src` backfill from the factory's exports | not built |
 | `@isnad-runtime` (the dynamic layer: an external index joined per request, shown in the infoview and on the website) | not built |
 | **tawatur** (a trusted theorem with four or more proofs whose dependency closures are disjoint after ignoring a forced set X) | not built; measured today: no statement has more than 3 proofs, so the set is empty |
 

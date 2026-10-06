@@ -194,5 +194,5 @@ twin, a structure's field, several theorems at one command, a file with Windows 
 A library whose modules are generated from records is not tagged by a PR: the promote bot regenerates those files, so a tag would be removed by the next promotion. They
 are tagged when the generator learns to write tags (not built).
 
-A tag PR is meant to be one part of a sweep over the tree (modules in dependency order, at most 400 per PR, the seed first), approved part by part like the parts of an
-intake bundle; the tool that plans and opens the parts is a separate change.
+A tag PR is one part of a sweep over the tree: `scripts/isnad_sweep.py` plans it (dependents first, at most 400 modules a part) and the `isnad-tag` workflow tags a part,
+verifies it and opens the PR as the bot (`docs/isnad.md`, "The sweep"). Parts are approved one by one like the parts of an intake bundle.
