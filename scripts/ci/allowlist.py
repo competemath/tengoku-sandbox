@@ -305,7 +305,9 @@ def _command_start_violations(stripped: str, command_keywords: set[str] | None =
         words = line.split()
         while words and words[0] in MODIFIERS:
             words = words[1:]
-        lead = _LEAD.match(words[0]).group(0) if words else ""
+        # a modifier can be followed by a symbol (`meta : Nat` is a field called meta), never by a command
+        after = _LEAD.match(words[0]) if words else None
+        lead = after.group(0) if after and re.match(r"[A-Za-z_]", after.group(0)) else ""
         if lead and lead not in COMMANDS and (command_keywords is None or lead in command_keywords):
             out.append(f"`{lead}` does not start an allowed command")
     return out
