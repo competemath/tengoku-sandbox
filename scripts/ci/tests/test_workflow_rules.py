@@ -127,22 +127,53 @@ class Cancelable(unittest.TestCase):
         )
 
     def job_if(self, cond):
-        return rules(swap("    runs-on: ubuntu-latest\n", f"    runs-on: ubuntu-latest\n    if: {cond}\n", CANCELLING))
+        wrapped = cond if cond.startswith("${{") else "${{ " + cond + " }}"  # a bare `!` at the start of a YAML scalar is a tag
+        return rules(swap("    runs-on: ubuntu-latest\n", f"    runs-on: ubuntu-latest\n    if: {wrapped}\n", CANCELLING))
 
-    def test_always_together_with_not_cancelled_passes(self):
+    def test_always_with_a_guard_that_holds_on_every_cancelled_run_passes(self):
         for cond in [
             "${{ always() && !cancelled() }}",
             "${{ !cancelled() && always() }}",
             "always() && ! cancelled ( ) && needs.x.result != 'skipped'",
+            "always() && !(!(!cancelled()))",
+            "!(cancelled() || github.event_name == 'x') && always()",
+            "always() && !cancelled() || false",
+            "!cancelled() && (always() || github.event_name == 'x')",
+            "always() && !cancelled() && github.event.pull_request.labels.*.name && github.event['ref'] == 'x'",
         ]:
             self.assertEqual(self.job_if(cond), [], cond)
 
-    def test_an_or_can_bypass_the_not_cancelled_so_it_is_reported(self):
+    def test_a_condition_that_can_be_true_on_a_cancelled_run_is_reported(self):
         for cond in [
             "${{ always() || !cancelled() }}",
             "${{ always() && !cancelled() || github.event_name == 'pull_request' }}",
             "${{ always() && foo || !cancelled() }}",
+            "always() && !(!cancelled())",  # CodeRabbit: a second negation brings the cancellation back
+            "always() && (!cancelled() || github.event_name == 'x')",
+            "always() && !contains(github.event.label.name, 'a||b')",
+            "failure() || always()",
+            "always() && !cancelled() == false",  # `!cancelled() == false` is true after a cancellation
+            "always() && contains(github.event.label.name, 'x')",
+            "always() && github.event.pull_request.labels.*.name",
         ]:
+            self.assertIn("cancelable", self.job_if(cond), cond)
+
+    def test_status_functions_on_a_cancelled_run(self):
+        self.assertFalse(wr.runs_when_cancelled("success()"))
+        self.assertFalse(wr.runs_when_cancelled("failure()"))
+        self.assertTrue(wr.runs_when_cancelled("cancelled()"))
+        self.assertTrue(wr.runs_when_cancelled("always()"))
+        self.assertFalse(wr.runs_when_cancelled("always() && failure()"))
+
+    def test_text_that_cannot_be_parsed_counts_as_able_to_run(self):
+        for cond in [
+            "always() &&",
+            "always() && (!cancelled()",
+            "always() $ !cancelled()",
+            "always() !cancelled()",
+            "!cancelled() always()",
+        ]:
+            self.assertTrue(wr.runs_when_cancelled(cond), cond)
             self.assertIn("cancelable", self.job_if(cond), cond)
 
     def test_always_in_a_workflow_that_nobody_cancels_passes(self):
