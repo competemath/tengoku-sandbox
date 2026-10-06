@@ -126,6 +126,25 @@ class Cancelable(unittest.TestCase):
             [],
         )
 
+    def job_if(self, cond):
+        return rules(swap("    runs-on: ubuntu-latest\n", f"    runs-on: ubuntu-latest\n    if: {cond}\n", CANCELLING))
+
+    def test_always_together_with_not_cancelled_passes(self):
+        for cond in [
+            "${{ always() && !cancelled() }}",
+            "${{ !cancelled() && always() }}",
+            "always() && ! cancelled ( ) && needs.x.result != 'skipped'",
+        ]:
+            self.assertEqual(self.job_if(cond), [], cond)
+
+    def test_an_or_can_bypass_the_not_cancelled_so_it_is_reported(self):
+        for cond in [
+            "${{ always() || !cancelled() }}",
+            "${{ always() && !cancelled() || github.event_name == 'pull_request' }}",
+            "${{ always() && foo || !cancelled() }}",
+        ]:
+            self.assertIn("cancelable", self.job_if(cond), cond)
+
     def test_always_in_a_workflow_that_nobody_cancels_passes(self):
         self.assertEqual(rules(swap("    runs-on: ubuntu-latest\n", "    runs-on: ubuntu-latest\n    if: always()\n")), [])
         no_cancel = swap("permissions: {}\n", "permissions: {}\nconcurrency:\n  group: g\n  cancel-in-progress: false\n")

@@ -54,6 +54,8 @@ LINE = "__line__"
 SHA = re.compile(r"[0-9a-f]{40}")
 USES_LINE = re.compile(r"""^\s*(?:-\s+)?uses:\s*["']?([^\s"'#]+)["']?\s*(?:#\s*(\S+))?""")
 EXPR = re.compile(r"\$\{\{(.*?)\}\}", re.S)
+ALWAYS_CALL = re.compile(r"\balways\s*\(")
+NOT_CANCELLED = re.compile(r"!\s*cancelled\s*\(\s*\)")
 STRING = r"'(?:[^']|'')*'"
 NAME = r"[A-Za-z_][\w-]*(?:\.[\w*-]+|\[[^\]]*\])*"
 OPERAND = rf"(?:{STRING}|{NAME}|-?\d+(?:\.\d+)?)"
@@ -246,7 +248,8 @@ class Checker:
         conc = [c for c in (doc.get("concurrency"), job.get("concurrency")) if isinstance(c, dict)]
         cancels = any(str(c.get("cancel-in-progress", "false")).strip().lower() not in ("false", "") for c in conc)
         cond = job.get("if")
-        if cancels and isinstance(cond, str) and re.search(r"\balways\s*\(", cond):
+        # `always() && !cancelled()` is `!cancelled()`; an `||` could bypass the `!cancelled()`, so such a condition is still reported
+        if cancels and isinstance(cond, str) and ALWAYS_CALL.search(cond) and not (NOT_CANCELLED.search(cond) and "||" not in cond):
             self.add(
                 job.get(LINE, 1),
                 "cancelable",
