@@ -158,6 +158,18 @@ class InertCommands(unittest.TestCase):
         ):
             self.assertEqual([v for v in refused(text) if "does not start" in v], [], text)
 
+    def test_a_modifier_word_followed_by_a_symbol_is_not_a_command_and_does_not_crash(self):
+        """Regression (2026-10-06): lean-pool's bundle compose died with `AttributeError: NoneType has no attribute group` on a column-0 line like `meta : Nat`
+        (a structure field called meta): after the modifier is dropped the next word starts with a symbol."""
+        for text in (
+            "structure S where\nmeta : Nat\n",
+            "def f := 1\nprivate (x : Nat)\n",
+            "def f := 1\nlocal ⟨x⟩\n",
+            "theorem t : True := by\n  trivial\nprotected :=\n",
+        ):
+            for keywords in (KEYWORDS, None):
+                self.assertEqual(refused(text, keywords), [], (text, keywords))
+
     def test_meta_is_a_modifier_not_a_way_to_hide_a_command(self):
         self.assertTrue(refused("meta initialize x : Nat ← pure 0\n"))
         self.assertTrue(refused('meta elab "x" : term => pure (Lean.mkNatLit 1)\n'))
