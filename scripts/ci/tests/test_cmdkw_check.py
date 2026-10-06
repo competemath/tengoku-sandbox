@@ -69,5 +69,36 @@ class Main(unittest.TestCase):
         self.assertEqual(doc["about"], "x")  # the rest of the file is kept
 
 
+class CiJob(unittest.TestCase):
+    """The pr-tests job `command-keywords` runs only when a file it depends on changes: the list must cover them, the workflow file included."""
+
+    def trigger(self):
+        import re
+
+        text = (HERE.parent.parent.parent / ".github" / "workflows" / "pr-tests.yml").read_text(encoding="utf-8")
+        job = re.search(r"^  command-keywords:\n(.*?)(?=^  \S|\Z)", text, re.S | re.M)
+        self.assertIsNotNone(job, "the command-keywords job was not found")
+        m = re.search(r"grep -qE '(\^\(.*?\))' <<< \"\$files\"", job.group(1))
+        self.assertIsNotNone(m, "the touched step of the command-keywords job was not found")
+        return re.compile(m.group(1))
+
+    def test_every_file_the_job_depends_on_triggers_it(self):
+        rx = self.trigger()
+        for path in (
+            "tools/CommandKeywords.lean",
+            "schemas/command-keywords.json",
+            "scripts/ci/cmdkw_check.py",
+            "scripts/ci/allowlist.py",
+            "lean-toolchain",
+            ".github/workflows/pr-tests.yml",
+        ):
+            self.assertRegex(path, rx, path)
+
+    def test_unrelated_files_do_not_trigger_it(self):
+        rx = self.trigger()
+        for path in ("scripts/seed.py", "Tengoku/Seed/Logic/Basic.lean", "docs/testing.md", "TengokuIsnad.lean"):
+            self.assertNotRegex(path, rx, path)
+
+
 if __name__ == "__main__":
     unittest.main()
