@@ -10,6 +10,7 @@ except `id`, `verify` and `selftest`, which run the Lean program.
   isnad.py verify '<tag line>' --module M --name N      recompute and compare id, shape and vocab of one theorem
   isnad.py tag --module M [--write]             write each theorem's tag into its source file (a dry run without --write; docs/isnad.md, "The tagger")
   isnad.py strip PATH... [--write]              take the tags out again
+  isnad.py check-tags --module M...             every taggable theorem of these modules carries exactly the tag the build computes, and no other tag is there (the merge queue, for a tag PR)
   isnad.py tagtest                              the tagger on a real compile: tag, tag again, strip; every identity unchanged (CI)
   isnad.py selftest                             the golden ids of the Lean core theorems (any Lean install gives the same bytes)
   isnad.py laws [--emit]                        the laws of the recipe (renaming changes nothing, a different statement does) on real
@@ -460,6 +461,48 @@ def cmd_tag(a: argparse.Namespace) -> int:
     return 0
 
 
+def tag_lines_of(text: str) -> int:
+    """How many tag lines the docstrings of this source hold."""
+    tg = _tagger()
+    return sum(1 for kind, a, b in tg.scan(text) if kind == "doc" for ln in text[a + 3 : b - 2].split("\n") if tg.TAG_LINE.match(ln))
+
+
+def check_tags(recs: list[Record], ranges: list[str], modules: list[str], root: Path) -> tuple[list[str], str]:
+    """A tag PR's modules, as built: tagging them again must change nothing (every taggable theorem has exactly the tag the build computes: none missing, none
+    stale, no docstring to create) and no tag may be there that belongs to no theorem. Returns (problems, a summary line)."""
+    plan, skipped = plan_tags(recs, ranges)
+    counts, more = tag_files(plan, root, write=False)
+    present = 0
+    for m in modules:
+        path = module_file(m, root)
+        present += tag_lines_of(read_source(path)) if path.is_file() else 0
+    problems = [
+        f"{counts[k]} theorem(s) {why}"
+        for k, why in (
+            ("added", "have no tag"),
+            ("replaced", "have a tag that is not the one the build computes"),
+            ("created", "have no docstring to carry one"),
+        )
+        if counts[k]
+    ]
+    problems += [f"{name}: {why}" for name, why in more]
+    if present != counts["same"]:
+        problems.append(
+            f"{present} tag line(s) in the docstrings but {counts['same']} theorem(s) carry the right one: a tag belongs to no theorem, or is on a theorem twice"
+        )
+    return problems, f"{counts['same']} tags right, {len(skipped)} theorems skipped by rule, {len(recs)} theorems in {len(modules)} modules"
+
+
+def cmd_check_tags(a: argparse.Namespace) -> int:
+    mods = [x for m in a.module for x in ("--module", m)]
+    problems, summary = check_tags(run_exe(mods, a.exe), run_exe_lines(["--ranges", *mods], a.exe), a.module, Path(a.root))
+    if problems:
+        print("isnad check-tags: " + "; ".join(problems[:10]) + (f"; and {len(problems) - 10} more" if len(problems) > 10 else ""))
+        return 1
+    print(f"isnad check-tags ok: {summary}")
+    return 0
+
+
 def cmd_strip(a: argparse.Namespace) -> int:
     n = strip_files([Path(p) for p in a.paths], a.write)
     print(f"isnad strip: tags in {n} file(s)" + ("" if a.write else " (dry run: nothing written; add --write)"))
@@ -504,6 +547,10 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--root", default=str(ROOT))
     s.add_argument("--write", action="store_true")
     s.add_argument("--exe")
+    s = sub.add_parser("check-tags")
+    s.add_argument("--module", action="append", required=True)
+    s.add_argument("--root", default=str(ROOT))
+    s.add_argument("--exe")
     s = sub.add_parser("strip")
     s.add_argument("paths", nargs="+")
     s.add_argument("--write", action="store_true")
@@ -522,6 +569,8 @@ def main(argv: list[str]) -> int:
         return cmd_tag(a)
     if a.cmd == "strip":
         return cmd_strip(a)
+    if a.cmd == "check-tags":
+        return cmd_check_tags(a)
     if a.cmd == "tagtest":
         return tagtest(a.exe)
     if a.cmd == "selftest":

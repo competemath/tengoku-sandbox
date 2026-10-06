@@ -168,31 +168,31 @@ module, `queue_targets.py`), not the library's root: the earlier parts are in th
 Parts merge in order: a part's PR says `Depends-On:` the one before it (the `depends` job waits for it), and the tree accepts part NNN only when part NNN-1 is in.
 Every part is approved like any other PR; the approvals are the point of the human check, the cutting is not.
 
-## 7. The content lint of a bundle
+## 7. The tag class
 
-Compiling Lean runs code, so a bundle's modules pass an allow-list (`scripts/ci/allowlist.py`) before the tree takes them: every command is a known-inert one,
-every attribute and `set_option` is on a list, and the words that run code or trust the compiler are refused wherever they appear. The repository variable
-`TENGOKU_INTAKE_LINT` picks one of three readings (the factory cuts all three bundles, `scripts/bump/bundle.py`; the gate and the queue read the variable):
+A **tag PR** writes isnad tags (`@isnad1 id=… from=… src=… shape=… vocab=…`, the last line of a theorem's docstring; `docs/isnad.md`, "The tagger") into modules that are
+already in the tree, and changes nothing else. It comes from `TENGOKU_BOT`, like every class that is generated, and is recognised by its content, not its paths:
+the diff is a set of modified modules and, **after the tags are taken out of both sides, the code is the same bytes and every docstring the same words**
+(`equivalent` in `scripts/isnad_tag.py`, the law the tagger itself keeps). That is also what tells it apart from a scope-fix PR, which modifies the same kind of file.
 
-| Mode | Adds to the allow-list | Why it is safe to add |
+| Path | Status | What it may hold |
 |---|---|---|
-| `strict` | nothing | |
-| `proposed` | the notation commands (`notation`, `notation3`, `infix`, `infixl`, `infixr`, `prefix`, `postfix`, `scoped`, `local`) | each is a rewrite rule that elaborates a term; none runs the library's code |
-| `wide` | also the macro family (`macro`, `macro_rules`, `syntax`, `declare_syntax_cat`) | a macro runs in Lean's pure macro monad, which cannot reach IO; the words that could (`unsafe`, `IO.`, `run_cmd`, `#eval`, `elab`, `initialize`, `implemented_by`, `extern`, `native_decide`, `axiom`, `opaque`) stay refused wherever they appear, in a quotation too |
+| `Tengoku/Seed/**.lean`, `Tengoku/Native/**.lean`, `Tengoku/<Library>/**.lean` of a library that arrived as an intake bundle | modified | tags, and nothing a compiler reads |
+| anything else (a library generated from records, `Tengoku/<Library>.lean`, `Tengoku/All.lean`, data, scripts) | | not in a tag PR |
 
-The merge queue's own content lint (`scripts/ci/lint_banked.py`) reads the same variable the same way: notation commands in `proposed` and `wide`, the macro family in
-`wide` only, `elab` and `elab_rules` in no mode.
+`scripts/ci/tag_check.py` judges it in the gate, without Lean and without running anything of the PR: the equivalence above, at most 400 modules, and every tag line left
+in a docstring one well-formed tag (exactly the fields, printable ASCII, a known version), at most one per docstring and the last line of it, whose `from=` is where
+the module lives (`seed` under `Tengoku/Seed/`, `novel` under `Tengoku/Native/`, `translated` for a library). The code of a tag PR is exactly the base's, which the
+queue has already built and scanned, so building the PR executes nothing new.
 
-In every mode a word at column 0 starts a command only if it is a command keyword of the tree's Lean (`schemas/command-keywords.json`, the leading tokens of
-Lean's `command` parser category, read from Lean itself). Any other word there continues the command above (`termination_by`, `decreasing_by`, `by`, `fun`, a
-proof term), and Lean refuses it if it does not parse. The old reading took every unknown word for a command and refused 10,937 of lean-pool's 79,378
-Gate-2-passed theorems for it. A few commands that carry no code and change no statement are allowed (`grind_pattern`, `suppress_compilation`,
-`unsuppress_compilation`, `recommended_spelling`, `deprecated_module`, and `meta` as a modifier).
+What the gate cannot know is whether an id *is* the id of its theorem. The merge queue builds the PR's own modules (`queue_targets.py`: the changed modules, not a library
+root: a docstring change rebuilds the module and what imports it, and the nightly cache build catches up with the dependents), and `scripts/ci/tag_verify.py` builds
+`tengoku-isnad` and runs `scripts/isnad.py check-tags` over them: tagging the modules again must change nothing, so every taggable theorem carries exactly the tag the build
+computes, none is stale, no docstring is missing, and no tag line belongs to no theorem. Anything else ejects the PR. A theorem the tagger leaves alone by rule (a generated
+twin, a structure's field, several theorems at one command, a file with Windows line endings) is not tagged, and a module that has one is still a valid tag PR.
 
-What stays refused in every mode, whatever it would cost: `elab`, `elab_rules`, `initialize`, `run_cmd` (code in the elaborator), `#eval` and the other `#`
-commands (diagnostics are cut from a bundle, never kept), `unsafe`/`partial` declarations, `IO.`/`System.`, `implemented_by`/`extern`, `native_decide`,
-`axiom`, `opaque`, simprocs. They cost at most half a percent of the theorems on the two largest libraries and each is a real way to run or trust code.
+A library whose modules are generated from records is not tagged by a PR: the promote bot regenerates those files, so a tag would be removed by the next promotion. They
+are tagged when the generator learns to write tags (not built).
 
-The tests are `scripts/ci/tests/test_lint_modes.py` (each mode on each family; what runs code is refused in all three, a macro cannot smuggle a forbidden word
-in a quotation). The list of command keywords is the tree's: `tools/CommandKeywords.lean` prints it from Lean, the nightly build compares it with the file and annotates a difference
-(it never blocks the cache), and `lake env lean --run tools/CommandKeywords.lean | python3 scripts/ci/cmdkw_check.py --write` regenerates it when the seed changes.
+A tag PR is meant to be one part of a sweep over the tree (modules in dependency order, at most 400 per PR, the seed first), approved part by part like the parts of an
+intake bundle; the tool that plans and opens the parts is a separate change.

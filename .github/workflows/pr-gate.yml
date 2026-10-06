@@ -66,9 +66,9 @@ jobs:
       - name: Label the PR with its class
         env: { GH_TOKEN: "${{ github.token }}", CLASS: "${{ needs.classify.outputs.class }}", PR: "${{ github.event.pull_request.number }}" }
         run: |
-          case "$CLASS" in content|tombstone|tooling|docs|promotion|derived|intake|extend|scope-fix|restructure) ;; *) echo "::error::not a class name"; exit 1 ;; esac
+          case "$CLASS" in content|tombstone|tooling|docs|promotion|derived|intake|extend|scope-fix|restructure|tag) ;; *) echo "::error::not a class name"; exit 1 ;; esac
           # one class label at a time: a PR whose class changes (docs, then content) loses the old one
-          old=$(gh pr view "$PR" -R "$GITHUB_REPOSITORY" --json labels --jq '.labels[].name' | grep -xE 'content|tombstone|tooling|docs|promotion|derived|intake|extend|scope-fix|restructure' | grep -vxF "$CLASS" | paste -sd, - || true)
+          old=$(gh pr view "$PR" -R "$GITHUB_REPOSITORY" --json labels --jq '.labels[].name' | grep -xE 'content|tombstone|tooling|docs|promotion|derived|intake|extend|scope-fix|restructure|tag' | grep -vxF "$CLASS" | paste -sd, - || true)
           args=(--add-label "$CLASS"); [ -n "$old" ] && args+=(--remove-label "$old")
           gh pr edit "$PR" -R "$GITHUB_REPOSITORY" "${args[@]}" || echo "::warning::could not label the PR '$CLASS' (scripts/ci/labels.sh creates the class labels)"
 
@@ -172,6 +172,30 @@ jobs:
                  --signer-workflow "competemath/emissary-archangel/.github/workflows/$wf.yml"; then ok=1; break; fi
           done
           [ "${ok:-0}" = 1 ] || { echo "::error::no build attestation of competemath/emissary-archangel matches the bundle in this PR"; exit 1; }
+
+  # A tag PR (isnad tags written into modules that are already in the tree) is judged without Lean: after the tags are taken out, the code is the base's bytes
+  # and every docstring the base's words, every tag is well formed and says where its module is from (scripts/ci/tag_check.py). Nothing of the PR runs; the merge
+  # queue builds the modules and recomputes every tag.
+  tag:
+    needs: classify
+    if: github.event_name == 'pull_request_target' && needs.classify.outputs.class == 'tag'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions: { contents: read }
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
+        with: { egress-policy: audit }
+      # The base commit with plain git (see the scope-fix job): only the base is checked out, the PR is read as git objects.
+      - name: The base commit (the checks are main's)
+        run: |
+          git init -q .
+          git remote add origin "https://github.com/$GITHUB_REPOSITORY"
+          git fetch -q --no-tags --filter=blob:none origin "$BASE"
+          git checkout -q --detach "$BASE"
+      - name: The PR's commits, as data (the checks are main's)
+        run: git fetch -q --no-tags --filter=blob:none origin "+$PR_REF:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
+      - name: tag checks
+        run: python3 scripts/ci/tag_check.py "$BASE" "$HEAD"
 
   # A scope-fix PR (a merged intake library's global registrations made local) is judged line by line: only `local ` inserted before
   # instance/simp, the library's own registrations repeated as local attributes, blank lines and one note comment. Nothing of the PR runs.
@@ -436,7 +460,7 @@ jobs:
           python3 scripts/ci/lint_banked.py "$BASE" "$HEAD"
 
   pr-gate:
-    needs: [classify, data-rules, credits, dco, secrets, workflows, depends, vacuity, goals, intake, scope-fix, restructure, imports, sorry-advisory, queue-recheck]
+    needs: [classify, data-rules, credits, dco, secrets, workflows, depends, vacuity, goals, intake, scope-fix, tag, restructure, imports, sorry-advisory, queue-recheck]
     # `!cancelled()`, not `always()`: a run that a newer run has cancelled (the PR was pushed to or edited again: CodeRabbit rewrites the description after its review, which is an
     # `edited` event) would still run this job, and its failure stays on the commit as the latest `pr-gate` after the newer run has passed: the PR is blocked for nothing
     if: ${{ !cancelled() }}
