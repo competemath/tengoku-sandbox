@@ -31,6 +31,7 @@ from _git import (
     unplaced,
 )
 from restructure_check import is_restructure
+from tag_check import is_tag, module_of
 
 base, head = sys.argv[1], sys.argv[2]
 regenerate = "--regenerate" in sys.argv
@@ -38,6 +39,11 @@ if is_restructure(
     base, head
 ):  # the move of the seed (scripts/restructure.py): the PR gate recomputed it; the cache build compiles it, not the queue
     print("restructure group: nothing for the queue to build or regenerate", file=sys.stderr)
+    sys.exit(0)
+# tags written into existing modules (scripts/ci/tag_check.py): the queue builds exactly those modules; they are no records and no derived files
+if is_tag(base, head):
+    if not regenerate:
+        print("\n".join(module_of(p) for _, p in changed_files(base, head)))
     sys.exit(0)
 corpora = load_schema("sources.json").get("corpora", {})
 

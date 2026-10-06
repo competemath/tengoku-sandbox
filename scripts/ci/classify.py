@@ -12,6 +12,7 @@ import sys
 
 from _git import changed_files, fail, gh_output, pascal, run, tier_of
 from restructure_check import is_restructure
+from tag_check import is_tag
 
 base, head = sys.argv[1], sys.argv[2]
 files = changed_files(base, head)
@@ -33,6 +34,16 @@ def tier(p: str) -> str:
     return tier_of(p)
 
 
+# A TAG PR writes isnad tags into modules that are already in the tree and changes nothing else (scripts/ci/tag_check.py judges it: after the tags are taken out, code and
+# docstring words are the base's). Asked before the scope-fix shape, which is also "existing modules modified in place", because only the content tells them apart.
+if is_tag(base, head):
+    bot_ = os.environ.get("TENGOKU_BOT", "tengoku-bot")
+    if not (os.environ.get("PR_ACTOR", "") == bot_ or os.environ.get("TENGOKU_ACTOR_CHECKED") == "1"):
+        fail(f"a tag PR comes from the factory's account ({bot_}), not from {os.environ.get('PR_ACTOR') or 'nobody'}")
+    print(f"class=tag ({len(files)} modules)")
+    gh_output("class", "tag")
+    gh_output("files", " ".join(p for _, p in files))
+    sys.exit(0)
 # A SCOPE-FIX PR makes what a merged intake library registered for the whole tree local to its modules (scripts/ci/scope_fix_check.py judges the
 # diff line by line): existing modules `Tengoku/<Library>/….lean` of a library that arrived as an intake bundle, modified in place, nothing else.
 intake_at_base = {

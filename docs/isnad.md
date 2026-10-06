@@ -142,7 +142,7 @@ broken versions of itself.
 | the recipe, the executable `tengoku-isnad`, `scripts/isnad.py`, golden ids, laws, CI job | **done** (this change) |
 | module block `@isnad1-module` (per-module list of ids, `mh` = hash of the list, `edit=` notice) | designed, not implemented |
 | the tagger (`tag`, `strip`, `tagtest`: writes tags with Lean's declaration ranges; stripping restores the code byte for byte) | **done**; not yet run on the tree |
-| a `tag` PR class and the queue's recomputation (a tag that differs from the recomputed value ejects the PR) | not built |
+| a `tag` PR class (gate: tags only, well formed, right origin; queue: every tag recomputed, `isnad.py check-tags`) | **done** (docs/pr-classes.md, section 7) |
 | the bundle factory writes tags (born tagged); the sweep of the landed libraries; `src` backfill from the factory's exports | not built |
 | `@isnad-runtime` (the dynamic layer: an external index joined per request, shown in the infoview and on the website) | not built |
 | **tawatur** (a trusted theorem with four or more proofs whose dependency closures are disjoint after ignoring a forced set X) | not built; measured today: no statement has more than 3 proofs, so the set is empty |

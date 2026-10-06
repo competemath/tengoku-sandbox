@@ -182,6 +182,15 @@ jobs:
           read -ra mods <<< "$TARGETS"
           # as few runs as possible (each imports the whole tree); candidates that clash are split apart (the script says how)
           python3 scripts/ci/axioms_check.py "${mods[@]}" 2>&1 | tee -a build.log
+      # A tag group (isnad tags written into modules that are already in the tree; the PR gate saw it change nothing but tags): every tag is recomputed from the
+      # modules just built. A group that is not a tag group passes at once. The code of a tag group is exactly the base's, so this runs nothing new.
+      - name: Tags of a tag group are the build's
+        if: github.event_name == 'merge_group' && steps.build.outputs.targets != ''
+        shell: bash
+        env: { BASE: "${{ github.event.merge_group.base_sha }}" }
+        run: |
+          set -o pipefail
+          python3 scripts/ci/tag_verify.py "$BASE" HEAD 2>&1 | tee -a build.log
       - name: Leak report (what the new libraries change for everybody else)
         # Report only: a global instance or simp lemma that mentions nothing of its own library changes how every other library's statements
         # elaborate in the one tree; a declaration in the root namespace is a name nothing ties to its library (a second library declaring it
