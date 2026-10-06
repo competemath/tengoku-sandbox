@@ -137,13 +137,6 @@ jobs:
             echo "complete=true" >> "$GITHUB_OUTPUT"
           fi
 
-      # The content lint reads a word at column 0 as a command only if it is a command keyword of the tree's Lean (schemas/command-keywords.json). A seed update that
-      # adds one makes the list stale; this says so. It never blocks the cache: the build above is the verdict on the tree, this is a reminder about the list.
-      - name: The command keywords of the tree against the lint's list
-        if: steps.build.outputs.complete == 'true'
-        continue-on-error: true
-        run: lake env lean --run tools/CommandKeywords.lean | python3 scripts/ci/cmdkw_check.py
-
       - name: Save partial/complete build
         if: always()
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -170,6 +163,18 @@ jobs:
       - if: steps.build.outputs.complete == 'true' && steps.guard.outputs.stale != 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with: { name: cache-parts, path: cache-out, retention-days: 1, compression-level: 0 }
+
+      # The content lint reads a word at column 0 as a command only if it is a command keyword of the tree's Lean (schemas/command-keywords.json). A seed update that
+      # adds one makes the list stale; this says so. It never blocks the cache: the build above is the verdict on the tree, this is a reminder about the list.
+      # It loads the tree (initializers of the seeded packages run), so it runs as the build does, with no network and in its own PID namespace, and only after the cache
+      # has been packed and uploaded: nothing it could write reaches what is published (CodeRabbit).
+      - name: The command keywords of the tree against the lint's list
+        if: steps.build.outputs.complete == 'true' && steps.guard.outputs.stale != 'true'
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          sudo unshare --net --pid --fork --mount-proc runuser -u "$(id -un)" -- env -i HOME="$HOME" PATH="$HOME/.elan/bin:/usr/local/bin:/usr/bin:/bin" LANG=C.UTF-8 \
+            lake env lean --run tools/CommandKeywords.lean | python3 scripts/ci/cmdkw_check.py
 
   # Publishes what the build packed: it runs no Lean, so it is the one job that may write releases and sign.
   publish:

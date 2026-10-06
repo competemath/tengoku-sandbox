@@ -22,20 +22,20 @@ from lean_lex import code_only
 from restructure_check import is_restructure
 
 IMPORT_START = r"^\s*import\b"
-NOTATION = "syntax/macro/elab/notation declarations"
-SYNTAX_COMMANDS = [
-    "macro",
-    "macro_rules",
-    "syntax",
-    "elab",
-    "elab_rules",
-    "declare_syntax_cat",
-    "notation3?",
-    "infixl?",
-    "infixr",
-    "prefix",
-    "postfix",
-]
+# three rules, because three readings of TENGOKU_INTAKE_LINT allow them differently (docs/bundle-lint.md): notation commands in `proposed` and `wide`, the macro
+# family in `wide`, the elaborator commands in no mode
+NOTATION = "notation declarations"
+MACRO = "syntax/macro declarations"
+ELAB = "elab declarations"
+NOTATION_COMMANDS = ["notation3?", "infixl?", "infixr", "prefix", "postfix"]
+MACRO_COMMANDS = ["macro", "macro_rules", "syntax", "declare_syntax_cat"]
+ELAB_COMMANDS = ["elab", "elab_rules"]
+
+
+def declaration_rule(commands: list[str]) -> re.Pattern:
+    return re.compile(r"^\s*(@\[[^\]]*\]\s*)*(scoped\s+|local\s+)?(" + "|".join(commands) + r")\b", re.M)
+
+
 FORBIDDEN = [
     (re.compile(IMPORT_START, re.M), "import (the generator supplies imports)"),
     (re.compile(r"#eval\b"), "#eval"),
@@ -49,10 +49,9 @@ FORBIDDEN = [
         "@[init]/@[extern]/@[implemented_by]/@[export]",
     ),
     (re.compile(r"^\s*(unsafe|partial)\s+(def|theorem|abbrev|instance|opaque)", re.M), "unsafe/partial definitions"),
-    (
-        re.compile(r"^\s*(@\[[^\]]*\]\s*)*(scoped\s+|local\s+)?(" + "|".join(SYNTAX_COMMANDS) + r")\b", re.M),
-        NOTATION,
-    ),
+    (declaration_rule(NOTATION_COMMANDS), NOTATION),
+    (declaration_rule(MACRO_COMMANDS), MACRO),
+    (declaration_rule(ELAB_COMMANDS), ELAB),
     (re.compile(r"\bnative_decide\b"), "native_decide (trusts the compiler)"),
     (re.compile(r"^\s*opaque\b", re.M), "opaque"),
     (re.compile(r"^\s*axiom\b", re.M), "axiom"),
@@ -75,10 +74,10 @@ def in_intake(p: str, intake: tuple[str, ...]) -> bool:
     return p in intake or any(x.endswith("/") and p.startswith(x) for x in intake)
 
 
-def check_text(label: str, text: str, allowed: set[str], notation_ok: bool = False) -> list[str]:
+def check_text(label: str, text: str, allowed: set[str], notation_ok: bool = False, macro_ok: bool = False) -> list[str]:
     out = []
     for re_, why in FORBIDDEN:
-        if why == NOTATION and notation_ok:
+        if (why == NOTATION and notation_ok) or (why == MACRO and macro_ok):
             continue
         if re_.search(text):
             out.append(f"{label}: {why}")
@@ -116,7 +115,9 @@ def lint_record_file(base: str, head: str, p: str, allowed: set[str]) -> list[st
     return errors
 
 
-def lint_module(base: str, head: str, p: str, allowed: set[str], notation_ok: bool, added: bool = False) -> list[str]:
+def lint_module(
+    base: str, head: str, p: str, allowed: set[str], notation_ok: bool, added: bool = False, macro_ok: bool = False
+) -> list[str]:
     """The lines a PR adds to a module. `import` lines in a module are the generator's own (a promotion regenerates them); records may not contain one.
     A module the PR adds is read whole and without its comments and string literals (lean_lex.code_only): the words this list refuses are
     refused where they run, not where a docstring mentions them (`#print axioms` in a doc comment is prose). A module the PR changes is read
@@ -128,9 +129,15 @@ def lint_module(base: str, head: str, p: str, allowed: set[str], notation_ok: bo
         # comments and strings first, THEN the import lines: a line `import X -/` inside a block comment closes it, and dropping it first would
         # turn the rest of the file into comment text (a `#eval` after it would go unread)
         code = code_only(raw.decode("utf-8", "replace"))
-        return check_text(p, "\n".join(ln for ln in code.split("\n") if not re.match(IMPORT_START, ln)), allowed, notation_ok=notation_ok)
+        return check_text(
+            p,
+            "\n".join(ln for ln in code.split("\n") if not re.match(IMPORT_START, ln)),
+            allowed,
+            notation_ok=notation_ok,
+            macro_ok=macro_ok,
+        )
     text = "\n".join(t for _, t in added_lines(base, head, p) if not re.match(IMPORT_START, t))
-    return check_text(p, text, allowed, notation_ok=notation_ok)
+    return check_text(p, text, allowed, notation_ok=notation_ok, macro_ok=macro_ok)
 
 
 def checked_path(arg: str) -> Path:
@@ -160,7 +167,16 @@ def main() -> None:
             elif p.endswith(".lean") and p.startswith(
                 "Tengoku/"
             ):  # modules only; root tool programs (TengokuExtract/TengokuAxioms) run in CI, not in the library
-                errors += lint_module(base, head, p, allowed, notation_ok=in_intake(p, intake), added=st == "A")
+                own = in_intake(p, intake)
+                errors += lint_module(
+                    base,
+                    head,
+                    p,
+                    allowed,
+                    notation_ok=own,
+                    added=st == "A",
+                    macro_ok=own and os.environ.get("TENGOKU_INTAKE_LINT") == "wide",
+                )
     if errors:
         fail("banked content lint:\n  " + "\n  ".join(errors[:20]))
     print("content lint OK")

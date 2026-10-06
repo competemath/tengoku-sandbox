@@ -251,11 +251,26 @@ class Modes(unittest.TestCase):
         self.assertIn("--lint is one of strict, proposed, wide", out)
 
     def test_the_queues_content_lint_follows_the_mode(self):
+        # (module text, the verdict of the queue's lint in strict, proposed, wide): notation from proposed on, the macro family only in wide, elab never
+        for text, want in (
+            ('\nnotation "ℓ" => 1\n', (False, True, True)),
+            ('\nmacro "m" : term => `(1)\n', (False, False, True)),
+            ('\nsyntax "m2" : term\n', (False, False, True)),
+            ('\nelab "x" : term => pure (Lean.mkNatLit 1)\n', (False, False, False)),
+            ("\nelab_rules : term\n| `(x) => pure (Lean.mkNatLit 1)\n", (False, False, False)),
+            ('\nscoped elab "x" : term => pure (Lean.mkNatLit 1)\n', (False, False, False)),
+            ('\n@[term_elab foo] elab "x" : term => pure (Lean.mkNatLit 1)\n', (False, False, False)),
+        ):
+            r = self.repo()
+            self.bundle(r, self.MOD + text)
+            got = tuple(r.gate("lint_banked.py", env={"TENGOKU_INTAKE_LINT": m})[0] == 0 for m in ("strict", "proposed", "wide"))
+            self.assertEqual(got, want, text)
+
+    def test_the_queue_refuses_what_runs_code_in_every_mode_even_where_the_macro_family_is_allowed(self):
         r = self.repo()
-        self.bundle(r, self.MOD + '\nmacro "m" : term => `(1)\n')
-        for mode, ok in (("strict", False), ("proposed", True), ("wide", True)):
-            rc, out = r.gate("lint_banked.py", env={"TENGOKU_INTAKE_LINT": mode})
-            self.assertEqual(rc == 0, ok, (mode, out))
+        self.bundle(r, self.MOD + '\nmacro "m" : command => `(run_cmd foo)\n')
+        for mode in ("strict", "proposed", "wide"):
+            self.assertNotEqual(r.gate("lint_banked.py", env={"TENGOKU_INTAKE_LINT": mode})[0], 0, mode)
 
 
 if __name__ == "__main__":
