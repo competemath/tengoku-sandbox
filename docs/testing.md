@@ -335,3 +335,5 @@ records), and `.github/workflows/promote.yml` opens the promotion PRs, hourly, a
 variable (its token is the `TENGOKU_BOT_TOKEN` secret; only the step that pushes and opens the PR sees it). Each
 promotion run builds up to `max_files` source files' modules on the attested cache, keeps staging changes to pure
 removals, and waits for its PR before the next batch. `scripts/promote-loop.sh` is the same thing for a laptop.
+
+<!-- repro 1: an edited PR description cancels the running gate -->
