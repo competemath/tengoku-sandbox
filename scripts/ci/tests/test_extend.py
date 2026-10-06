@@ -223,6 +223,32 @@ class Extend(unittest.TestCase):
                 self.assertNotEqual(rc, 0)
                 self.assertIn(why, out)
 
+    def test_a_final_line_break_is_not_a_line_of_the_root_file(self):
+        # the root file of the tree has no final newline and the part's has one, and the other way round: the same lines, so the same file plus imports
+        for base_text, head_text in (
+            (f"import {self.A}", f"import {self.A}\nimport {self.B}\n"),
+            (f"import {self.A}\n", f"import {self.A}\nimport {self.B}"),
+            (f"import {self.A}", f"import {self.A}\nimport {self.B}"),
+        ):
+            with self.subTest(base=base_text, head=head_text):
+                r = self.repo()
+                r.write("Tengoku/FxLib.lean", base_text)
+                if r.git("status", "--porcelain").strip():  # the tree's root file as it is in this case
+                    r.commit("the tree's root file without or with a final line break")
+                    r.git("checkout", "-q", "main")
+                    r.git("merge", "-q", "--ff-only", "pr")
+                    r.git("checkout", "-q", "pr")
+                self.part2(r, umbrella=head_text)
+                rc, out = self.check(r)
+                self.assertEqual(rc, 0, out)
+
+    def test_a_blank_line_added_to_the_root_file_is_still_a_change(self):
+        r = self.repo()
+        self.part2(r, umbrella=f"import {self.A}\n\nimport {self.B}\n")
+        rc, out = self.check(r)
+        self.assertNotEqual(rc, 0)
+        self.assertIn("may only gain the imports", out)
+
     def test_a_public_import_in_the_root_file_is_accepted(self):
         r = self.repo()
         self.part2(r, umbrella=f"import {self.A}\npublic import {self.B}\n")

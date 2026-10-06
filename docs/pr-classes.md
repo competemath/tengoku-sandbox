@@ -162,8 +162,8 @@ The class is recognised by the new `parts/NNN.json` file and must come from `TEN
 checks of an intake PR on the new modules and manifest lines (allow-list lint, tree imports only, names unique and not the library's own earlier ones, toolchain)
 and with these: the library is in the tree already, the part number is the next one, `Tengoku/All.lean` is untouched, a part has at most 400 modules, and the
 factory's build attestation matches the part's archive (its modules, the root file, its own manifest lines and its report), rebuilt from the PR's files.
-The `imports` gate checks that every `import` of the part resolves, in the tree it joins. The merge queue builds `Tengoku.<Library>` as for an intake: the
-earlier parts are in the cache, so it compiles the new modules.
+The `imports` gate checks that every `import` of the part resolves, in the tree it joins. The merge queue builds and scans the part's own modules (`Tengoku.<Library>.<Module>` for each new
+module, `queue_targets.py`), not the library's root: the earlier parts are in the cache, and the root would re-check every declaration of every earlier part.
 
 Parts merge in order: a part's PR says `Depends-On:` the one before it (the `depends` job waits for it), and the tree accepts part NNN only when part NNN-1 is in.
 Every part is approved like any other PR; the approvals are the point of the human check, the cutting is not.
@@ -179,6 +179,9 @@ every attribute and `set_option` is on a list, and the words that run code or tr
 | `strict` | nothing | |
 | `proposed` | the notation commands (`notation`, `notation3`, `infix`, `infixl`, `infixr`, `prefix`, `postfix`, `scoped`, `local`) | each is a rewrite rule that elaborates a term; none runs the library's code |
 | `wide` | also the macro family (`macro`, `macro_rules`, `syntax`, `declare_syntax_cat`) | a macro runs in Lean's pure macro monad, which cannot reach IO; the words that could (`unsafe`, `IO.`, `run_cmd`, `#eval`, `elab`, `initialize`, `implemented_by`, `extern`, `native_decide`, `axiom`, `opaque`) stay refused wherever they appear, in a quotation too |
+
+The merge queue's own content lint (`scripts/ci/lint_banked.py`) reads the same variable the same way: notation commands in `proposed` and `wide`, the macro family in
+`wide` only, `elab` and `elab_rules` in no mode.
 
 In every mode a word at column 0 starts a command only if it is a command keyword of the tree's Lean (`schemas/command-keywords.json`, the leading tokens of
 Lean's `command` parser category, read from Lean itself). Any other word there continues the command above (`termination_by`, `decreasing_by`, `by`, `fun`, a

@@ -39,40 +39,44 @@ def skip_block_comment(text: str, i: int) -> int:
     return n
 
 
+def string_end(text: str, i: int) -> int:
+    """`i` is at the opening quote of a string literal; the index just after the closing one (a backslash escapes the next character), or len(text) when it is never closed."""
+    n, j = len(text), i + 1
+    while j < n and text[j] != '"':
+        j += 2 if text[j] == "\\" else 1
+    return min(j + 1, n)
+
+
+def segment_at(text: str, i: int) -> tuple[str, int] | None:
+    """The docstring, comment or string that starts at `i` as (kind, end), or None when code goes on."""
+    if text.startswith("/-", i):
+        kind = "doc" if text.startswith("/--", i) and not text.startswith("/--/", i) else "comment"
+        return kind, skip_block_comment(text, i)
+    if text.startswith("--", i):
+        end = text.find("\n", i)
+        return "comment", len(text) if end < 0 else end
+    if text[i] == '"':
+        return "string", string_end(text, i)
+    return None
+
+
 def scan(text: str) -> list[tuple[str, int, int]]:
     """The text as segments (kind, start, end), kind in code / doc (a `/--` docstring) / comment (`/- -/`, `/-! -/`, `-- …`) / string: every byte in exactly one
     segment, so a docstring-like text inside a string or a comment is never taken for a docstring."""
-    out, i, n, code_from = [], 0, len(text), 0
-
-    def flush(upto: int) -> None:
-        if upto > code_from:
-            out.append(("code", code_from, upto))
-
+    out: list[tuple[str, int, int]] = []
+    i, n, code_from = 0, len(text), 0
     while i < n:
-        c = text[i]
-        if text.startswith("/-", i):
-            flush(i)
-            end = skip_block_comment(text, i)
-            kind = "doc" if text.startswith("/--", i) and not text.startswith("/--/", i) else "comment"
-            out.append((kind, i, end))
-            i = code_from = end
-        elif text.startswith("--", i):
-            flush(i)
-            end = text.find("\n", i)
-            end = n if end < 0 else end
-            out.append(("comment", i, end))
-            i = code_from = end
-        elif c == '"':
-            flush(i)
-            j = i + 1
-            while j < n and text[j] != '"':
-                j += 2 if text[j] == "\\" else 1
-            end = min(j + 1, n)
-            out.append(("string", i, end))
-            i = code_from = end
-        else:
+        seg = segment_at(text, i)
+        if seg is None:
             i += 1
-    flush(n)
+            continue
+        if i > code_from:
+            out.append(("code", code_from, i))
+        kind, end = seg
+        out.append((kind, i, end))
+        i = code_from = end
+    if n > code_from:
+        out.append(("code", code_from, n))
     return out
 
 
@@ -129,55 +133,66 @@ def counts_zero() -> dict[str, int]:
     return {"added": 0, "replaced": 0, "same": 0, "created": 0}
 
 
-def tag_text(text: str, items: list[Item]) -> tuple[str, dict[str, int], list[tuple[str, str]]]:
-    """The text with every item's tag written, a count per outcome, and the (name, reason) of those skipped."""
+def placement(text: str, it: Item) -> tuple[int, str]:
+    """Where the item's command starts in `text`, or why it cannot be tagged: (offset, "") or (0, reason)."""
+    try:
+        p = offset_of(text, it.rng[0], it.rng[1])
+        s0, s1 = offset_of(text, it.sel[0], it.sel[1]), offset_of(text, it.sel[2], it.sel[3])
+    except ValueError as e:
+        return 0, f"position outside the file ({e})"
+    if not declared_name_matches(it.name, text[s0:s1]):
+        return 0, f"generated: the text at its name's position is {text[s0:s1]!r}"
+    if it.rng == it.sel:
+        return 0, "its range is only its name (a structure field, or a name inside an attribute): there is no command to tag"
+    return p, ""
+
+
+def locate(text: str, items: list[Item]) -> tuple[list[tuple[int, Item]], list[tuple[str, str]]]:
+    """The items that can be tagged with the offset of their command, and the (name, reason) of those that cannot (two items at one command are both left alone)."""
     skipped: list[tuple[str, str]] = []
-    counts = {"added": 0, "replaced": 0, "same": 0, "created": 0}
-    if "\r" in text:
-        return text, counts_zero(), [(it.name, "the file has CRLF line endings") for it in items]
-    placed: list[tuple[int, Item]] = []
     starts: dict[int, list[Item]] = {}
     for it in items:
-        try:
-            p = offset_of(text, it.rng[0], it.rng[1])
-            s0, s1 = offset_of(text, it.sel[0], it.sel[1]), offset_of(text, it.sel[2], it.sel[3])
-        except ValueError as e:
-            skipped.append((it.name, f"position outside the file ({e})"))
-            continue
-        if not declared_name_matches(it.name, text[s0:s1]):
-            skipped.append((it.name, f"generated: the text at its name's position is {text[s0:s1]!r}"))
-            continue
-        if it.rng == it.sel:
-            skipped.append(
-                (it.name, "its range is only its name (a structure field, or a name inside an attribute): there is no command to tag")
-            )
-            continue
-        starts.setdefault(p, []).append(it)
+        p, why = placement(text, it)
+        if why:
+            skipped.append((it.name, why))
+        else:
+            starts.setdefault(p, []).append(it)
+    placed: list[tuple[int, Item]] = []
     for p, group in starts.items():
         if len(group) > 1:
             skipped += [(g.name, "several theorems start at one command (mutual, or generated together)") for g in group]
-            continue
-        placed.append((p, group[0]))
-    for p, it in sorted(placed, key=lambda x: -x[0]):  # from the end: an edit never moves one still to do
-        if text.startswith("/--", p) and not text.startswith("/--/", p):
-            end = skip_block_comment(text, p)
-            if not text.startswith("-/", end - 2):
-                skipped.append((it.name, "its docstring is never closed"))
-                continue
-            line_start = text[text.rfind("\n", 0, p) + 1 : p]
-            new, what = with_tag(text[p:end], it.tag, line_start if not line_start.strip() else "")
-            counts[what] += 1
-            text = text[:p] + new + text[end:]
         else:
-            indent = text[text.rfind("\n", 0, p) + 1 : p]
-            if indent.strip():  # something other than indentation before the command on its line
-                inside = indent.rstrip().endswith("@[")  # `@[to_additive name]`: Lean gives the twin the attribute's position
-                skipped.append(
-                    (it.name, "generated: the command starts inside an attribute" if inside else "the command does not start its line")
-                )
-                continue
-            counts["created"] += 1
-            text = text[:p] + f"/--\n{indent}{it.tag}\n{indent}-/\n{indent}" + text[p:]
+            placed.append((p, group[0]))
+    return placed, skipped
+
+
+def write_tag(text: str, p: int, it: Item) -> tuple[str, str, str]:
+    """The text with the item's tag written at the command that starts at `p`: (new text, outcome, "") or (text, "", reason) when it cannot be written."""
+    line_start = text[text.rfind("\n", 0, p) + 1 : p]
+    if text.startswith("/--", p) and not text.startswith("/--/", p):
+        end = skip_block_comment(text, p)
+        if not text.startswith("-/", end - 2):
+            return text, "", "its docstring is never closed"
+        new, what = with_tag(text[p:end], it.tag, line_start if not line_start.strip() else "")
+        return text[:p] + new + text[end:], what, ""
+    if line_start.strip():  # something other than indentation before the command on its line
+        inside = line_start.rstrip().endswith("@[")  # `@[to_additive name]`: Lean gives the twin the attribute's position
+        return text, "", "generated: the command starts inside an attribute" if inside else "the command does not start its line"
+    return text[:p] + f"/--\n{line_start}{it.tag}\n{line_start}-/\n{line_start}" + text[p:], "created", ""
+
+
+def tag_text(text: str, items: list[Item]) -> tuple[str, dict[str, int], list[tuple[str, str]]]:
+    """The text with every item's tag written, a count per outcome, and the (name, reason) of those skipped."""
+    if "\r" in text:
+        return text, counts_zero(), [(it.name, "the file has CRLF line endings") for it in items]
+    counts = counts_zero()
+    placed, skipped = locate(text, items)
+    for p, it in sorted(placed, key=lambda x: -x[0]):  # from the end: an edit never moves one still to do
+        text, what, why = write_tag(text, p, it)
+        if why:
+            skipped.append((it.name, why))
+        else:
+            counts[what] += 1
     return text, counts, skipped
 
 
@@ -207,7 +222,8 @@ def strip_text(text: str) -> str:
 
 
 def normalise_doc_end(doc: str) -> str:
-    return re.sub(r"[ \t\r\n]*-/$", "-/", doc)
+    """A docstring with the whitespace before its closing `-/` removed (no regular expression: a long run of whitespace made the pattern slow)."""
+    return doc[:-2].rstrip(" \t\r\n") + "-/" if doc.endswith("-/") else doc
 
 
 def equivalent(base: str, head: str) -> bool:

@@ -169,12 +169,20 @@ if extending:
     )
     if len(new_mods) > MAX_PART_MODULES:
         errors.append(f"{len(new_mods)} modules in one part (cap {MAX_PART_MODULES}): cut the bundle into smaller parts")
-    norm = lambda ln: re.sub(r"^\s*public\s+", "", ln.strip())  # noqa: E731
+
+    def norm(ln: str) -> str:
+        return re.sub(r"^\s*public\s+", "", ln.strip())
+
+    def lines_of(text: str) -> list[str]:
+        """The lines of a file; the empty item `split` adds after a final line break is not a line (a file with and a file without one are the same lines)."""
+        parts = text.split("\n")
+        return parts[:-1] if text.endswith("\n") else parts
+
     wanted_lines = {f"import {m}" for m in new_mods}
-    head_lines = show(UMBRELLA).split("\n")
+    head_lines = lines_of(show(UMBRELLA))
     if sorted(norm(ln) for ln in head_lines if norm(ln) in wanted_lines) != sorted(wanted_lines):
         errors.append(f"{UMBRELLA} must import each new module exactly once")
-    if [ln for ln in head_lines if norm(ln) not in wanted_lines] != (blob(base, UMBRELLA) or b"").decode("utf-8").split("\n"):
+    if [ln for ln in head_lines if norm(ln) not in wanted_lines] != lines_of((blob(base, UMBRELLA) or b"").decode("utf-8")):
         errors.append(f"{UMBRELLA} may only gain the imports of the new modules")
 if not manifest:
     errors.append(
