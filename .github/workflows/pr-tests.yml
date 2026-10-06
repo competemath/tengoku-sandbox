@@ -59,6 +59,41 @@ jobs:
       - uses: rhysd/actionlint@914e7df21a07ef503a81201c76d2b11c789d3fca # v1.7.12
         with: { args: -color }
 
+  # The program that lists the tree's command keywords (tools/CommandKeywords.lean; the content lint reads schemas/command-keywords.json) compiles and runs on a
+  # clean checkout. Smoke test on Lean's own grammar: the tree is not built here, the nightly build compares the real list.
+  command-keywords:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions: { contents: read }
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
+        with: { egress-policy: audit }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { fetch-depth: 2, filter: "blob:none", persist-credentials: false }   # 2: the merge commit and the base
+      - id: touched
+        name: Does this PR touch the command keywords?
+        run: |
+          files="$(git diff --name-only HEAD^1 HEAD)"
+          if grep -qE '^(tools/CommandKeywords\.lean|schemas/command-keywords\.json|scripts/ci/cmdkw_check\.py|scripts/ci/allowlist\.py|lean-toolchain|\.github/workflows/pr-tests\.yml)' <<< "$files"; then
+            echo "run=yes" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=no" >> "$GITHUB_OUTPUT"; echo "no file of the command keywords changed"
+          fi
+      - name: elan (the installer at a fixed commit, checked against its digest before it runs)
+        if: steps.touched.outputs.run == 'yes'
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSfL -o elan-init.sh https://raw.githubusercontent.com/leanprover/elan/0e36a07b9bbcc5381fa6250df109f9a4f94d7bac/elan-init.sh
+          echo "a620ff1641616222c8d37c54845492004bb84d6877cdbc944dd65c1aa685bf53  elan-init.sh" | sha256sum -c -
+          sh elan-init.sh -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: The program lists the keywords of Lean's own grammar
+        if: steps.touched.outputs.run == 'yes'
+        run: |
+          lake env lean --run tools/CommandKeywords.lean Lean > keywords.txt
+          wc -l keywords.txt
+          [ "$(wc -l < keywords.txt)" -gt 50 ]
+          for w in theorem def instance namespace '#eval' initialize macro elab; do grep -qx -- "$w" keywords.txt || { echo "::error::$w is not in the list Lean reported"; exit 1; }; done
+
   # The identity recipe (docs/isnad.md), rebuilt from a clean checkout: the executable, the golden ids of Lean core theorems, and the laws on real
   # elaborated statements. Runs the PR's code like the jobs above; nothing for a PR that touches none of the recipe's files.
   isnad:

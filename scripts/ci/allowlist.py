@@ -52,8 +52,15 @@ COMMANDS = {
     "library_note",
     "recall",
     "assert_not_exists",
+    # commands of the tree that carry no code of the record's and change no statement: metadata for `grind`, code generation, documentation
+    "grind_pattern",
+    "suppress_compilation",
+    "unsuppress_compilation",
+    "recommended_spelling",
+    "deprecated_module",
 }
-MODIFIERS = {"private", "protected", "noncomputable", "nonrec", "scoped", "local", "public"}
+# `meta` is the module system's: `meta def`, `meta section`
+MODIFIERS = {"private", "protected", "noncomputable", "nonrec", "scoped", "local", "public", "meta"}
 # attributes that register nothing of the record's own to run: simp sets, lemma tags for the tree's tactics,
 # generators whose code is the tree's (to_additive, simps, reassoc), documentation tags
 ATTRIBUTES = {
@@ -284,7 +291,10 @@ def _attribute_violations(code: str) -> tuple[list[str], str]:
     return out, stripped
 
 
-def _command_start_violations(stripped: str) -> list[str]:
+def _command_start_violations(stripped: str, command_keywords: set[str] | None = None) -> list[str]:
+    """The lines whose first word starts a command that is not allowed. With `command_keywords` (the tree's own, schemas/command-keywords.json) only a word that
+    IS a command keyword counts: any other word at column 0 continues the command above (`termination_by`, `decreasing_by`, `by`, `fun`, `rfl`, a proof term) and
+    Lean refuses it if it does not parse. Without it, every word outside COMMANDS counts: the conservative reading the records lint keeps."""
     out: list[str] = []
     for line in stripped.split("\n"):
         if not line.strip() or line[0].isspace():
@@ -296,16 +306,16 @@ def _command_start_violations(stripped: str) -> list[str]:
         while words and words[0] in MODIFIERS:
             words = words[1:]
         lead = _LEAD.match(words[0]).group(0) if words else ""
-        if lead and lead not in COMMANDS:
+        if lead and lead not in COMMANDS and (command_keywords is None or lead in command_keywords):
             out.append(f"`{lead}` does not start an allowed command")
     return out
 
 
-def violations(text: str, allowed_options: set[str]) -> list[str]:
+def violations(text: str, allowed_options: set[str], command_keywords: set[str] | None = None) -> list[str]:
     code = code_only(text)
     out = _token_violations(code)
     attribute_out, stripped = _attribute_violations(code)
     out += attribute_out
     out += [f"set_option {opt} is not on the allowlist" for opt in _SET_OPTION.findall(code) if opt not in allowed_options]
-    out += _command_start_violations(stripped)
+    out += _command_start_violations(stripped, command_keywords)
     return list(dict.fromkeys(out))

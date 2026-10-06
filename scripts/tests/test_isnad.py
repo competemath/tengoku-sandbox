@@ -265,7 +265,10 @@ class CiJob(unittest.TestCase):
 
     def trigger(self) -> re.Pattern:
         text = (ROOT / ".github" / "workflows" / "pr-tests.yml").read_text(encoding="utf-8")
-        m = re.search(r"grep -qE '(\^\(.*?\))' <<< \"\$files\"", text)
+        # the isnad job's own block: other jobs of the file have a trigger step of their own (the first one in the file is not necessarily this job's)
+        job = re.search(r"^  isnad:\n(.*?)(?=^  \S|\Z)", text, re.S | re.M)
+        self.assertIsNotNone(job, "the isnad job was not found")
+        m = re.search(r"grep -qE '(\^\(.*?\))' <<< \"\$files\"", job.group(1))
         self.assertIsNotNone(m, "the touched step of the isnad job was not found")
         return re.compile(m.group(1))
 
@@ -276,10 +279,7 @@ class CiJob(unittest.TestCase):
             "lakefile.toml",
             "lean-toolchain",
             "scripts/isnad.py",
-            "scripts/isnad_tag.py",
             "tools/isnad/golden.tsv",
-            "tools/isnad/tagger/Fixture.lean",
-            "tools/isnad/tagger/ranges.json",
             "tools/isnad/laws_body.lean",
             "docs/isnad.md",
             ".github/workflows/pr-tests.yml",
