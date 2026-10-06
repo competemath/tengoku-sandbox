@@ -25,6 +25,10 @@ read from the PR's commit as data. The rules:
                can write are split over two jobs, and the one that writes takes only validated outputs. Without this, a later step that
                ever ran a file of the PR would hold the token.
 
+  cancelable   in a workflow whose runs a newer run cancels (`concurrency: cancel-in-progress`), no job runs on `always()`: a cancelled run would still run it, and what it
+               reports (a failure, for an aggregating required check) outlives the run and blocks the commit after the newer run has passed. `!cancelled()` runs after
+               failed jobs as `always()` does, and is skipped in a cancelled run.
+
   --online     genuine pins: the tag named in the comment contains the commit. A repository shares commits with
                all its forks, so a pin can name a commit that exists only in an attacker's fork (an impostor commit).
 
@@ -234,7 +238,21 @@ class Checker:
                 self.pinned(job["uses"], line)
             self.steps(job.get("steps") or [], job.get("env") or {}, doc.get("env") or {}, on)
             self.write_and_pr(name, job, on, doc.get("env") or {})
+            self.cancelable(name, job, doc)
         return self
+
+    def cancelable(self, name: str, job: dict, doc: dict) -> None:
+        """A job of a workflow whose runs are cancelled by newer ones does not run on `always()`."""
+        conc = [c for c in (doc.get("concurrency"), job.get("concurrency")) if isinstance(c, dict)]
+        cancels = any(str(c.get("cancel-in-progress", "false")).strip().lower() not in ("false", "") for c in conc)
+        cond = job.get("if")
+        if cancels and isinstance(cond, str) and re.search(r"\balways\s*\(", cond):
+            self.add(
+                job.get(LINE, 1),
+                "cancelable",
+                f"job `{name}` runs on `always()` in a workflow whose runs are cancelled by newer ones: a cancelled run still runs it and its result outlives the run; "
+                "use `!cancelled()`",
+            )
 
     def write_and_pr(self, name: str, job: dict, on: set[str], wf_env: object) -> None:
         """A job that can write never reads the commits of the PR or of the queue entry."""

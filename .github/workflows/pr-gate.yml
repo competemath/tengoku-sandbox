@@ -56,7 +56,7 @@ jobs:
   # no fetch, takes the class from the classify job's output, and refuses any value that is not one of the fixed class names.
   label:
     needs: classify
-    if: always() && needs.classify.outputs.class != '' && github.event_name == 'pull_request_target'
+    if: ${{ !cancelled() && needs.classify.outputs.class != '' && github.event_name == 'pull_request_target' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions: { pull-requests: write }
@@ -437,7 +437,9 @@ jobs:
 
   pr-gate:
     needs: [classify, data-rules, credits, dco, secrets, workflows, depends, vacuity, goals, intake, scope-fix, restructure, imports, sorry-advisory, queue-recheck]
-    if: always()
+    # `!cancelled()`, not `always()`: a run that a newer run has cancelled (the PR was pushed to or edited again: CodeRabbit rewrites the description after its review, which is an
+    # `edited` event) would still run this job, and its failure stays on the commit as the latest `pr-gate` after the newer run has passed: the PR is blocked for nothing
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions: { contents: read, actions: write, pull-requests: write }   # actions: write — to stop the runs of removed queue entries
@@ -468,7 +470,7 @@ jobs:
       # One comment per PR (updated in place): which check failed, what it said, what to do, and a
       # prefilled "Report a gate bug" issue link for the checks complex enough to be wrong themselves.
       - name: Explain the verdict on the PR
-        if: always() && github.event_name == 'pull_request_target'
+        if: ${{ !cancelled() && github.event_name == 'pull_request_target' }}
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
