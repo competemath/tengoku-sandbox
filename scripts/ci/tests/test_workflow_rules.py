@@ -139,6 +139,10 @@ class Cancelable(unittest.TestCase):
             "!(cancelled() || github.event_name == 'x') && always()",
             "always() && !cancelled() || false",
             "!cancelled() && (always() || github.event_name == 'x')",
+            "github.event_name == 'x' && !cancelled() && always()",  # an unknown left operand: the right one must be read once
+            "(github.event_name == 'x' || false) && !cancelled() && always()",  # the same inside parentheses, with `||`
+            "always() && !cancelled() && contains((github.event.x), 'a')",  # a call argument with parentheses of its own
+            "always() && !cancelled() && github.event[format('{0}', github.x)]",  # an index that is an expression
             "always() && !cancelled() && github.event.pull_request.labels.*.name && github.event['ref'] == 'x'",
         ]:
             self.assertEqual(self.job_if(cond), [], cond)
@@ -152,6 +156,7 @@ class Cancelable(unittest.TestCase):
             "always() && (!cancelled() || github.event_name == 'x')",
             "always() && !contains(github.event.label.name, 'a||b')",
             "failure() || always()",
+            "github.event_name == 'x' || !cancelled() && always() && false",  # the left of `||` alone can make it true, whatever the right says
             "always() && !cancelled() == false",  # `!cancelled() == false` is true after a cancellation
             "always() && contains(github.event.label.name, 'x')",
             "always() && github.event.pull_request.labels.*.name",

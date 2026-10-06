@@ -55,7 +55,8 @@ SHA = re.compile(r"[0-9a-f]{40}")
 USES_LINE = re.compile(r"""^\s*(?:-\s+)?uses:\s*["']?([^\s"'#]+)["']?\s*(?:#\s*(\S+))?""")
 EXPR = re.compile(r"\$\{\{(.*?)\}\}", re.S)
 ALWAYS_CALL = re.compile(r"\balways\s*\(")
-EXPR_TOKEN = re.compile(r"\s*(?:(&&|\|\||==|!=|<=|>=|[<>!(),\[\].*])|('(?:[^']|'')*')|([A-Za-z_][\w-]*|\d+(?:\.\d+)?))")
+EXPR_OPERATOR = re.compile(r"&&|\|\||[=!<>]=|[<>!(),\[\].*]")
+EXPR_WORD = re.compile(r"[A-Za-z_][\w-]*|\d+(?:\.\d+)?")
 UNKNOWN = frozenset({True, False})
 # what a call is on a cancelled run: `always()` and `cancelled()` are true, `success()` and `failure()` false, any other call or context is unknown
 STATUS_ON_CANCELLED = {
@@ -66,6 +67,7 @@ STATUS_ON_CANCELLED = {
 }
 LITERALS = {"true": frozenset({True}), "false": frozenset({False}), "null": frozenset({False})}
 STRING = r"'(?:[^']|'')*'"
+EXPR_TOKENS = (EXPR_OPERATOR, re.compile(STRING), EXPR_WORD)
 NAME = r"[A-Za-z_][\w-]*(?:\.[\w*-]+|\[[^\]]*\])*"
 OPERAND = rf"(?:{STRING}|{NAME}|-?\d+(?:\.\d+)?)"
 COMPARISON = re.compile(rf"{OPERAND}\s*(?:==|!=|<=|>=|<|>)\s*{OPERAND}")
@@ -158,13 +160,16 @@ class CancelledRun:
     evaluates it with the status functions as they are on a cancelled run; everything else is unknown. Raises ValueError for text it does not understand."""
 
     def __init__(self, cond: str):
-        self.tokens = []
-        pos, text = 0, cond.strip()
+        self.tokens: list[str] = []
+        text, pos = cond.strip(), 0
         while pos < len(text):
-            m = EXPR_TOKEN.match(text, pos)
-            if not m:
+            if text[pos].isspace():
+                pos += 1
+                continue
+            m = next((m for m in (t.match(text, pos) for t in EXPR_TOKENS) if m), None)
+            if m is None:
                 raise ValueError(f"unexpected text at {pos}")
-            self.tokens.append(m.group(m.lastindex))
+            self.tokens.append(m.group())
             pos = m.end()
         self.at = 0
 
@@ -188,14 +193,16 @@ class CancelledRun:
         value = self.both()
         while self.peek() == "||":
             self.take()
-            value = frozenset(a or b for a in value for b in self.both())
+            right = self.both()  # once: parsing it advances the position
+            value = frozenset(a or b for a in value for b in right)
         return value
 
     def both(self) -> frozenset:
         value = self.compared()
         while self.peek() == "&&":
             self.take()
-            value = frozenset(a and b for a in value for b in self.compared())
+            right = self.compared()
+            value = frozenset(a and b for a in value for b in right)
         return value
 
     def compared(self) -> frozenset:
@@ -223,22 +230,28 @@ class CancelledRun:
         if not (tok[0].isalpha() or tok[0] == "_"):
             raise ValueError(f"unexpected {tok}")
         if self.peek() == "(":
-            self.take()
-            while self.peek() != ")":
-                self.either()
-                if self.peek() == ",":
-                    self.take()
-            self.take(")")
+            self.arguments()
             return STATUS_ON_CANCELLED.get(tok.lower(), UNKNOWN)
         if tok.lower() in LITERALS and self.peek() not in (".", "["):
             return LITERALS[tok.lower()]
+        self.accessors()
+        return UNKNOWN
+
+    def arguments(self) -> None:
+        self.take("(")
+        while self.peek() != ")":
+            self.either()
+            if self.peek() == ",":
+                self.take()
+        self.take(")")
+
+    def accessors(self) -> None:
         while self.peek() in (".", "["):
             if self.take() == "[":
                 self.either()
                 self.take("]")
             else:
                 self.take()  # the name after the dot, or the `*` of `.*`
-        return UNKNOWN
 
 
 def runs_when_cancelled(cond: str) -> bool:
