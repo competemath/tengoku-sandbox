@@ -86,28 +86,36 @@ def tag_lines(doc_body: str) -> list[str]:
     return [ln for ln in doc_body.split("\n") if tg.TAG_LINE.match(ln)]
 
 
-def tag_errors(path: str, text: str, before: str = "") -> list[str]:
-    """What is wrong with the tags the file has: every tag line, one per docstring, the last line, one origin; and the change must write or replace a tag."""
-    origin = isnad.origin_of(module_of(path))
-    errors, tags = [], 0
-    for kind, a, b in tg.scan(text):
-        if kind != "doc":
+def doc_tag_errors(path: str, body: str, origin: str) -> tuple[list[str], int]:
+    """The tags of one docstring: (what is wrong with them, how many there are). One at most, well formed, from where the module is, the last line of the docstring."""
+    lines = tag_lines(body)
+    errors = [f"{path}: a docstring with {len(lines)} tag lines"] if len(lines) > 1 else []
+    last = [x for x in body.split("\n") if x.strip()][-1:]
+    tags = 0
+    for ln in lines:
+        try:
+            tag = isnad.parse_tag(ln)
+        except ValueError as e:
+            errors.append(f"{path}: {e}")
             continue
-        body = text[a + 3 : b - 2]
-        lines = tag_lines(body)
-        if len(lines) > 1:
-            errors.append(f"{path}: a docstring with {len(lines)} tag lines")
-        for ln in lines:
-            try:
-                tag = isnad.parse_tag(ln)
-            except ValueError as e:
-                errors.append(f"{path}: {e}")
-                continue
-            if tag["from"] != origin:
-                errors.append(f"{path}: from={tag['from']} but the module is {origin} content")
-            if [x for x in body.split("\n") if x.strip()][-1] != ln:
-                errors.append(f"{path}: the tag is not the last line of its docstring")
-            tags += 1
+        tags += 1
+        if tag["from"] != origin:
+            errors.append(f"{path}: from={tag['from']} but the module is {origin} content")
+        if last != [ln]:
+            errors.append(f"{path}: the tag is not the last line of its docstring")
+    return errors, tags
+
+
+def tag_errors(path: str, text: str, before: str = "") -> list[str]:
+    """What is wrong with the tags the file has (every docstring: `doc_tag_errors`); and the change must write or replace a tag."""
+    origin = isnad.origin_of(module_of(path))
+    errors: list[str] = []
+    tags = 0
+    for kind, a, b in tg.scan(text):
+        if kind == "doc":
+            more, n = doc_tag_errors(path, text[a + 3 : b - 2], origin)
+            errors += more
+            tags += n
     if not tags or tags_of(before) == tags_of(text):
         errors.append(f"{path}: the change writes no tag")
     return errors
