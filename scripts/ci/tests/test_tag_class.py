@@ -321,6 +321,45 @@ class CheckTags(unittest.TestCase):
         self.assertEqual(problems, [])
         self.assertIn("2 tags right", summary)
 
+    def test_theorems_the_tagger_leaves_alone_by_rule_are_not_problems(self):
+        """Found by the first run on a real runner (sandbox, 2026-10-07): a structure's field (`Fact.out`: its range is only its name) and a generated twin
+        (`beq_ext_iff`) are skipped by rule and were reported as problems"""
+        text = self.right()
+        recs, lines = self.inputs(text)
+        t0 = ranges_of(text, 2)[0]
+        recs += [fake_record("gen_twin", self.MODULE), fake_record("Fx.field", self.MODULE)]
+        lines += [
+            range_line(
+                "gen_twin", {"range": t0.rng, "sel": (t0.sel[0], t0.sel[1] + 4, t0.sel[2], t0.sel[3] + 4)}, self.MODULE
+            ),  # the text at its name is not its name
+            range_line("Fx.field", {"range": (9, 0, 9, 3), "sel": (9, 0, 9, 3)}, self.MODULE),  # a range that is only its name
+        ]
+        root = Path(tempfile.mkdtemp())
+        path = isnad.module_file(self.MODULE, root)
+        path.parent.mkdir(parents=True)
+        path.write_text(text, encoding="utf-8")
+        problems, summary = isnad.check_tags(recs, lines, [self.MODULE], root)
+        self.assertEqual(problems, [])
+        self.assertIn("2 tags right, 2 theorems skipped by rule, 4 theorems in 1 modules", summary)
+
+    def test_a_missing_module_or_a_result_that_changes_more_than_tags_is_a_problem(self):
+        recs, lines = self.inputs(PLAIN)
+        problems, _ = isnad.check_tags(recs, lines, [self.MODULE], Path(tempfile.mkdtemp()))  # the file is not there
+        self.assertTrue(any("does not exist" in p for p in problems), problems)
+
+    def test_a_result_that_would_change_more_than_tags_is_a_problem(self):
+        from unittest import mock
+
+        text = self.right()
+        root = Path(tempfile.mkdtemp())
+        path = isnad.module_file(self.MODULE, root)
+        path.parent.mkdir(parents=True)
+        path.write_text(text, encoding="utf-8")
+        recs, lines = self.inputs(text)
+        with mock.patch.object(isnad._tagger(), "equivalent", return_value=False):  # the law the tagger keeps, broken on purpose
+            problems, _ = isnad.check_tags(recs, lines, [self.MODULE], root)
+        self.assertTrue(any("tagging would change more than tags" in p for p in problems), problems)
+
     def test_a_theorem_without_a_tag_is_reported(self):
         text = self.right()
         recs, lines = self.inputs(text)
