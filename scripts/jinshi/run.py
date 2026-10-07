@@ -20,6 +20,10 @@ On a built tree (scripts/cache.sh get; lake build Tengoku.All; lake build tengok
                 default, or set to 0 (no limit), is a module that compiles only with extra budget (fragile under any toolchain change:
                 warn); `debug.*` options and `autoImplicit true` are warn; a linter switched off is info. No Lean runs.
   env           tengoku-jinshi over the round's modules in one process: the examinations the executable lists (--list).
+  mutants       off by default (`--checks` must name it): `tengoku-jinshi --check mutants --mutants-out DIR/mutants` mutates the first
+                theorems of each module (eight operators at fixed positions, Jinshi/Mutants.lean), judges every mutant with Lean's kernel
+                in-process and writes it unchecked as a module of its own; then scripts/jinshi/mutants.py has leanchecker and lean4lean
+                judge each one. Kernels that disagree on a mutant: fail (one of them has a bug; the module is the reproducer).
 
 Writes DIR/<check>.jsonl (one finding per line, the same shape for every check) and DIR/summary.md. Exit 0 always: the summary is the
 verdict, the workflow decides. `--modules FILE` (one module name per line) replaces the round's list (a rehearsal on a few modules).
@@ -565,6 +569,17 @@ def main() -> int:
         print(f"env: {len(fs)} findings in {timings['env']:.0f} s", flush=True)
         for check in {f["check"] for f in fs}:
             flush(check)
+    if "mutants" in checks:
+        t = time.time()
+        from mutants import generate, judge  # noqa: E402
+
+        mdir = a.out / "mutants"
+        gen = generate(modules, mdir)
+        fs, verdicts = judge(mdir, jobs=a.jobs)
+        results["mutants"] = [f for f in gen if not f["detail"].startswith("lean: ")] + fs
+        timings["mutants"] = time.time() - t
+        flush("mutants")
+        print(f"mutants: {len(verdicts)} mutants judged, {len(results['mutants'])} findings in {timings['mutants']:.0f} s", flush=True)
 
     for check, fs in results.items():
         with (a.out / f"{check}.jsonl").open("w", encoding="utf-8") as fh:

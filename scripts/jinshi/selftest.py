@@ -123,6 +123,42 @@ def main() -> int:
             print(
                 f"{kernel}: the forged module {'refused' if forged else 'ACCEPTED'}, {len(fixtures)} honest module(s) {'accepted' if not honest else 'REFUSED'}"
             )
+    # mutants (appended block): the fixture's mutant modules, generated into a directory of their own, judged by every kernel at hand
+    # (leanchecker; lean4lean when JINSHI_LEAN4LEAN names it): no disagreement with Lean's in-process verdict, and at least one mutant
+    # refused by every kernel and one accepted by every kernel
+    from mutants import generate, judge  # noqa: E402
+
+    # (the mutants' directory is NOT under the fixtures' LEAN_PATH entry: a module is named by the search-path entry it is found under)
+    with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as mtmp:
+        out = Path(tmp) / "JinshiFixtures"
+        out.mkdir()
+        r = sh(["lake", "env", "lean", "-o", str(out / "Mutants.olean"), "-i", str(out / "Mutants.ilean"), str(FIX / "Mutants.lean")])
+        if r.returncode:
+            problems.append("Mutants: the fixture does not compile for the kernels' run: " + (r.stdout + r.stderr)[-300:])
+        else:
+            lean_path = os.pathsep.join(p for p in [sh(["lake", "env", "printenv", "LEAN_PATH"]).stdout.strip(), tmp] if p)
+            env = dict(os.environ, LEAN_PATH=lean_path)
+            mdir = Path(mtmp) / "mutants"
+            gen = generate(["JinshiFixtures.Mutants"], mdir, seed="Init", env=env)
+            fs, verdicts = judge(mdir, jobs=4, env=env)
+            for f in gen + fs:
+                if f["severity"] == "fail":
+                    problems.append(f"Mutants: KERNELS DISAGREE {f['name']}: {f['detail'][:300]}")
+                elif f["severity"] == "warn":
+                    problems.append(f"Mutants: WARN {f['name']}: {f['detail'][:300]}")
+            accepted = sum(1 for v in verdicts if all(x == "accept" for x in v["verdicts"].values()))
+            refused = sum(1 for v in verdicts if all(x == "reject" for x in v["verdicts"].values()))
+            if not verdicts:
+                problems.append("Mutants: MISSING  no mutant module was generated")
+            if verdicts and not accepted:
+                problems.append("Mutants: MISSING  no mutant accepted by every kernel")
+            if verdicts and not refused:
+                problems.append("Mutants: MISSING  no mutant refused by every kernel")
+            kernels = ["lean", "leanchecker"] + (["lean4lean"] if os.environ.get("JINSHI_LEAN4LEAN") else [])
+            print(
+                f"mutants: {len(verdicts)} mutants, {accepted} accepted by every kernel, {refused} refused by every kernel, "
+                f"{len(verdicts) - accepted - refused} disagreements or timeouts (kernels: {', '.join(kernels)})"
+            )
     for p in problems:
         print(p)
     print(f"jinshi selftest: {len(fixtures)} fixtures, {total_found} findings, {total_expected} expected, {len(problems)} problems")

@@ -26,3 +26,12 @@ duplicate	warn	JinshiFixtures.add_zero'	Nat.add_zero
 duplicate	warn	JinshiFixtures.conclusion_is_hypothesis	nestedProof
 duplicate	warn	JinshiFixtures.iff_self_only	Iff.refl
 duplicate	info	JinshiFixtures.nat_sub_claim	honest_sub
+necessity	info	JinshiFixtures.conclusion_is_hypothesis	p = False
+necessity	info	JinshiFixtures.conclusion_is_hypothesis	every hypothesis
+entailed	warn	JinshiFixtures.add_zero'	Nat.add_zero
+entailed	warn	JinshiFixtures.le_succ'	entailed by the seed
+entailed	warn	JinshiFixtures.nat_div_claim	Nat.div_mul_le_self
+entailed	info	JinshiFixtures.nat_sub_claim	honest_sub
+entailed	warn	JinshiFixtures.about_secret	entailed by the seed
+entailed	warn	JinshiFixtures.conclusion_true	entailed by the seed
+entailed	warn	JinshiFixtures.refl_only	entailed by the seed
