@@ -16,6 +16,7 @@ examinations that read a library's theorems). `--import` loads a module without 
 file under Jinshi/, registered in `examinations` below.
 -/
 import Jinshi.Base
+import Jinshi.Forensics
 open Lean Meta Jinshi
 
 /-- every examination this build knows: its name (the `check` field, the `--check` key) and its runner -/
@@ -24,7 +25,8 @@ def examinations : List (String × (Ctx → MetaM (Array Finding))) :=
    ("shadow", fun c => shadow c),
    ("arith", fun c => arith c),
    ("dossier", dossier),
-   ("content", content)]
+   ("content", content),
+   ("forensics", forensics)]
 
 unsafe def main (argv : List String) : IO UInt32 := do
   enableInitializersExecution
