@@ -54,6 +54,9 @@ def decodeList : ℕ → Option (List α)
       have : v₂ < succ v := lt_succ_of_le h
       (· :: ·) <$> decode (α := α) v₁ <*> decodeList v₂
 
+/--
+@isnad1 id=eq.0h2v.s4.ed8dc850e80e from=seed src=0 shape=bdeadc95 vocab=8ab6f5d8
+-/
 @[simp]
 theorem decodeList_encodeList_eq_self (l : List α) : decodeList (encodeList l) = some l := by
   induction l <;> simp [encodeList, decodeList, unpair_pair, encodek, *]
@@ -67,19 +70,31 @@ instance _root_.List.countable {α : Type*} [Countable α] : Countable (List α)
   have := Encodable.ofCountable α
   infer_instance
 
+/--
+@isnad1 id=eq.0h1v.s4.b80cae39d2ae from=seed src=0 shape=46a7a1bc vocab=7526ea88
+-/
 @[simp]
 theorem encode_list_nil : encode (@nil α) = 0 :=
   rfl
 
+/--
+@isnad1 id=eq.0h3v.s5.cda91b11c497 from=seed src=0 shape=da5b3b2e vocab=bb1e7aa9
+-/
 @[simp]
 theorem encode_list_cons (a : α) (l : List α) :
     encode (a :: l) = succ (pair (encode a) (encode l)) :=
   rfl
 
+/--
+@isnad1 id=eq.0h1v.s4.b08e70f58c09 from=seed src=0 shape=3c054d3a vocab=b066121f
+-/
 @[simp]
 theorem decode_list_zero : decode (α := List α) 0 = some [] :=
   show decodeList 0 = some [] by rw [decodeList]
 
+/--
+@isnad1 id=eq.0h2v.s6.077964f7b8ff from=seed src=0 shape=d80b26de vocab=b20e075c
+-/
 @[simp]
 theorem decode_list_succ (v : ℕ) :
     decode (α := List α) (succ v) =
@@ -88,6 +103,9 @@ theorem decode_list_succ (v : ℕ) :
     rcases e : unpair v with ⟨v₁, v₂⟩
     simp [decodeList, e]; rfl
 
+/--
+@isnad1 id=le.0h2v.s4.847975d41858 from=seed src=0 shape=bc32bc01 vocab=13ce190f
+-/
 theorem length_le_encode : ∀ l : List α, length l ≤ encode l
   | [] => Nat.zero_le _
   | _ :: l => succ_le_succ <| (length_le_encode l).trans (right_le_pair _ _)
@@ -133,6 +151,9 @@ open Encodable
 
 section List
 
+/--
+@isnad1 id=ex.0h2v.s5.cacea498dbfa from=seed src=0 shape=9d389504 vocab=61534fd5
+-/
 theorem denumerable_list_aux : ∀ n : ℕ, ∃ a ∈ @decodeList α _ n, encodeList a = n
   | 0 => by rw [decodeList]; exact ⟨_, rfl, rfl⟩
   | succ v => by
@@ -150,9 +171,15 @@ theorem denumerable_list_aux : ∀ n : ℕ, ∃ a ∈ @decodeList α _ n, encode
 instance denumerableList : Denumerable (List α) :=
   ⟨denumerable_list_aux⟩
 
+/--
+@isnad1 id=eq.0h1v.s4.043bedc9733b from=seed src=0 shape=95c7f936 vocab=ba26b46a
+-/
 @[simp]
 theorem list_ofNat_zero : ofNat (List α) 0 = [] := by rw [← @encode_list_nil α, ofNat_encode]
 
+/--
+@isnad1 id=eq.0h2v.s5.978593fb3c95 from=seed src=0 shape=c3b58c2d vocab=4246984a
+-/
 @[simp]
 theorem list_ofNat_succ (v : ℕ) :
     ofNat (List α) (succ v) = ofNat α v.unpair.1 :: ofNat (List α) v.unpair.2 :=

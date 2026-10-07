@@ -64,25 +64,39 @@ def raise : List ℕ → ℕ → List ℕ
   | [], _ => []
   | m :: l, n => (m + n) :: raise l (m + n)
 
+/--
+@isnad1 id=eq.0h2v.s3.df9c50eb9134 from=seed src=0 shape=f8d2ce29 vocab=efc8db48
+-/
 theorem lower_raise : ∀ l n, lower (raise l n) n = l
   | [], _ => rfl
   | m :: l, n => by rw [raise, lower, Nat.add_sub_cancel_right, lower_raise l]
 
+/--
+@isnad1 id=eq.1h2v.s4.0bb5e12352a2 from=seed src=0 shape=8875c2b4 vocab=ebcc893f
+-/
 theorem raise_lower : ∀ {l n}, List.SortedLE (n :: l) → raise (lower l n) n = l
   | [], _, _ => rfl
   | m :: l, n, h => by
     have : n ≤ m := List.rel_of_pairwise_cons h.pairwise List.mem_cons_self
     simp [raise, lower, Nat.sub_add_cancel this, raise_lower h.pairwise.of_cons.sortedLE]
 
+/--
+@isnad1 id=ischain.0h2v.s4.ce2fb25c705b from=seed src=0 shape=ce911725 vocab=fb798865
+-/
 theorem isChain_raise : ∀ l n, List.IsChain (· ≤ ·) (raise l n)
   | [], _ => .nil
   | [_], _ => .singleton _
   | _ :: _ :: _, _ => .cons_cons (Nat.le_add_left _ _) (isChain_raise (_ :: _) _)
 
+/--
+@isnad1 id=ischain.0h2v.s4.08fe1da961a0 from=seed src=0 shape=0e8a9b7f vocab=d939cf4c
+-/
 theorem isChain_cons_raise (l n) : List.IsChain (· ≤ ·) (n :: raise l n) :=
   isChain_raise (n :: l) 0
 
-/-- `raise l n` is a non-decreasing sequence. -/
+/-- `raise l n` is a non-decreasing sequence.
+@isnad1 id=sortedle.0h2v.s3.8835a8eec4c9 from=seed src=0 shape=c64140a1 vocab=22d01165
+-/
 theorem raise_sorted (l n) : List.SortedLE (raise l n) := (isChain_raise _ _).sortedLE
 
 /-- If `α` is denumerable, then so is `Multiset α`. Warning: this is *not* the same encoding as used

@@ -28,6 +28,9 @@ section Equiv
 
 variable {α : Sort u} {β : Sort v}
 
+/--
+@isnad1 id=eq.0h4v.s5.48a8ad7190b6 from=seed src=0 shape=50084eb6 vocab=72f826f5
+-/
 @[simp]
 theorem Equiv.asEmbedding_range {α β : Sort _} {p : β → Prop} (e : α ≃ Subtype p) :
     Set.range e.asEmbedding = Set.ofPred p :=
@@ -57,6 +60,9 @@ def optionEmbeddingEquiv (α β) : (Option α ↪ β) ≃ Σ f : α ↪ β, ↥(
 def codRestrict {α β} (p : Set β) (f : α ↪ β) (H : ∀ a, f a ∈ p) : α ↪ p :=
   ⟨fun a ↦ ⟨f a, H a⟩, fun _ _ h ↦ f.injective (congr_arg Subtype.val h)⟩
 
+/--
+@isnad1 id=eq.1h5v.s6.75574445cef8 from=seed src=0 shape=52e914df vocab=c5a390b6
+-/
 @[simp]
 theorem codRestrict_apply {α β} (p) (f : α ↪ β) (H a) : codRestrict p f H a = ⟨f a, H a⟩ :=
   rfl
@@ -109,11 +115,17 @@ def subtypeOrEquiv (p q : α → Prop) [DecidablePred p] (h : Disjoint p q) :
         intro hp
         simpa using h.le_bot x ⟨hp, x.prop⟩
 
+/--
+@isnad1 id=eq.1h4v.s8.487bc18217f4 from=seed src=0 shape=740c99e5 vocab=12276ea0
+-/
 @[simp, grind =]
 theorem subtypeOrEquiv_symm_inl (p q : α → Prop) [DecidablePred p] (h : Disjoint p q)
     (x : { x // p x }) : (subtypeOrEquiv p q h).symm (Sum.inl x) = ⟨x, Or.inl x.prop⟩ :=
   rfl
 
+/--
+@isnad1 id=eq.1h4v.s8.a54c411533ee from=seed src=0 shape=a4ef9af8 vocab=11b8de3a
+-/
 @[simp, grind =]
 theorem subtypeOrEquiv_symm_inr (p q : α → Prop) [DecidablePred p] (h : Disjoint p q)
     (x : { x // q x }) : (subtypeOrEquiv p q h).symm (Sum.inr x) = ⟨x, Or.inr x.prop⟩ :=
@@ -135,17 +147,29 @@ variable {α ι : Type*} {s t r : Set α}
     · simpa using h.symm.ne_of_mem ha hb
     simp
 
+/--
+@isnad1 id=eq.1h3v.s6.08c042275a94 from=seed src=0 shape=010990db vocab=9eb17661
+-/
 @[norm_cast] lemma Function.Embedding.coe_sumSet (h : Disjoint s t) :
     (Function.Embedding.sumSet h : s ⊕ t → α) = Sum.elim (↑) (↑) := rfl
 
+/--
+@isnad1 id=eq.1h4v.s7.b9774d5cccc2 from=seed src=0 shape=b2877e94 vocab=ee1673d6
+-/
 @[simp] theorem Function.Embedding.sumSet_preimage_inl (h : Disjoint s t) :
     .inl ⁻¹' Function.Embedding.sumSet h ⁻¹' r = r ∩ s := by
   simp [Set.ext_iff]
 
+/--
+@isnad1 id=eq.1h4v.s7.387d848810d6 from=seed src=0 shape=8358ce5d vocab=f5df0089
+-/
 @[simp] theorem Function.Embedding.sumSet_preimage_inr (h : Disjoint s t) :
     .inr ⁻¹' Function.Embedding.sumSet h ⁻¹' r = r ∩ t := by
   simp [Set.ext_iff]
 
+/--
+@isnad1 id=eq.1h3v.s6.edbae461b941 from=seed src=0 shape=366a996f vocab=aeb5f30d
+-/
 @[simp] theorem Function.Embedding.sumSet_range {s t : Set α} (h : Disjoint s t) :
     range (Function.Embedding.sumSet h) = s ∪ t := by
   simp [Set.ext_iff]
@@ -163,14 +187,23 @@ the natural injection from the sigma-type `(i : ι) × ↑(s i)` to `α`. -/
     rfl
 
 set_option warning.simp.otherHead false in
+/--
+@isnad1 id=eq.1h3v.s7.b2d049ba74d8 from=seed src=0 shape=c2105fd9 vocab=af13bfaf
+-/
 @[norm_cast] lemma Function.Embedding.coe_sigmaSet {s : ι → Set α} (h) :
     (Function.Embedding.sigmaSet h : ((i : ι) × s i) → α) = fun x ↦ x.2.1 := rfl
 
+/--
+@isnad1 id=eq.1h5v.s7.b76346cd508b from=seed src=0 shape=46343bdb vocab=97d3f62a
+-/
 @[simp] theorem Function.Embedding.sigmaSet_preimage {s : ι → Set α}
     (h : Pairwise (Disjoint on s)) (i : ι) (r : Set α) :
     Sigma.mk i ⁻¹' Function.Embedding.sigmaSet h ⁻¹' r = r ∩ s i := by
   simp [Set.ext_iff]
 
+/--
+@isnad1 id=eq.1h3v.s6.f373f217d9f6 from=seed src=0 shape=b65795e8 vocab=148a771c
+-/
 @[simp] theorem Function.Embedding.sigmaSet_range {s : ι → Set α}
     (h : Pairwise (Disjoint on s)) : Set.range (Function.Embedding.sigmaSet h) = ⋃ i, s i := by
   simp [Set.ext_iff]

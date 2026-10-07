@@ -63,36 +63,60 @@ split induced by `p : ε → Prop` constructs a permutation on `ε`. -/
 def Perm.subtypeCongr : Equiv.Perm ε :=
   permCongr (sumCompl p) (sumCongr ep en)
 
+/--
+@isnad1 id=eq.0h5v.s7.3abd550b5b8a from=seed src=0 shape=6eb7cd1d vocab=63fccef6
+-/
 theorem Perm.subtypeCongr.apply (a : ε) : ep.subtypeCongr en a =
     if h : p a then (ep ⟨a, h⟩ : ε) else en ⟨a, h⟩ := by
   by_cases h : p a <;> simp [Perm.subtypeCongr, h]
 
+/--
+@isnad1 id=eq.0h6v.s7.76a9aac802e8 from=seed src=0 shape=41fe4581 vocab=bc19bc8c
+-/
 @[simp]
 theorem Perm.subtypeCongr.left_apply {a : ε} (h : p a) : ep.subtypeCongr en a = ep ⟨a, h⟩ := by
   simp [Perm.subtypeCongr.apply, h]
 
+/--
+@isnad1 id=eq.0h5v.s7.4c55f5620a71 from=seed src=0 shape=1a258246 vocab=204e57d2
+-/
 @[simp]
 theorem Perm.subtypeCongr.left_apply_subtype (a : { a // p a }) : ep.subtypeCongr en a = ep a :=
     Perm.subtypeCongr.left_apply ep en a.property
 
+/--
+@isnad1 id=eq.1h5v.s7.185d54007168 from=seed src=0 shape=62006cbb vocab=bc19bc8c
+-/
 @[simp]
 theorem Perm.subtypeCongr.right_apply {a : ε} (h : ¬p a) : ep.subtypeCongr en a = en ⟨a, h⟩ := by
   simp [Perm.subtypeCongr.apply, h]
 
+/--
+@isnad1 id=eq.0h5v.s7.1a2beec16138 from=seed src=0 shape=113508d2 vocab=204e57d2
+-/
 @[simp]
 theorem Perm.subtypeCongr.right_apply_subtype (a : { a // ¬p a }) : ep.subtypeCongr en a = en a :=
   Perm.subtypeCongr.right_apply ep en a.property
 
+/--
+@isnad1 id=eq.0h2v.s5.c99a34a64156 from=seed src=0 shape=b05f3c61 vocab=57ff6f16
+-/
 @[simp]
 theorem Perm.subtypeCongr.refl :
     Perm.subtypeCongr (Equiv.refl { a // p a }) (Equiv.refl { a // ¬p a }) = Equiv.refl ε := by
   ext x
   by_cases h : p x <;> simp [h]
 
+/--
+@isnad1 id=eq.0h4v.s6.08b2f99d7f87 from=seed src=0 shape=b01a21a8 vocab=94a41d86
+-/
 @[simp]
 theorem Perm.subtypeCongr.symm : (ep.subtypeCongr en).symm = Perm.subtypeCongr ep.symm en.symm :=
   rfl
 
+/--
+@isnad1 id=eq.0h6v.s6.e92430fda1fd from=seed src=0 shape=fd3a617e vocab=a077b49b
+-/
 @[simp]
 theorem Perm.subtypeCongr.trans :
     (ep.subtypeCongr en).trans (ep'.subtypeCongr en')
@@ -126,10 +150,16 @@ def subtypePreimage : { x : α → β // x ∘ Subtype.val = x₀ } ≃ ({ a // 
         dsimp only
         rw [dite_eq_right h]
 
+/--
+@isnad1 id=eq.0h7v.s8.5538d91065e7 from=seed src=0 shape=26ff5f81 vocab=0eccdb1f
+-/
 theorem subtypePreimage_symm_apply_coe_pos (x : { a // ¬p a } → β) (a : α) (h : p a) :
     ((subtypePreimage p x₀).symm x : α → β) a = x₀ ⟨a, h⟩ :=
   dite_eq_left h
 
+/--
+@isnad1 id=eq.1h6v.s8.65f5da56db57 from=seed src=0 shape=8d362e23 vocab=0eccdb1f
+-/
 theorem subtypePreimage_symm_apply_coe_neg (x : { a // ¬p a } → β) (a : α) (h : ¬p a) :
     ((subtypePreimage p x₀).symm x : α → β) a = x ⟨a, h⟩ :=
   dite_eq_right h
@@ -145,6 +175,9 @@ def piCongrRight {β₁ β₂ : α → Sort*} (F : ∀ a, β₁ a ≃ β₂ a) :
   ⟨Pi.map fun a ↦ F a, Pi.map fun a ↦ (F a).symm, fun H => funext <| by simp,
     fun H => funext <| by simp⟩
 
+/--
+@isnad1 id=eq.0h2v.s5.ceff91e6bcd1 from=seed src=0 shape=901b0821 vocab=cff5d582
+-/
 @[simp]
 lemma piCongrRight_refl {β : α → Sort*} : piCongrRight (fun a ↦ .refl (β a)) = .refl (∀ a, β a) :=
   rfl
@@ -155,6 +188,9 @@ This is `Function.swap` as an `Equiv`. -/
 def piComm (φ : α → β → Sort*) : (∀ a b, φ a b) ≃ ∀ b a, φ a b :=
   ⟨swap, swap, fun _ => rfl, fun _ => rfl⟩
 
+/--
+@isnad1 id=eq.0h3v.s5.7e153db1f5c1 from=seed src=0 shape=aaaaebe8 vocab=a4abb728
+-/
 @[simp]
 theorem piComm_symm {φ : α → β → Sort*} : (piComm φ).symm = (piComm <| swap φ) :=
   rfl
@@ -171,11 +207,17 @@ def piCurry {α} {β : α → Type*} (γ : ∀ a, β a → Type*) :
   right_inv := Sigma.curry_uncurry
 
 -- `simps` overapplies these but `simps -fullyApplied` under-applies them
+/--
+@isnad1 id=eq.0h4v.s8.6936b51e86d3 from=seed src=0 shape=d351c212 vocab=9296a849
+-/
 @[simp] theorem piCurry_apply {α} {β : α → Type*} (γ : ∀ a, β a → Type*)
     (f : ∀ x : Σ i, β i, γ x.1 x.2) :
     piCurry γ f = Sigma.curry f :=
   rfl
 
+/--
+@isnad1 id=eq.0h4v.s8.337c7be20185 from=seed src=0 shape=723ca322 vocab=c4abc4e0
+-/
 @[simp] theorem piCurry_symm_apply {α} {β : α → Type*} (γ : ∀ a, β a → Type*) (f : ∀ a b, γ a b) :
     (piCurry γ).symm f = Sigma.uncurry f :=
   rfl
@@ -193,6 +235,9 @@ def ofFiberEquiv {α β γ} {f : α → γ} {g : β → γ}
     (e : ∀ c, { a // f a = c } ≃ { b // g b = c }) : α ≃ β :=
   (sigmaFiberEquiv f).symm.trans <| (Equiv.sigmaCongrRight e).trans (sigmaFiberEquiv g)
 
+/--
+@isnad1 id=eq.0h7v.s6.34122615f2aa from=seed src=0 shape=477b8203 vocab=617b6fe7
+-/
 theorem ofFiberEquiv_map {α β γ} {f : α → γ} {g : β → γ}
     (e : ∀ c, { a // f a = c } ≃ { b // g b = c }) (a : α) : g (ofFiberEquiv e a) = f a :=
   (_ : { b // g b = _ }).property
@@ -245,10 +290,15 @@ def uniqueCongr (e : α ≃ β) : Unique α ≃ Unique β where
   left_inv _ := Subsingleton.elim _ _
   right_inv _ := Subsingleton.elim _ _
 
-/-- If `α` is equivalent to `β`, then `IsEmpty α` is equivalent to `IsEmpty β`. -/
+/-- If `α` is equivalent to `β`, then `IsEmpty α` is equivalent to `IsEmpty β`.
+@isnad1 id=iff.0h3v.s3.c1282386163b from=seed src=0 shape=f8a886ac vocab=39ecbfd5
+-/
 theorem isEmpty_congr (e : α ≃ β) : IsEmpty α ↔ IsEmpty β :=
   ⟨fun h => @Function.isEmpty _ _ h e.symm, fun h => @Function.isEmpty _ _ h e⟩
 
+/--
+@isnad1 id=isempty.0h3v.s3.b13ed491b547 from=seed src=0 shape=6aa8801c vocab=39ecbfd5
+-/
 protected theorem isEmpty (e : α ≃ β) [IsEmpty β] : IsEmpty α :=
   e.isEmpty_congr.mpr ‹_›
 
@@ -267,10 +317,16 @@ def subtypeEquiv {p : α → Prop} {q : β → Prop} (e : α ≃ β) (h : ∀ a,
   left_inv a := Subtype.ext <| by simp
   right_inv b := Subtype.ext <| by simp
 
+/--
+@isnad1 id=eq.1h5v.s7.46c53970ec25 from=seed src=0 shape=870f8232 vocab=d07145cf
+-/
 lemma coe_subtypeEquiv_eq_map {X Y} {p : X → Prop} {q : Y → Prop} (e : X ≃ Y)
     (h : ∀ x, p x ↔ q (e x)) : ⇑(e.subtypeEquiv h) = Subtype.map e (h · |>.mp) :=
   rfl
 
+/--
+@isnad1 id=eq.0h3v.s6.4c65bc8ccd56 from=seed src=0 shape=3f88fd56 vocab=808d9873
+-/
 @[simp]
 theorem subtypeEquiv_refl {p : α → Prop} (h : ∀ a, p a ↔ p (Equiv.refl _ a) := fun _ => Iff.rfl) :
     (Equiv.refl α).subtypeEquiv h = Equiv.refl { a : α // p a } := by
@@ -278,11 +334,17 @@ theorem subtypeEquiv_refl {p : α → Prop} (h : ∀ a, p a ↔ p (Equiv.refl _ 
   rfl
 
 -- We use `as_aux_lemma` here to avoid creating large proof terms when using `simp`
+/--
+@isnad1 id=eq.1h5v.s6.3f9b2a1aa9b6 from=seed src=0 shape=2c0969f5 vocab=9f79c936
+-/
 @[simp]
 theorem subtypeEquiv_symm {p : α → Prop} {q : β → Prop} (e : α ≃ β) (h : ∀ a : α, p a ↔ q (e a)) :
     (e.subtypeEquiv h).symm = e.symm.subtypeEquiv (by as_aux_lemma => grind) :=
   rfl
 
+/--
+@isnad1 id=eq.2h8v.s7.fd62882f6baf from=seed src=0 shape=793e7104 vocab=1e826018
+-/
 @[simp]
 theorem subtypeEquiv_trans {p : α → Prop} {q : β → Prop} {r : γ → Prop} (e : α ≃ β) (f : β ≃ γ)
     (h : ∀ a : α, p a ↔ q (e a)) (h' : ∀ b : β, q b ↔ r (f b)) :
@@ -296,9 +358,15 @@ theorem subtypeEquiv_trans {p : α → Prop} {q : β → Prop} {r : γ → Prop}
 def subtypeEquivRight {p q : α → Prop} (e : ∀ x, p x ↔ q x) : { x // p x } ≃ { x // q x } :=
   subtypeEquiv (Equiv.refl _) e
 
+/--
+@isnad1 id=eq.1h4v.s7.ebe2aadaa565 from=seed src=0 shape=416e7148 vocab=a092f7d1
+-/
 lemma subtypeEquivRight_apply {p q : α → Prop} (e : ∀ x, p x ↔ q x)
     (z : { x // p x }) : subtypeEquivRight e z = ⟨z, (e z.1).mp z.2⟩ := rfl
 
+/--
+@isnad1 id=eq.1h4v.s7.a8df7c51f1c5 from=seed src=0 shape=a17f5024 vocab=de63fc47
+-/
 lemma subtypeEquivRight_symm_apply {p q : α → Prop} (e : ∀ x, p x ↔ q x)
     (z : { x // q x }) : (subtypeEquivRight e).symm z = ⟨z, (e z.1).mpr z.2⟩ := rfl
 
@@ -457,6 +525,9 @@ def sigmaSigmaSubtype {α : Type*} {β : α → Type*} {γ : (a : α) → β a �
   _ ≃ _ := uniqueSigma (fun ab ↦ γ (Sigma.fst <| Subtype.val ab) (Sigma.snd <| Subtype.val ab))
   _ ≃ γ a b := Equiv.cast <| by rw [← uniq.uniq ⟨⟨a, b⟩, h⟩]
 
+/--
+@isnad1 id=eq.0h8v.s10.47eba8a2c2f8 from=seed src=0 shape=965f516f vocab=dc8756d9
+-/
 @[simp]
 lemma sigmaSigmaSubtype_symm_apply {α : Type*} {β : α → Type*} {γ : (a : α) → β a → Type*}
     (p : (a : α) × β a → Prop) [uniq : Unique {ab // p ab}]
@@ -474,12 +545,18 @@ def sigmaSigmaSubtypeEq {α β : Type*} {γ : α → β → Type*} (a : α) (b :
     uniq := by rintro ⟨⟨a', b'⟩, ⟨rfl, rfl⟩⟩; rfl }
   sigmaSigmaSubtype (fun ⟨a', b'⟩ ↦ a' = a ∧ b' = b) ⟨rfl, rfl⟩
 
+/--
+@isnad1 id=eq.0h6v.s10.4fd44ef52497 from=seed src=0 shape=d9c7cd33 vocab=72129437
+-/
 @[simp]
 lemma sigmaSigmaSubtypeEq_apply {α β : Type*} {γ : α → β → Type*} {a : α} {b : β}
     (s : {s : (a : α) × (b : β) × γ a b // s.1 = a ∧ s.2.1 = b}) :
     sigmaSigmaSubtypeEq a b s = cast (congrArg₂ γ s.2.1 s.2.2) s.1.2.2 := by
   simp [sigmaSigmaSubtypeEq]
 
+/--
+@isnad1 id=eq.0h6v.s9.335eedb6295f from=seed src=0 shape=2600463d vocab=857c6498
+-/
 @[simp]
 lemma sigmaSigmaSubtypeEq_symm_apply {α β : Type*} {γ : α → β → Type*} {a : α} {b : β} (c : γ a b) :
     (sigmaSigmaSubtypeEq a b).symm c = ⟨⟨a, ⟨b, c⟩⟩, ⟨rfl, rfl⟩⟩ := by
@@ -505,31 +582,49 @@ def subtypeEquivCodomain (f : { x' // x' ≠ x } → Y) :
             default := ⟨x, rfl⟩, uniq := fun ⟨_, h⟩ => Subtype.val_injective h })
           (subtypeEquivRight fun _ => not_not)
 
+/--
+@isnad1 id=eq.0h4v.s8.a39530902ea3 from=seed src=0 shape=ed4df00d vocab=5c735b96
+-/
 @[simp]
 theorem coe_subtypeEquivCodomain (f : { x' // x' ≠ x } → Y) :
     (subtypeEquivCodomain f : _ → Y) =
       fun g : { g : X → Y // g ∘ (↑) = f } => (g : X → Y) x :=
   rfl
 
+/--
+@isnad1 id=eq.0h5v.s8.06c9ba403fd2 from=seed src=0 shape=bcb9cfaa vocab=5c735b96
+-/
 @[simp]
 theorem subtypeEquivCodomain_apply (f : { x' // x' ≠ x } → Y) (g) :
     subtypeEquivCodomain f g = (g : X → Y) x :=
   rfl
 
+/--
+@isnad1 id=eq.0h4v.s8.acf7b7e19ff6 from=seed src=0 shape=18f97b92 vocab=3083c2ac
+-/
 theorem coe_subtypeEquivCodomain_symm (f : { x' // x' ≠ x } → Y) :
     ((subtypeEquivCodomain f).symm : Y → _) = fun y =>
       ⟨fun x' => if h : x' ≠ x then f ⟨x', h⟩ else y, by grind⟩ :=
   rfl
 
+/--
+@isnad1 id=eq.0h6v.s8.ef1727dedbba from=seed src=0 shape=5ba3e86e vocab=b7b662e4
+-/
 @[simp]
 theorem subtypeEquivCodomain_symm_apply (f : { x' // x' ≠ x } → Y) (y : Y) (x' : X) :
     ((subtypeEquivCodomain f).symm y : X → Y) x' = if h : x' ≠ x then f ⟨x', h⟩ else y :=
   rfl
 
+/--
+@isnad1 id=eq.0h5v.s8.637b4f9978fc from=seed src=0 shape=ad9e45db vocab=1f8bdb41
+-/
 theorem subtypeEquivCodomain_symm_apply_eq (f : { x' // x' ≠ x } → Y) (y : Y) :
     ((subtypeEquivCodomain f).symm y : X → Y) x = y :=
   dite_eq_right (not_not.mpr rfl)
 
+/--
+@isnad1 id=eq.1h6v.s8.784ed623859c from=seed src=0 shape=95f26e52 vocab=7a2ef42b
+-/
 theorem subtypeEquivCodomain_symm_apply_ne
     (f : { x' // x' ≠ x } → Y) (y : Y) (x' : X) (h : x' ≠ x) :
     ((subtypeEquivCodomain f).symm y : X → Y) x' = f ⟨x', h⟩ :=
@@ -553,25 +648,43 @@ inverse, or `Equiv.ofInjective` in the general case.
 def Perm.extendDomain : Perm β' :=
   (permCongr f e).subtypeCongr (Equiv.refl _)
 
+/--
+@isnad1 id=eq.0h6v.s6.b2e037985f27 from=seed src=0 shape=ac6d246c vocab=7784383b
+-/
 @[simp]
 theorem Perm.extendDomain_apply_image (a : α') : e.extendDomain f (f a) = f (e a) := by
   simp [Perm.extendDomain]
 
+/--
+@isnad1 id=eq.0h7v.s7.31cf30656f10 from=seed src=0 shape=d956aa50 vocab=5a897c20
+-/
 theorem Perm.extendDomain_apply_subtype {b : β'} (h : p b) :
     e.extendDomain f b = f (e (f.symm ⟨b, h⟩)) := by
   simp [Perm.extendDomain, h]
 
+/--
+@isnad1 id=eq.1h6v.s5.50b06d74ec06 from=seed src=0 shape=f1714326 vocab=479abef4
+-/
 theorem Perm.extendDomain_apply_not_subtype {b : β'} (h : ¬p b) : e.extendDomain f b = b := by
   simp [Perm.extendDomain, h]
 
+/--
+@isnad1 id=eq.0h4v.s4.5b3314fdfec5 from=seed src=0 shape=53228c93 vocab=42cee986
+-/
 @[simp]
 theorem Perm.extendDomain_refl : Perm.extendDomain (Equiv.refl _) f = Equiv.refl _ := by
   simp [Perm.extendDomain]
 
+/--
+@isnad1 id=eq.0h5v.s5.40b8de508762 from=seed src=0 shape=7c567f39 vocab=3510f7da
+-/
 @[simp]
 theorem Perm.extendDomain_symm : (e.extendDomain f).symm = Perm.extendDomain e.symm f :=
   rfl
 
+/--
+@isnad1 id=eq.0h6v.s5.518903612a2b from=seed src=0 shape=0a589f36 vocab=9e810749
+-/
 theorem Perm.extendDomain_trans (e e' : Perm α') :
     (e.extendDomain f).trans (e'.extendDomain f) = Perm.extendDomain (e.trans e') f := by
   simp [Perm.extendDomain, permCongr_trans]
@@ -599,6 +712,9 @@ def subtypeQuotientEquivQuotientSubtype (p₁ : α → Prop) {s₁ : Setoid α} 
     rfl
   right_inv a := by induction a using Quotient.inductionOn; rfl
 
+/--
+@isnad1 id=eq.2h5v.s7.f61d25fbad8b from=seed src=0 shape=d78ec67f vocab=4e7e6de9
+-/
 @[simp]
 theorem subtypeQuotientEquivQuotientSubtype_mk (p₁ : α → Prop)
     [s₁ : Setoid α] [s₂ : Setoid (Subtype p₁)] (p₂ : Quotient s₁ → Prop) (hp₂ : ∀ a, p₁ a ↔ p₂ ⟦a⟧)
@@ -606,6 +722,9 @@ theorem subtypeQuotientEquivQuotientSubtype_mk (p₁ : α → Prop)
     (x hx) : subtypeQuotientEquivQuotientSubtype p₁ p₂ hp₂ h ⟨⟦x⟧, hx⟩ = ⟦⟨x, (hp₂ _).2 hx⟩⟧ :=
   rfl
 
+/--
+@isnad1 id=eq.2h4v.s7.10cfee80741b from=seed src=0 shape=90a6a5f3 vocab=ec588cd1
+-/
 @[simp]
 theorem subtypeQuotientEquivQuotientSubtype_symm_mk (p₁ : α → Prop)
     [s₁ : Setoid α] [s₂ : Setoid (Subtype p₁)] (p₂ : Quotient s₁ → Prop) (hp₂ : ∀ a, p₁ a ↔ p₂ ⟦a⟧)
@@ -621,13 +740,22 @@ variable [DecidableEq α]
 def swapCore (a b r : α) : α :=
   if r = a then b else if r = b then a else r
 
+/--
+@isnad1 id=eq.0h3v.s4.2990386f4bf2 from=seed src=0 shape=421adf1f vocab=4b175902
+-/
 theorem swapCore_self (r a : α) : swapCore a a r = r := by
   unfold swapCore
   split_ifs <;> simp [*]
 
+/--
+@isnad1 id=eq.0h4v.s4.c9813645f614 from=seed src=0 shape=95829a0f vocab=4b175902
+-/
 theorem swapCore_swapCore (r a b : α) : swapCore a b (swapCore a b r) = r := by
   unfold swapCore; split_ifs <;> grind
 
+/--
+@isnad1 id=eq.0h4v.s4.dea573a6ada7 from=seed src=0 shape=a5820f1b vocab=4b175902
+-/
 theorem swapCore_comm (r a b : α) : swapCore a b r = swapCore b a r := by
   unfold swapCore; split_ifs <;> grind
 
@@ -637,25 +765,43 @@ def swap (a b : α) : Perm α :=
   ⟨swapCore a b, swapCore a b, fun r => swapCore_swapCore r a b,
     fun r => swapCore_swapCore r a b⟩
 
+/--
+@isnad1 id=eq.0h2v.s4.b33c463253d2 from=seed src=0 shape=153f342d vocab=6f5bf983
+-/
 @[simp]
 theorem swap_self (a : α) : swap a a = Equiv.refl _ :=
   ext fun r => swapCore_self r a
 
+/--
+@isnad1 id=eq.0h3v.s4.1150e8449798 from=seed src=0 shape=68544d1e vocab=976fef26
+-/
 theorem swap_comm (a b : α) : swap a b = swap b a :=
   ext fun r => swapCore_comm r _ _
 
+/--
+@isnad1 id=eq.0h4v.s5.38b293dcbee2 from=seed src=0 shape=d6133451 vocab=cf1fbbcc
+-/
 @[aesop simp, grind =]
 theorem swap_apply_def (a b x : α) : swap a b x = if x = a then b else if x = b then a else x :=
   rfl
 
+/--
+@isnad1 id=eq.0h3v.s5.4ea3bb3ae580 from=seed src=0 shape=e4cf566e vocab=77ade824
+-/
 @[simp]
 theorem swap_apply_left (a b : α) : swap a b a = b :=
   ite_eq_left rfl
 
+/--
+@isnad1 id=eq.0h3v.s5.7a2870637992 from=seed src=0 shape=7be76a27 vocab=77ade824
+-/
 @[simp]
 theorem swap_apply_right (a b : α) : swap a b b = a := by
   grind
 
+/--
+@isnad1 id=eq.2h4v.s5.14e5000e177b from=seed src=0 shape=cefb8cee vocab=77ade824
+-/
 theorem swap_apply_of_ne_of_ne {a b x : α} : x ≠ a → x ≠ b → swap a b x = x := by
   grind
 
@@ -663,60 +809,101 @@ theorem eq_or_eq_of_swap_apply_ne_self {a b x : α} (h : swap a b x ≠ x) : x =
   contrapose! h
   exact swap_apply_of_ne_of_ne h.1 h.2
 
+/--
+@isnad1 id=eq.0h3v.s4.2acbd8b189fe from=seed src=0 shape=1a468bc1 vocab=19715d3d
+-/
 @[simp]
 theorem swap_swap (a b : α) : (swap a b).trans (swap a b) = Equiv.refl _ :=
   ext fun _ => swapCore_swapCore _ _ _
 
+/--
+@isnad1 id=eq.0h3v.s4.b345351aff66 from=seed src=0 shape=96832550 vocab=e1caeea8
+-/
 @[simp]
 theorem symm_swap (a b : α) : (swap a b).symm = swap a b :=
   rfl
 
+/--
+@isnad1 id=iff.0h3v.s4.911f2c8f2572 from=seed src=0 shape=855beb81 vocab=6f5bf983
+-/
 @[simp]
 theorem swap_eq_refl_iff {x y : α} : swap x y = Equiv.refl _ ↔ x = y :=
   ⟨fun h => (Equiv.refl _).injective (by grind), by grind⟩
 
+/--
+@isnad1 id=eq.0h5v.s7.3bd51f9053ef from=seed src=0 shape=4ce2f2bd vocab=fc82c83d
+-/
 theorem swap_comp_apply {a b x : α} (π : Perm α) :
     π.trans (swap a b) x = if π x = a then b else if π x = b then a else π x := by
   cases π
   rfl
 
+/--
+@isnad1 id=eq.0h3v.s5.afc54ebea804 from=seed src=0 shape=c3bb13ba vocab=324c662c
+-/
 theorem swap_eq_update (i j : α) : (Equiv.swap i j : α → α) = update (update id j i) i j := by
   grind
 
+/--
+@isnad1 id=eq.0h5v.s6.11acdfc4e486 from=seed src=0 shape=b8cdb61c vocab=b068769a
+-/
 theorem comp_swap_eq_update (i j : α) (f : α → β) :
     f ∘ Equiv.swap i j = update (update f j (f i)) i (f j) := by
   grind
 
+/--
+@isnad1 id=eq.0h5v.s6.af38881ae435 from=seed src=0 shape=c43a7c3c vocab=d22ed233
+-/
 @[simp]
 theorem symm_trans_swap_trans [DecidableEq β] (a b : α) (e : α ≃ β) :
     (e.symm.trans (swap a b)).trans e = swap (e a) (e b) := by
   grind
 
+/--
+@isnad1 id=eq.0h5v.s6.3f854e6622f1 from=seed src=0 shape=26f25682 vocab=d22ed233
+-/
 @[simp]
 theorem trans_swap_trans_symm [DecidableEq β] (a b : β) (e : α ≃ β) :
     (e.trans (swap a b)).trans e.symm = swap (e.symm a) (e.symm b) :=
   symm_trans_swap_trans a b e.symm
 
+/--
+@isnad1 id=eq.0h4v.s5.963f970a2026 from=seed src=0 shape=9f61093d vocab=77ade824
+-/
 @[simp]
 theorem swap_apply_self (i j a : α) : swap i j (swap i j a) = a := by
   grind
 
-/-- A function is invariant to a swap if it is equal at both elements -/
+/-- A function is invariant to a swap if it is equal at both elements
+@isnad1 id=eq.1h6v.s5.c64f4ca2aea3 from=seed src=0 shape=626c52f6 vocab=77ade824
+-/
 theorem apply_swap_eq_self {v : α → β} {i j : α} (hv : v i = v j) (k : α) :
     v (swap i j k) = v k := by
   grind
 
+/--
+@isnad1 id=iff.0h5v.s5.cb757a319f67 from=seed src=0 shape=27422c69 vocab=77ade824
+-/
 theorem swap_apply_eq_iff {x y z w : α} : swap x y z = w ↔ z = swap x y w := by
   grind
 
+/--
+@isnad1 id=iff.0h4v.s5.b7ad93f5e02f from=seed src=0 shape=9a67b10f vocab=77ade824
+-/
 theorem swap_apply_ne_self_iff {a b x : α} : swap a b x ≠ x ↔ a ≠ b ∧ (x = a ∨ x = b) := by
   grind
 
+/--
+@isnad1 id=injectiv.0h2v.s4.360b5bf8263e from=seed src=0 shape=9988de99 vocab=f5409456
+-/
 theorem swap_injective_of_left (a : α) :
     Function.Injective (fun x ↦ Equiv.swap a x) := fun c d h ↦ by
   simp only at h
   rw [← Equiv.swap_apply_left a c, h, Equiv.swap_apply_left]
 
+/--
+@isnad1 id=injectiv.0h2v.s4.df0e64a12a3c from=seed src=0 shape=32dba72d vocab=f5409456
+-/
 theorem swap_injective_of_right (a : α) :
     Function.Injective (fun x ↦ Equiv.swap x a) := by
   simp_rw [swap_comm _ a]
@@ -727,6 +914,9 @@ instance (α : Type*) [Nontrivial α] : Nontrivial (Equiv.Perm α) := by
   obtain ⟨a : α⟩ := Nontrivial.to_nonempty (α := α)
   exact Function.Injective.nontrivial (Equiv.swap_injective_of_left a)
 
+/--
+@isnad1 id=eq.2h4v.s6.d6101adb8edc from=seed src=0 shape=8f795b8b vocab=bc0d3777
+-/
 lemma image_swap_of_mem_of_notMem {α : Type*} [DecidableEq α] {s : Set α} {i j : α}
     (hi : i ∈ s) (hj : j ∉ s) : s.image (swap i j) = insert j s \ {i} :=
   Set.ext fun a ↦ by
@@ -741,11 +931,17 @@ lemma image_swap_of_mem_of_notMem {α : Type*} [DecidableEq α] {s : Set α} {i 
 
 namespace Perm
 
+/--
+@isnad1 id=eq.0h4v.s5.63e5e0872b77 from=seed src=0 shape=4c4619e9 vocab=c210b5df
+-/
 @[simp]
 theorem sumCongr_swap_refl {α β : Sort _} [DecidableEq α] [DecidableEq β] (i j : α) :
     Equiv.Perm.sumCongr (Equiv.swap i j) (Equiv.refl β) = Equiv.swap (Sum.inl i) (Sum.inl j) := by
   aesop
 
+/--
+@isnad1 id=eq.0h4v.s5.6fcd82e1630b from=seed src=0 shape=685905cd vocab=e469e6cd
+-/
 @[simp]
 theorem sumCongr_refl_swap {α β : Sort _} [DecidableEq α] [DecidableEq β] (i j : β) :
     Equiv.Perm.sumCongr (Equiv.refl α) (Equiv.swap i j) = Equiv.swap (Sum.inr i) (Sum.inr j) := by
@@ -757,6 +953,9 @@ end Perm
 def setValue (f : α ≃ β) (a : α) (b : β) : α ≃ β :=
   (swap a (f.symm b)).trans f
 
+/--
+@isnad1 id=eq.0h5v.s5.b84399ddf191 from=seed src=0 shape=5ef318f2 vocab=ad4004ee
+-/
 @[simp]
 theorem setValue_eq (f : α ≃ β) (a : α) (b : β) : setValue f a b a = b := by
   simp [setValue, swap_apply_left]
@@ -771,17 +970,29 @@ namespace Function.Involutive
 def toPerm (f : α → α) (h : Involutive f) : Equiv.Perm α :=
   ⟨f, f, h.leftInverse, h.rightInverse⟩
 
+/--
+@isnad1 id=eq.1h2v.s5.ffde941d8b55 from=seed src=0 shape=8fb6fbd1 vocab=86dd0b0d
+-/
 @[simp]
 theorem coe_toPerm {f : α → α} (h : Involutive f) : (h.toPerm f : α → α) = f :=
   rfl
 
+/--
+@isnad1 id=eq.1h2v.s4.c48d7d967003 from=seed src=0 shape=f4bc1658 vocab=64eb9025
+-/
 @[simp]
 theorem toPerm_symm {f : α → α} (h : Involutive f) : (h.toPerm f).symm = h.toPerm f :=
   rfl
 
+/--
+@isnad1 id=involuti.1h2v.s4.ca909095c4ac from=seed src=0 shape=8da13170 vocab=86dd0b0d
+-/
 theorem toPerm_involutive {f : α → α} (h : Involutive f) : Involutive (h.toPerm f) :=
   h
 
+/--
+@isnad1 id=eq.1h2v.s5.787fa22c5a92 from=seed src=0 shape=4ea328bd vocab=412c6266
+-/
 theorem symm_eq_self_of_involutive (f : Equiv.Perm α) (h : Involutive f) : f.symm = f :=
   DFunLike.coe_injective (h.leftInverse_iff.mp f.left_inv)
 
@@ -790,6 +1001,9 @@ end Function.Involutive
 theorem PLift.eq_up_iff_down_eq {x : PLift α} {y : α} : x = PLift.up y ↔ x.down = y :=
   Equiv.plift.eq_symm_apply
 
+/--
+@isnad1 id=eq.1h6v.s6.1fc8403184df from=seed src=0 shape=5d212f49 vocab=19d0be1d
+-/
 theorem Function.Injective.map_swap [DecidableEq α] [DecidableEq β] {f : α → β}
     (hf : Function.Injective f) (x y z : α) :
     f (Equiv.swap x y z) = Equiv.swap (f x) (f y) (f z) := by
@@ -813,7 +1027,9 @@ LHS would have type `P a` while the RHS would have type `P (e.symm (e a))`. For 
 we have to explicitly substitute along `e.symm (e a) = a` in the statement of this lemma. -/
 add_decl_doc Equiv.piCongrLeft'_symm_apply
 
-/-- This lemma is impractical to state in the dependent case. -/
+/-- This lemma is impractical to state in the dependent case.
+@isnad1 id=eq.0h4v.s5.287833ad2549 from=seed src=0 shape=15491641 vocab=a1fc18ff
+-/
 @[simp]
 theorem piCongrLeft'_symm (P : Sort*) (e : α ≃ β) :
     (piCongrLeft' (fun _ => P) e).symm = piCongrLeft' _ e.symm := by ext; simp [piCongrLeft']
@@ -821,13 +1037,18 @@ theorem piCongrLeft'_symm (P : Sort*) (e : α ≃ β) :
 /-- Note: the "obvious" statement `(piCongrLeft' P e).symm g a = g (e a)` doesn't typecheck: the
 LHS would have type `P a` while the RHS would have type `P (e.symm (e a))`. This lemma is a way
 around it in the case where `a` is of the form `e.symm b`, so we can use `g b` instead of
-`g (e (e.symm b))`. -/
+`g (e (e.symm b))`.
+@isnad1 id=eq.0h6v.s8.fddc6c644436 from=seed src=0 shape=ed57c6cf vocab=2af7213c
+-/
 @[simp]
 lemma piCongrLeft'_symm_apply_apply (P : α → Sort*) (e : α ≃ β) (g : ∀ b, P (e.symm b)) (b : β) :
     (piCongrLeft' P e).symm g (e.symm b) = g b := by
   rw [piCongrLeft'_symm_apply, ← heq_iff_eq, eqRec_heq_iff]
   exact congr_arg_heq _ (e.apply_symm_apply _)
 
+/--
+@isnad1 id=eq.0h2v.s5.d5840cb9c8ef from=seed src=0 shape=f5d42844 vocab=61bd15de
+-/
 @[simp]
 lemma piCongrLeft'_refl (P : α → Sort*) : piCongrLeft' P (.refl α) = .refl (∀ a, P a) := rfl
 
@@ -845,16 +1066,24 @@ def piCongrLeft : (∀ a, P (e a)) ≃ ∀ b, P b :=
 
 /-- Note: the "obvious" statement `(piCongrLeft P e) f b = f (e.symm b)` doesn't typecheck: the
 LHS would have type `P b` while the RHS would have type `P (e (e.symm b))`. For that reason,
-we have to explicitly substitute along `e (e.symm b) = b` in the statement of this lemma. -/
+we have to explicitly substitute along `e (e.symm b) = b` in the statement of this lemma.
+@isnad1 id=eq.0h6v.s8.930c804468b4 from=seed src=0 shape=21640d60 vocab=ae2528ed
+-/
 lemma piCongrLeft_apply (f : ∀ a, P (e a)) (b : β) :
     (piCongrLeft P e) f b = e.apply_symm_apply b ▸ f (e.symm b) :=
   rfl
 
+/--
+@isnad1 id=eq.0h6v.s7.cac301b1ec39 from=seed src=0 shape=e3a1dda6 vocab=9fe29360
+-/
 @[simp, grind =]
 lemma piCongrLeft_symm_apply (g : ∀ b, P b) (a : α) :
     (piCongrLeft P e).symm g a = g (e a) :=
   piCongrLeft'_apply P e.symm g a
 
+/--
+@isnad1 id=eq.0h2v.s5.73af5383dbc4 from=seed src=0 shape=c5c59eb8 vocab=267bc43f
+-/
 @[simp]
 lemma piCongrLeft_refl (P : α → Sort*) : piCongrLeft P (.refl α) = .refl (∀ a, P a) :=
   rfl
@@ -862,7 +1091,9 @@ lemma piCongrLeft_refl (P : α → Sort*) : piCongrLeft P (.refl α) = .refl (�
 /-- Note: the "obvious" statement `(piCongrLeft P e) f b = f (e.symm b)` doesn't typecheck: the
 LHS would have type `P b` while the RHS would have type `P (e (e.symm b))`. This lemma is a way
 around it in the case where `b` is of the form `e a`, so we can use `f a` instead of
-`f (e.symm (e a))`. -/
+`f (e.symm (e a))`.
+@isnad1 id=eq.0h6v.s8.88d60042a38d from=seed src=0 shape=f0fe17ba vocab=b64807e5
+-/
 @[simp, grind =]
 lemma piCongrLeft_apply_apply (f : ∀ a, P (e a)) (a : α) :
     (piCongrLeft P e) f (e a) = f a :=
@@ -870,16 +1101,25 @@ lemma piCongrLeft_apply_apply (f : ∀ a, P (e a)) (a : α) :
 
 open Sum
 
+/--
+@isnad1 id=eq.0h6v.s8.7b009bc0c9ae from=seed src=0 shape=7c976896 vocab=e89e9ff1
+-/
 lemma piCongrLeft_apply_eq_cast {P : β → Sort v} {e : α ≃ β}
     (f : (a : α) → P (e a)) (b : β) :
     piCongrLeft P e f b = cast (congr_arg P (e.apply_symm_apply b)) (f (e.symm b)) :=
   eqRec_eq_cast _ _
 
+/--
+@isnad1 id=eq.0h8v.s10.d05408efae07 from=seed src=0 shape=1cccba26 vocab=8899b319
+-/
 theorem piCongrLeft_sumInl {ι ι' ι''} (π : ι'' → Type*) (e : ι ⊕ ι' ≃ ι'') (f : ∀ i, π (e (inl i)))
     (g : ∀ i, π (e (inr i))) (i : ι) :
     piCongrLeft π e (sumPiEquivProdPi (fun x => π (e x)) |>.symm (f, g)) (e (inl i)) = f i := by
   grind
 
+/--
+@isnad1 id=eq.0h8v.s10.ae696b0eec22 from=seed src=0 shape=e41e3034 vocab=8899b319
+-/
 theorem piCongrLeft_sumInr {ι ι' ι''} (π : ι'' → Type*) (e : ι ⊕ ι' ≃ ι'') (f : ∀ i, π (e (inl i)))
     (g : ∀ i, π (e (inr i))) (j : ι') :
     piCongrLeft π e (sumPiEquivProdPi (fun x => π (e x)) |>.symm (f, g)) (e (inr j)) = g j := by
@@ -898,16 +1138,25 @@ of equivalences of the matching fibers.
 def piCongr : (∀ a, W a) ≃ ∀ b, Z b :=
   (Equiv.piCongrRight h₂).trans (Equiv.piCongrLeft _ h₁)
 
+/--
+@isnad1 id=eq.0h6v.s8.8e2d602aa050 from=seed src=0 shape=744a8fd8 vocab=65010cbc
+-/
 @[simp]
 theorem coe_piCongr_symm :
     ((h₁.piCongr h₂).symm : (∀ b, Z b) → ∀ a, W a) = fun f a => (h₂ a).symm (f (h₁ a)) :=
   rfl
 
+/--
+@isnad1 id=eq.0h7v.s8.432828dbcf92 from=seed src=0 shape=979ca217 vocab=65010cbc
+-/
 @[simp, grind =]
 theorem piCongr_symm_apply (f : ∀ b, Z b) :
     (h₁.piCongr h₂).symm f = fun a => (h₂ a).symm (f (h₁ a)) :=
   rfl
 
+/--
+@isnad1 id=eq.0h8v.s8.b687c124a605 from=seed src=0 shape=ddb582cd vocab=d85b9f98
+-/
 @[simp, grind =]
 theorem piCongr_apply_apply (f : ∀ a, W a) (a : α) : h₁.piCongr h₂ f (h₁ a) = h₂ a (f a) := by
   rw [piCongr, trans_apply, piCongrLeft_apply_apply, piCongrRight_apply, Pi.map_apply]
@@ -925,14 +1174,23 @@ of equivalences of the matching fibres.
 def piCongr' : (∀ a, W a) ≃ ∀ b, Z b :=
   (piCongr h₁.symm fun b => (h₂ b).symm).symm
 
+/--
+@isnad1 id=eq.0h6v.s8.6ba49aa34acf from=seed src=0 shape=798e2a38 vocab=e24c91a9
+-/
 @[simp]
 theorem coe_piCongr' :
     (h₁.piCongr' h₂ : (∀ a, W a) → ∀ b, Z b) = fun f b => h₂ b <| f <| h₁.symm b :=
   rfl
 
+/--
+@isnad1 id=eq.0h7v.s8.62f27ba9c320 from=seed src=0 shape=ebf9226a vocab=e24c91a9
+-/
 theorem piCongr'_apply (f : ∀ a, W a) : h₁.piCongr' h₂ f = fun b => h₂ b <| f <| h₁.symm b :=
   rfl
 
+/--
+@isnad1 id=eq.0h8v.s8.8936a9820910 from=seed src=0 shape=76ca43ab vocab=e24c91a9
+-/
 @[simp]
 theorem piCongr'_symm_apply_symm_apply (f : ∀ b, Z b) (b : β) :
     (h₁.piCongr' h₂).symm f (h₁.symm b) = (h₂ b).symm (f b) := by
@@ -948,11 +1206,17 @@ def piCongrSigmaFiber {γ₁ γ₂ : α → Sort*} (e : (a : α) → γ₁ a ≃
     ((σ : (y : β) × { x : α // f x = y }) → γ₁ σ.2.1) ≃ ((a : α) → γ₂ a) :=
   piCongrLeft γ₁ (sigmaFiberEquiv f) |>.trans (piCongrRight e)
 
+/--
+@isnad1 id=eq.0h8v.s9.23bc580714f5 from=seed src=0 shape=d7d035f6 vocab=9c093497
+-/
 @[simp]
 theorem piCongrSigmaFiber_apply {γ₁ γ₂ : α → Sort*} (e : (a : α) → γ₁ a ≃ γ₂ a)
     (g : (σ : (y : β) × { x : α // f x = y }) → γ₁ σ.2.1) (a : α) :
     piCongrSigmaFiber e g a = e a (g ⟨f a, ⟨a, rfl⟩⟩) := rfl
 
+/--
+@isnad1 id=eq.0h8v.s10.5758cd3245ff from=seed src=0 shape=cd48e2fd vocab=53f575e0
+-/
 @[simp]
 theorem piCongrSigmaFiber_symm_apply {γ₁ γ₂ : α → Sort*} (e : (a : α) → γ₁ a ≃ γ₂ a)
     (g : (a : α) → γ₂ a) (σ : (y : β) × { x : α // f x = y }) :
@@ -969,11 +1233,17 @@ def piCongrFiberwise {γ₁ : α → Type*} {γ₂ : β → Type*} {f : α → �
     (piCurry fun b (x : { x : α // f x = b }) => γ₁ x.1)).trans
       (piCongrRight e)
 
+/--
+@isnad1 id=eq.0h8v.s8.0f906ad293ce from=seed src=0 shape=cbf156dc vocab=0b5021be
+-/
 @[simp]
 theorem piCongrFiberwise_apply {γ₁ : α → Type*} {γ₂ : β → Type*} {f : α → β}
     (e : (b : β) → ((σ : { a : α // f a = b }) → γ₁ σ.1) ≃ γ₂ b) (g : (a : α) → γ₁ a) (b : β) :
     piCongrFiberwise e g b = e b fun σ => g σ.1 := rfl
 
+/--
+@isnad1 id=eq.0h8v.s8.3d607c42c799 from=seed src=0 shape=f75024ce vocab=62ab0f3d
+-/
 @[simp]
 theorem piCongrFiberwise_symm_apply {γ₁ : α → Type*} {γ₂ : β → Type*} {f : α → β}
     (e : (b : β) → ((σ : { a : α // f a = b }) → γ₁ σ.1) ≃ γ₂ b) (g : (b : β) → γ₂ b) (a : α) :
@@ -993,8 +1263,14 @@ section BinaryOp
 
 variable {α₁ β₁ : Type*} (e : α₁ ≃ β₁) (f : α₁ → α₁ → α₁)
 
+/--
+@isnad1 id=semiconj.0h4v.s6.a8c99ec299d1 from=seed src=0 shape=f6a54a3a vocab=c0056b11
+-/
 theorem semiconj_conj (f : α₁ → α₁) : Semiconj e f (e.conj f) := fun x => by simp
 
+/--
+@isnad1 id=semiconj.0h4v.s6.313e12b92bbd from=seed src=0 shape=16b814cb vocab=a61dd6d2
+-/
 theorem semiconj₂_conj : Semiconj₂ e f (e.arrowCongr e.conj f) := fun x y => by simp [arrowCongr]
 
 instance [Std.Associative f] : Std.Associative (e.arrowCongr (e.arrowCongr e) f) :=
@@ -1007,6 +1283,9 @@ end BinaryOp
 
 section ULift
 
+/--
+@isnad1 id=eq.0h2v.s5.499657c08fb0 from=seed src=0 shape=2a16cb04 vocab=3bbaa178
+-/
 @[simp]
 theorem ulift_symm_down {α} (x : α) : (Equiv.ulift.{u, v}.symm x).down = x :=
   rfl
@@ -1015,11 +1294,17 @@ end ULift
 
 end Equiv
 
+/--
+@isnad1 id=eq.1h6v.s6.d891cd7016bd from=seed src=0 shape=574eca96 vocab=19d0be1d
+-/
 theorem Function.Injective.swap_apply
     [DecidableEq α] [DecidableEq β] {f : α → β} (hf : Function.Injective f) (x y z : α) :
     Equiv.swap (f x) (f y) (f z) = f (Equiv.swap x y z) :=
   Eq.symm (map_swap hf x y z)
 
+/--
+@isnad1 id=eq.1h5v.s6.4ca2ae45374b from=seed src=0 shape=9ffaa306 vocab=0ddba75e
+-/
 theorem Function.Injective.swap_comp
     [DecidableEq α] [DecidableEq β] {f : α → β} (hf : Function.Injective f) (x y : α) :
     Equiv.swap (f x) (f y) ∘ f = f ∘ Equiv.swap x y :=
@@ -1052,21 +1337,33 @@ namespace Function
 
 variable {α' : Sort*}
 
+/--
+@isnad1 id=eq.0h7v.s6.2eb303e0d871 from=seed src=0 shape=c14f997f vocab=39748ded
+-/
 theorem update_comp_equiv [DecidableEq α'] [DecidableEq α] (f : α → β)
     (g : α' ≃ α) (a : α) (v : β) :
     update f a v ∘ g = update (f ∘ g) (g.symm a) v := by
   rw [← update_comp_eq_of_injective _ g.injective, g.apply_symm_apply]
 
+/--
+@isnad1 id=eq.0h8v.s6.555207cfa8fd from=seed src=0 shape=67838c01 vocab=39748ded
+-/
 theorem update_apply_equiv_apply [DecidableEq α'] [DecidableEq α] (f : α → β)
     (g : α' ≃ α) (a : α) (v : β) (a' : α') : update f a v (g a') = update (f ∘ g) (g.symm a) v a' :=
   congr_fun (update_comp_equiv f g a v) a'
 
+/--
+@isnad1 id=eq.0h7v.s8.edf1dfd4260f from=seed src=0 shape=ee867ae0 vocab=ea5d1e2d
+-/
 theorem piCongrLeft'_update [DecidableEq α] [DecidableEq β] (P : α → Sort*) (e : α ≃ β)
     (f : ∀ a, P a) (b : β) (x : P (e.symm b)) :
     e.piCongrLeft' P (update f (e.symm b) x) = update (e.piCongrLeft' P f) b x := by
   ext b'
   rcases eq_or_ne b' b with (rfl | h) <;> simp_all
 
+/--
+@isnad1 id=eq.0h7v.s9.d547dd437636 from=seed src=0 shape=ad793130 vocab=ea5d1e2d
+-/
 theorem piCongrLeft'_symm_update [DecidableEq α] [DecidableEq β] (P : α → Sort*) (e : α ≃ β)
     (f : ∀ b, P (e.symm b)) (b : β) (x : P (e.symm b)) :
     (e.piCongrLeft' P).symm (update f b x) = update ((e.piCongrLeft' P).symm f) (e.symm b) x := by

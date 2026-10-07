@@ -49,6 +49,9 @@ Gödel, beta function
 
 namespace Nat
 
+/--
+@isnad1 id=coprime.1h3v.s5.b6c45eca38d2 from=seed src=0 shape=a4f1f147 vocab=895da5be
+-/
 lemma coprime_mul_succ {n m a} (ha : m - n ∣ a) : Coprime (n * a + 1) (m * a + 1) :=
   Nat.coprime_of_dvd fun p pp hn hm => by
     have : p ∣ (m - n) * a := by
@@ -71,6 +74,9 @@ private def coprimes (a : Fin m → ℕ) : Fin m → ℕ := fun i => (i + 1) * (
 
 set_option backward.privateInPublic true in
 set_option backward.privateInPublic.warn false in
+/--
+@isnad1 id=lt.0h3v.s4.2ed26a1295d2 from=seed src=0 shape=09862338 vocab=391362e9
+-/
 lemma coprimes_lt (a : Fin m → ℕ) (i) : a i < coprimes a i := by
   have h₁ : a i < supOfSeq a :=
     Nat.lt_add_one_iff.mpr (le_max_of_le_right <| Finset.le_sup (by simp))
@@ -104,7 +110,9 @@ def unbeta (l : List ℕ) : ℕ :=
     (by simpa using Set.pairwise_univ.mpr (pairwise_coprime_coprimes _)) : ℕ).pair
   (supOfSeq (m := l.length) (l[·]))!
 
-/-- **Gödel's Beta Function Lemma** -/
+/-- **Gödel's Beta Function Lemma**
+@isnad1 id=eq.0h2v.s6.669e72be0070 from=seed src=0 shape=3205ea74 vocab=7b6136a4
+-/
 lemma beta_unbeta_coe (l : List ℕ) (i : Fin l.length) : beta (unbeta l) i = l[i] := by
   simpa [beta, unbeta, coprimes] using mod_eq_of_modEq
     ((chineseRemainderOfFinset (l[·]) (coprimes (l[·])) Finset.univ

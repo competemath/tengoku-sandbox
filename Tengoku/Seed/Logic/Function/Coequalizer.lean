@@ -41,9 +41,15 @@ variable {α β : Type*} (f g : α → β)
 def mk (x : β) : Coequalizer f g :=
   Quot.mk _ x
 
+/--
+@isnad1 id=eq.0h5v.s5.4ee285afa79a from=seed src=0 shape=5b7c74ee vocab=eaca9942
+-/
 lemma condition (x : α) : mk f g (f x) = mk f g (g x) :=
   Quot.sound (.intro x)
 
+/--
+@isnad1 id=surjecti.0h4v.s4.34467e2c66db from=seed src=0 shape=16bda6e7 vocab=96dd644a
+-/
 lemma mk_surjective : Function.Surjective (mk f g) :=
   Quot.exists_rep
 
@@ -51,6 +57,9 @@ lemma mk_surjective : Function.Surjective (mk f g) :=
 def desc {γ : Type*} (u : β → γ) (hu : u ∘ f = u ∘ g) : Coequalizer f g → γ :=
   Quot.lift u (fun _ _ (.intro e) ↦ congrFun hu e)
 
+/--
+@isnad1 id=eq.1h7v.s5.9d17b9fde257 from=seed src=0 shape=af33906b vocab=dcf8c647
+-/
 @[simp] lemma desc_mk {γ : Type*} (u : β → γ) (hu : u ∘ f = u ∘ g) (x : β) :
     desc f g u hu (mk f g x) = u x :=
   rfl

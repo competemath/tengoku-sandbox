@@ -31,18 +31,30 @@ namespace Encodable
 def sortedUniv (α) [Fintype α] [Encodable α] : List α :=
   Finset.univ.sort (Encodable.encode' α ⁻¹'o (· ≤ ·))
 
+/--
+@isnad1 id=mem.0h2v.s4.3cba5a0d6b6b from=seed src=0 shape=18593467 vocab=a7f0a0dc
+-/
 @[simp]
 theorem mem_sortedUniv {α} [Fintype α] [Encodable α] (x : α) : x ∈ sortedUniv α :=
   (Finset.mem_sort _).2 (Finset.mem_univ _)
 
+/--
+@isnad1 id=eq.0h1v.s4.e6d7db2cf975 from=seed src=0 shape=290c6fd3 vocab=b5bbadb4
+-/
 @[simp]
 theorem length_sortedUniv (α) [Fintype α] [Encodable α] : (sortedUniv α).length = Fintype.card α :=
   Finset.length_sort _
 
+/--
+@isnad1 id=nodup.0h1v.s3.99e135c67c82 from=seed src=0 shape=4c9b52a8 vocab=eb0e5e71
+-/
 @[simp]
 theorem sortedUniv_nodup (α) [Fintype α] [Encodable α] : (sortedUniv α).Nodup :=
   Finset.sort_nodup _ _
 
+/--
+@isnad1 id=eq.0h1v.s4.faf72a3ce644 from=seed src=0 shape=fbb2e310 vocab=2f802fcb
+-/
 @[simp]
 theorem sortedUniv_toFinset (α) [Fintype α] [Encodable α] [DecidableEq α] :
     (sortedUniv α).toFinset = Finset.univ :=
@@ -73,10 +85,16 @@ def raise' : List ℕ → ℕ → List ℕ
   | [], _ => []
   | m :: l, n => (m + n) :: raise' l (m + n + 1)
 
+/--
+@isnad1 id=eq.0h2v.s3.3b9ba46e3773 from=seed src=0 shape=f8d2ce29 vocab=caa13fc8
+-/
 theorem lower_raise' : ∀ l n, lower' (raise' l n) n = l
   | [], _ => rfl
   | m :: l, n => by simp [raise', lower', lower_raise']
 
+/--
+@isnad1 id=eq.2h2v.s5.40e783582757 from=seed src=0 shape=9416a232 vocab=29ecfeb2
+-/
 theorem raise_lower' : ∀ {l n}, (∀ m ∈ l, n ≤ m) → List.SortedLT l → raise' (lower' l n) n = l
   | [], _, _, _ => rfl
   | m :: l, n, h₁, h₂ => by
@@ -85,19 +103,30 @@ theorem raise_lower' : ∀ {l n}, (∀ m ∈ l, n ≤ m) → List.SortedLT l →
       raise_lower' (fun _ => List.rel_of_pairwise_cons h₂.pairwise : ∀ a ∈ l, m < a)
       h₂.pairwise.of_cons.sortedLT]
 
+/--
+@isnad1 id=ischain.0h2v.s4.e30b881eae22 from=seed src=0 shape=ce911725 vocab=62473ccc
+-/
 theorem isChain_raise' : ∀ (l) (n), List.IsChain (· < ·) (raise' l n)
   | [], _ => .nil
   | [_], _ => .singleton _
   | _ :: _ :: _, _ => .cons_cons (by lia) (isChain_raise' (_ :: _) _)
 
+/--
+@isnad1 id=ischain.0h2v.s5.7f84e62f835b from=seed src=0 shape=8ca312de vocab=a1597ae9
+-/
 theorem isChain_cons_raise' (l m) : List.IsChain (· < ·) (m :: raise' l (m + 1)) :=
   isChain_raise' (m :: l) 0
 
+/--
+@isnad1 id=ischain.1h3v.s4.1fb2d2cf2e4c from=seed src=0 shape=8cb8a360 vocab=c06ab291
+-/
 theorem isChain_cons_raise'_of_lt (l) {m n} (h : m < n) :
     List.IsChain (· < ·) (m :: raise' l n) := by
   unfold raise'; cases l with grind [isChain_cons_raise']
 
-/-- `raise' l n` is a strictly increasing sequence. -/
+/-- `raise' l n` is a strictly increasing sequence.
+@isnad1 id=sortedlt.0h2v.s3.d2c67d5743f4 from=seed src=0 shape=c64140a1 vocab=fe901fb9
+-/
 theorem raise'_sorted (l n) : List.SortedLT (raise' l n) := (isChain_raise' _ _).sortedLT
 
 /-- Makes `raise' l n` into a finset. Elements are distinct thanks to `raise'_sorted`. -/
