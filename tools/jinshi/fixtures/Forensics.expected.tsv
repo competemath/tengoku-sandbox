@@ -1,0 +1,7 @@
+# check	severity	name	a word the detail must contain
+forensics	warn	JinshiFixtures.big	2^64
+forensics	info	JinshiFixtures.dec	decide
+forensics	info	JinshiFixtures.casts	cast chain
+forensics	info	JinshiFixtures.ratio	automation
+forensics	info	JinshiFixtures.triv	nearly trivial
+forensics	warn	JinshiFixtures.via_compiled	implemented_by

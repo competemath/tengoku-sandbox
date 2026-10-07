@@ -22,3 +22,7 @@ content	warn	JinshiFixtures.about_secret	a = a
 dossier	info	JinshiFixtures.about_secret	secret
 autoimplicit	fail	JinshiFixtures.typo_quantified	m
 autoimplicit	warn	JinshiFixtures.List.length	α
+duplicate	warn	JinshiFixtures.add_zero'	Nat.add_zero
+duplicate	warn	JinshiFixtures.conclusion_is_hypothesis	nestedProof
+duplicate	warn	JinshiFixtures.iff_self_only	Iff.refl
+duplicate	info	JinshiFixtures.nat_sub_claim	honest_sub

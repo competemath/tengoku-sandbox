@@ -1,0 +1,4 @@
+# check	severity	name	a word the detail must contain
+unusedhyp	warn	JinshiFixtures.unused_hyp	h : n > 0
+unusedhyp	warn	JinshiFixtures.one_of_two_unused	hlt
+unusedhyp	warn	JinshiFixtures.hyp_in_later_unused_hyp	h2

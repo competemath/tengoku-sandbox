@@ -42,6 +42,11 @@ supportInterpreter = true
 # Jinshi's environment examinations (docs/jinshi.md): the trusted-computing-base inventory, shadowed seed names, truncated
 # arithmetic and junk values in a library's statements, the definitions a statement rests on, statements that say nothing.
 # Imports only Lean.
+[[lean_lib]]
+name = "Jinshi"
+roots = ["Jinshi"]
+globs = ["Jinshi.+"]
+
 [[lean_exe]]
 name = "tengoku-jinshi"
 root = "TengokuJinshi"

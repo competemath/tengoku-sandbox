@@ -4,6 +4,7 @@ Jinshi fixture: a proof that never met the kernel. `debug.skipKernelTC` makes `a
 replay examinations (leanchecker, lean4lean) must refuse this module: that is what they are for. Nothing of the tree may ever contain
 this (the content lint refuses `run_cmd` and the option); it is a test of the test.
 -/
+-- jinshi: only decide
 import Lean
 open Lean Elab Command
 
@@ -13,6 +14,6 @@ run_cmd liftCoreM do
   let decl := Declaration.thmDecl { name := `JinshiFixtures.forged, levelParams := [], type := mkConst ``False, value := mkConst ``True.intro }
   withOptions (fun o => o.setBool `debug.skipKernelTC true) (addDecl decl)
 
-theorem honest : True := trivial
+theorem honest_beside_forged : True := trivial
 
 end JinshiFixtures

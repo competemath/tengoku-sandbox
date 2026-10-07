@@ -1,0 +1,2 @@
+# the forged proof of False: evaluation says the statement is false (the replay kernels refuse the module; scripts/jinshi/selftest.py tests that separately)
+decide	fail	JinshiFixtures.forged	FALSE
