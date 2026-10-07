@@ -62,6 +62,19 @@ class MarkdownMove(unittest.TestCase):
                 r.commit("move into " + target)
                 self.assertEqual(credits(r)[0], 1, target)
 
+    def test_each_gained_occurrence_covers_one_removal(self):
+        """Two Markdown files lose the same credit line; gained once elsewhere, one removal is still a removal (CodeRabbit, #333)."""
+        for gains, rc in ((1, 1), (2, 0)):
+            with self.subTest(gains=gains):
+                r = repo()
+                r.write("docs/other.md", "# other\n\n" + EXAMPLE)
+                r.commit("the same credit line in a second file")
+                r.write("README.md", "# t\n")
+                r.write("docs/other.md", "# other\n")
+                r.write("docs/credit.md", "# Credit\n\n" + EXAMPLE * gains + SENTENCE)
+                r.commit("move both")
+                self.assertEqual(credits(r)[0], rc)
+
     def test_a_modules_credit_does_not_travel_into_markdown(self):
         r = Repo()
         r.write("Tengoku/Logic/Basic.lean", "/-\n-/\ntheorem seeded : True := trivial\n")
