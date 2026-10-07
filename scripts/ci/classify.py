@@ -11,6 +11,7 @@ import re
 import sys
 
 from _git import changed_files, fail, gh_output, pascal, run, tier_of
+from native_check import is_native
 from restructure_check import is_restructure
 from tag_check import is_tag
 
@@ -42,6 +43,15 @@ if is_tag(base, head):
         fail(f"a tag PR comes from the factory's account ({bot_}), not from {os.environ.get('PR_ACTOR') or 'nobody'}")
     print(f"class=tag ({len(files)} modules)")
     gh_output("class", "tag")
+    gh_output("files", " ".join(p for _, p in files))
+    sys.exit(0)
+# A NATIVE PR adds or edits modules of Tengoku/Native/ (novel content: scripts/ci/native_check.py judges it) and nothing else.
+if is_native(base, head):
+    bot_ = os.environ.get("TENGOKU_BOT", "tengoku-bot")
+    if not (os.environ.get("PR_ACTOR", "") == bot_ or os.environ.get("TENGOKU_ACTOR_CHECKED") == "1"):
+        fail(f"a native PR comes from the factory's account ({bot_}), not from {os.environ.get('PR_ACTOR') or 'nobody'}")
+    print(f"class=native ({len(files)} files)")
+    gh_output("class", "native")
     gh_output("files", " ".join(p for _, p in files))
     sys.exit(0)
 # A SCOPE-FIX PR makes what a merged intake library registered for the whole tree local to its modules (scripts/ci/scope_fix_check.py judges the
