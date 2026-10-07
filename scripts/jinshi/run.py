@@ -5,9 +5,11 @@ On a built tree (scripts/cache.sh get; lake build Tengoku.All; lake build tengok
 
   replay        `leanchecker <module>`: the toolchain's own kernel re-adds every declaration of the module to the environment of its
                 imports. A module whose .olean holds something the kernel would not accept fails. One process per module, J at a time.
-  reproduce     the same re-elaboration writes an .olean; when the module re-elaborates without error, its bytes are compared with the
-                cached .olean the tree ships (the attested cache): a difference is a compiled artefact that is not what the source gives
-                (tampering, a stale cache, or a non-reproducible compile), reported as `warn`; identical ones are counted as `info`.
+  reproduce     `lake env lean -D<lakefile leanOptions> <file>`: the module compiled again with lake's own options, its .olean compared
+                byte for byte with the cached .olean the tree ships (the attested cache): a difference is a compiled artefact that is not
+                what the source gives (tampering, a stale cache, or a non-reproducible compile), reported as `warn` with the byte of the
+                first difference; identical ones are counted as `info`. (Round 0 compared the autoImplicit re-elaboration's olean instead,
+                compiled with other options: every module differed by the same 88 bytes.)
   autoimplicit  `lean -DautoImplicit=false -DrelaxedAutoImplicit=false <file>`: the module re-elaborated with auto-bound implicits off.
                 Every `unknown identifier` error is a declaration in which Lean silently quantified a name (fail); any other error is
                 reported as `warn` (the re-elaboration should otherwise succeed: the module built). A module that sets
@@ -26,7 +28,6 @@ verdict, the workflow decides. `--modules FILE` (one module name per line) repla
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 import re
@@ -50,6 +51,82 @@ DECL = re.compile(
     r"^\s*(?:@\[[^\]]*\]\s*)*(?:(?:private|protected|noncomputable|nonrec|public|meta|unsafe|partial)\s+)*(?:theorem|lemma|def|abbrev|instance|structure|class|inductive|opaque|axiom)\s+([^\s:({\[⦃]+)",
     re.M,
 )
+DECL = re.compile(
+    r"^\s*(?:@\[[^\]]*\]\s*)?(?:(?:private|protected|noncomputable|unsafe|partial|nonrec|scoped|local)\s+)*"
+    r"(?:theorem|lemma|def|structure|inductive|class|abbrev|instance|opaque|axiom)\s+([\w.'!?]+)",
+    re.M,
+)
+
+
+def lake_options() -> list[str]:
+    """The [leanOptions] of lakefile.toml as -D flags: a compile that is to reproduce lake's olean must use lake's options."""
+    text = (ROOT / "lakefile.toml").read_text(encoding="utf-8") if (ROOT / "lakefile.toml").is_file() else ""
+    m = re.search(r"^\[leanOptions\]\n((?:[^\[\n][^\n]*\n?)*)", text, re.M)
+    out = []
+    for ln in (m.group(1) if m else "").splitlines():
+        if "=" in ln and not ln.strip().startswith("#"):
+            k, v = (s.strip() for s in ln.split("=", 1))
+            out.append(f"-D{k}={v.strip(chr(34))}")
+    return out
+
+
+def reproduce_findings(path: Path, module: str, timeout: int = 1800) -> list[dict]:
+    """The module compiled again with lake's own options: the olean must be byte-identical to the cached one, or the cache is not what the
+    source gives today."""
+    cached = ROOT / ".lake" / "build" / "lib" / "lean" / (module.replace(".", "/") + ".olean")
+    if not path.is_file() or not cached.is_file():
+        return []
+    out_dir = Path(tempfile.mkdtemp(prefix="jinshi-rep-"))
+    olean_out = out_dir / "out.olean"
+    try:
+        r = subprocess.run(
+            ["lake", "env", "lean", *lake_options(), "-o", str(olean_out), str(path)],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        shutil.rmtree(out_dir, ignore_errors=True)
+        return [
+            {
+                "check": "reproduce",
+                "severity": "warn",
+                "module": module,
+                "name": "",
+                "line": None,
+                "detail": f"re-compilation exceeded {timeout} s",
+            }
+        ]
+    if r.returncode != 0 or not olean_out.is_file():
+        shutil.rmtree(out_dir, ignore_errors=True)
+        return [
+            {
+                "check": "reproduce",
+                "severity": "warn",
+                "module": module,
+                "name": "",
+                "line": None,
+                "detail": f"the module does not compile with lake's options (exit {r.returncode}): {(r.stdout + r.stderr)[-300:]}",
+            }
+        ]
+    a, b = olean_out.read_bytes(), cached.read_bytes()
+    same = a == b
+    if not same:
+        # where the first difference is, and whether it is only the header (the first 1 KiB) or the body
+        i = next((i for i, (x, y) in enumerate(zip(a, b)) if x != y), min(len(a), len(b)))
+        detail = (
+            f"the re-compiled olean DIFFERS from the cached one ({len(a)} vs {len(b)} bytes, first difference at byte {i}, "
+            + ("in the header" if i < 1024 else "in the body")
+            + "): the cache is not what the source gives today (tampering, a stale cache, or a non-reproducible compile)"
+        )
+    else:
+        detail = "the re-compiled olean is byte-identical to the cached one"
+    shutil.rmtree(out_dir, ignore_errors=True)
+    return [{"check": "reproduce", "severity": "info" if same else "warn", "module": module, "name": "", "line": None, "detail": detail}]
+
+
+REALIZED = re.compile(r"constant has already been declared '[^']*\.(?:congr_simp|hcongr(?:_[A-Za-z0-9_]+)?)'")
 OPT_IN = re.compile(r"^\s*set_option\s+autoImplicit\s+true\b", re.M)
 
 
@@ -131,20 +208,11 @@ def autoimplicit_findings(path: Path, module: str, lake: bool = False, timeout: 
         ]
     log = r.stdout + r.stderr
     errors = list(ERROR.finditer(log))
-    # reproduce: an error-free re-elaboration gives the same bytes as the cached olean, or the cache is not what the source gives
-    cached = ROOT / ".lake" / "build" / "lib" / "lean" / (module.replace(".", "/") + ".olean")
-    if not errors and olean_out.is_file() and cached.is_file():
-        same = hashlib.sha256(olean_out.read_bytes()).digest() == hashlib.sha256(cached.read_bytes()).digest()
-        detail = (
-            "the re-elaborated olean is byte-identical to the cached one"
-            if same
-            else f"the re-elaborated olean DIFFERS from the cached one ({olean_out.stat().st_size} vs {cached.stat().st_size} bytes): the cache is not what the source gives today (tampering, a stale cache, or a non-reproducible compile)"
-        )
-        out.append(
-            {"check": "reproduce", "severity": "info" if same else "warn", "module": module, "name": "", "line": None, "detail": detail}
-        )
     shutil.rmtree(olean_out.parent, ignore_errors=True)
     seen = set()
+    declared = {
+        d.rsplit(".", 1)[-1] for d in DECL.findall(text)
+    }  # a declaration that failed makes every later use of it "unknown": not a finding
     for m in errors:
         line = int(m.group("line"))
         u = UNKNOWN.match(m.group(0))
@@ -153,6 +221,8 @@ def autoimplicit_findings(path: Path, module: str, lake: bool = False, timeout: 
         if key in seen:
             continue
         seen.add(key)
+        if u and u.group("ident").rsplit(".", 1)[-1] in declared:
+            continue
         if u:
             ident = u.group("ident")
             greek = bool(GREEK.match(ident))  # a Greek letter is the idiom for a type variable: quantified on purpose, almost always
@@ -307,11 +377,16 @@ def lean4lean_finding(module: str, timeout: int = 1800) -> list[dict]:
     return [
         {
             "check": "lean4lean",
-            "severity": "fail",
+            "severity": "info" if REALIZED.search(" ".join(tail)) else "fail",
             "module": module,
             "name": "",
             "line": None,
-            "detail": f"lean4lean refused the module (exit {r.returncode}): " + " | ".join(tail)[:600],
+            "detail": (
+                "lean4lean refused a realized constant (a reserved `congr_simp`/`hcongr` name that several modules may create; Lean deduplicates them at import, lean4lean does not model that: not a finding about the tree): "
+                if REALIZED.search(" ".join(tail))
+                else f"lean4lean refused the module (exit {r.returncode}): "
+            )
+            + " | ".join(tail)[:600],
         }
     ]
 
@@ -452,8 +527,12 @@ def main() -> int:
         with ThreadPoolExecutor(a.jobs) as pool:
             both = [f for fs in pool.map(lambda m: autoimplicit_findings(module_path(m), m, lake=True), modules) for f in fs]
         results["autoimplicit"] = [f for f in both if f["check"] == "autoimplicit"]
-        results["reproduce"] = [f for f in both if f["check"] == "reproduce"]
-        timings["reproduce"] = 0.0
+    if "reproduce" in checks:
+        t = time.time()
+        with ThreadPoolExecutor(a.jobs) as pool:
+            results["reproduce"] = [f for fs in pool.map(lambda m: reproduce_findings(module_path(m), m), modules) for f in fs]
+        timings["reproduce"] = time.time() - t
+        print(f"reproduce: {len(results['reproduce'])} findings in {timings['reproduce']:.0f} s", flush=True)
         flush("reproduce")
         timings["autoimplicit"] = time.time() - t
         print(f"autoimplicit: {len(results['autoimplicit'])} findings in {timings['autoimplicit']:.0f} s", flush=True)
