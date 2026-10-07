@@ -81,7 +81,7 @@ def main() -> int:
         args = [str(exe), "--seed", "Init"]
         for name in examined:
             args += ["--module", f"JinshiFixtures.{name}"]
-        if os.environ.get("JINSHI_SELFTEST_PROBE", "1") != "0":  # on by default for this diagnostic commit
+        if os.environ.get("JINSHI_SELFTEST_PROBE"):  # JINSHI_SELFTEST_PROBE=1: one process per examination, with its peak memory
             # DIAGNOSTIC (temporary): one process per examination over every fixture, each under a 3 GB address-space cap, so the
             # examination that exhausts a runner's memory names itself; the combined run is then skipped.
             import resource
