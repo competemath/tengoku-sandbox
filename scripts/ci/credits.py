@@ -51,6 +51,13 @@ def moved_lines(path: str) -> set[str]:
     return set(text.decode("utf-8", "replace").split("\n")) if text is not None else set()
 
 
+# A credit line that a Markdown file loses and another Markdown file gains, verbatim, has moved, not gone (the README's credit example moved to
+# docs/credit.md, 2026-10-07). Only Markdown: a credit in a module or a record never travels this way.
+md_added: set[str] = set()
+for st, p in changed_files(base, head):
+    if p.endswith(".md") and st != "D" and not match(p, EXEMPT):
+        md_added |= {text.strip() for _, text in added_lines(base, head, p) if CREDIT_MD.search(text)}
+
 hits = []
 for st, p in changed_files(base, head):
     if st == "A" or match(p, EXEMPT) or (st == "D" and deregistered(base, p)):
@@ -58,7 +65,7 @@ for st, p in changed_files(base, head):
     rx = CREDIT_MD if p.endswith(".md") else CREDIT
     kept = moved_lines(p) if st == "D" else set()
     for no, text in removed_lines(base, head, p):
-        if not rx.search(text) or text in kept:
+        if not rx.search(text) or text in kept or (p.endswith(".md") and text.strip() in md_added):
             continue
         if promotion and match(p, ["data/staging/*.jsonl", "data/staging/*/*.jsonl"]):
             try:
