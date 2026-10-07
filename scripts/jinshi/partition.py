@@ -6,7 +6,7 @@ says so. This script says which units are in which round, from the files alone (
 
   units     every Lean module of the tree, every record of the data tiers, and the tree's own code
   strata    a unit belongs to one stratum, named by its provenance and folder:
-              seed/<Topic>[/<Sub>]        Mathlib and the packages it pulled in, under Tengoku/Seed/ (SEED.md names the origin package)
+              seed/<Topic>[/<Sub>]        the tree's foundation under Tengoku/Seed/ (SEED.md records where each folder was seeded from, once)
               translated/<Library>[/<Sub>] a library the tree compiles: an intake bundle (data/intake/<library>/) or a legacy generated library
               records/<tier>/<library>    one line of data/<tier>/…jsonl (intake manifests, staging, tentative, trusted)
               custom/<kind>               the tree's own programs: root Lean files, tools/, scripts/, widget/, workflows — never sampled, in every round
@@ -38,7 +38,7 @@ ROOT = Path(__file__).resolve().parents[2]
 SALT = "jinshi-v1"
 SPLIT = 10  # a sub-folder with this many modules is its own stratum
 
-# SEED.md: the origin package of each seeded folder (everything else under Seed/ is mathlib)
+# SEED.md: the package each seeded folder came from, kept as provenance (every other folder under Seed/ came with the main seed)
 SEED_ORIGINS = {
     "Std": "batteries",
     "Tactic/Aesop": "aesop",
@@ -134,7 +134,7 @@ def lean_modules() -> list[dict]:
         elif parts[0] == "Seed":
             topic = parts[1] if len(parts) > 2 else "(top)"
             sub = parts[2] if len(parts) > 3 else None
-            origin = "mathlib"
+            origin = "seed"
             for prefix, pkg in SEED_ORIGINS.items():
                 if "/".join(parts[1:]).startswith(prefix + "/"):
                     origin = pkg
@@ -282,7 +282,7 @@ def main() -> int:
     print(f"# Jinshi partition — round {a.round} of {a.rounds} — {commit[:12]} — salt {SALT}\n")
     print("| class | modules | in round | share | MB | MB in round |")
     print("|---|---:|---:|---:|---:|---:|")
-    for name, prefix in (("seed (Mathlib + packages)", "seed/"), ("translated libraries", "translated/")):
+    for name, prefix in (("seed (the tree's foundation)", "seed/"), ("translated libraries", "translated/")):
         t, r, b, br = group(prefix)
         print(f"| {name} | {t} | {r} | {100 * r / max(t, 1):.1f}% | {b / 1e6:.1f} | {br / 1e6:.1f} |")
     print(f"| custom code (every round) | {len(custom)} | {len(custom)} | 100% | {sum(c['bytes'] for c in custom) / 1e6:.2f} | same |")

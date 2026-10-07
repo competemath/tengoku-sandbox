@@ -28,7 +28,7 @@ theorem conclusion_true (n : Nat) : True := trivial
 theorem refl_only (n : Nat) : n + 1 = n + 1 := rfl
 theorem iff_self_only (p : Prop) : p ↔ p := Iff.rfl
 
--- arith: ℕ-subtraction and ℕ-division in statements (the real-like types are Mathlib's, absent here)
+-- arith: ℕ-subtraction and ℕ-division in statements (the real-like types live in the tree, not in Lean's own library)
 theorem nat_sub_claim (a b : Nat) : a - b + b = a ∨ a < b := by omega
 theorem nat_div_claim (n : Nat) : n / 2 * 2 ≤ n := Nat.div_mul_le_self n 2
 
