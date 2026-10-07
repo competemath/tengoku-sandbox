@@ -25,7 +25,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 FIX = ROOT / "tools" / "jinshi" / "fixtures"
-ONLY = re.compile(r"^--\s*jinshi:\s*only\s+([\w,\s]+)$", re.M)
+ONLY = re.compile(r"^--[ \t]*jinshi:[ \t]*only[ \t]+([\w, \t]+?)[ \t]*$", re.M)
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from run import autoimplicit_findings, lean4lean_finding, replay_finding  # noqa: E402
@@ -50,7 +50,8 @@ def main() -> int:
     if not exe.is_file():
         print("build the examinations first: lake build tengoku-jinshi", file=sys.stderr)
         return 2
-    fixtures = sorted(p.stem for p in FIX.glob("*.lean") if (FIX / f"{p.stem}.expected.tsv").is_file())
+    fixtures = sorted(p.stem for p in FIX.glob("*.lean") if (FIX / f"{p.stem}.expected.tsv").is_file() and p.stem != "Forged")
+    examined = fixtures + ["Forged"]  # Forged is examined (its table says what `decide` must find) but never expected to pass the replay
     if not fixtures:
         print("no fixture has an expected table", file=sys.stderr)
         return 2
@@ -68,7 +69,7 @@ def main() -> int:
                 return 2
         # the environment examinations, one process, every fixture a module
         args = [str(exe), "--seed", "Init"]
-        for name in fixtures:
+        for name in examined:
             args += ["--module", f"JinshiFixtures.{name}"]
         r = subprocess.run(args, cwd=ROOT, capture_output=True, text=True, env=env)
         if r.returncode:
@@ -79,11 +80,17 @@ def main() -> int:
         for name in fixtures:
             found += autoimplicit_findings(FIX / f"{name}.lean", f"JinshiFixtures.{name}", lake=True)
         # judged per fixture: the findings on its module against its table
-        for name in fixtures:
+        for name in examined:
             text = (FIX / f"{name}.lean").read_text(encoding="utf-8")
             only = ONLY.search(text)
             only_checks = {c.strip() for c in only.group(1).split(",")} if only else None
-            mine = [f for f in found if f["module"] == f"JinshiFixtures.{name}" and (only_checks is None or f["check"] in only_checks)]
+            mine = [
+                f
+                for f in found
+                if f["module"] == f"JinshiFixtures.{name}"
+                and (only_checks is None or f["check"] in only_checks)
+                and f["name"] not in ("", "[anonymous]")
+            ]
             expected = read_expected(FIX / f"{name}.expected.tsv")
             total_found += len(mine)
             total_expected += len(expected)
