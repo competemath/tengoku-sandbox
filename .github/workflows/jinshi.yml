@@ -1,6 +1,7 @@
-# Jinshi, one round of the tree (docs/jinshi.md): the kernel replay (leanchecker), the re-elaboration with auto-bound implicits off,
-# and the environment examinations (tengoku-jinshi), on the attested cache. On demand only; the round is an input, and the maintainer
-# opens a round by running it. ADVISORY: nothing here is a required check; the findings are the artifact and the run's summary.
+# Jinshi, one round of the tree (docs/jinshi.md), in shards: `plan` cuts the round into N shards, `round` examines each shard on its own
+# runner (the attested cache, the kernel replays, the re-elaboration with auto-bound implicits off, the environment examinations), and
+# `merge` joins the findings into one report. On demand only; the round is an input, and the maintainer opens a round by running it.
+# ADVISORY: nothing here is a required check; the findings are the artifact and the run's summary.
 name: jinshi
 on:
   workflow_dispatch:
@@ -9,6 +10,10 @@ on:
         description: "The round of tools/jinshi/partition.tsv to examine (0-9)"
         required: false
         default: "0"
+      shards:
+        description: "Runners to spread the round over (1-16)"
+        required: false
+        default: "8"
       checks:
         description: "Comma-separated: replay, lean4lean, autoimplicit, env"
         required: false
@@ -29,10 +34,38 @@ env:
   LEAN4LEAN_COMMIT: 8223d223ed98661882e95d9d6a7126df7097cd76   # pragma: allowlist secret (a commit id: digama0/lean4lean, 2026-08-29)
   BATTERIES_COMMIT: d54dddc581e08be364c278052863524bff7a99a9   # pragma: allowlist secret (a commit id: the Batteries the tree seeded, SEED.md)
 jobs:
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions: { contents: read }
+    outputs:
+      shards: ${{ steps.plan.outputs.shards }}
+      count: ${{ steps.plan.outputs.count }}
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
+        with: { egress-policy: audit }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - name: The inputs, and the shards
+        id: plan
+        env: { ROUND: "${{ inputs.round }}", SHARDS: "${{ inputs.shards }}", CHECKS: "${{ inputs.checks }}", MODULES: "${{ inputs.modules }}" }
+        run: |
+          case "$ROUND" in [0-9]) ;; *) echo "::error::round is a digit 0-9"; exit 1 ;; esac
+          case "$SHARDS" in [1-9]|1[0-6]) ;; *) echo "::error::shards is 1 to 16"; exit 1 ;; esac
+          case "$CHECKS" in *[!a-z0-9,]*) echo "::error::checks is a comma-separated list of replay, lean4lean, autoimplicit, env"; exit 1 ;; esac
+          case "$MODULES" in *[!A-Za-z0-9_.,\ ]*) echo "::error::modules is a comma-separated list of module names"; exit 1 ;; esac
+          python3 scripts/jinshi/partition.py --round "$ROUND" --no-records | head -8
+          echo "shards=$(python3 -c "import json,sys; print(json.dumps(list(range(int(sys.argv[1])))))" "$SHARDS")" >> "$GITHUB_OUTPUT"
+          echo "count=$SHARDS" >> "$GITHUB_OUTPUT"
   round:
+    needs: plan
     runs-on: ubuntu-latest
     timeout-minutes: 360
     permissions: { contents: read }
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.plan.outputs.shards) }}
     steps:
       - name: Free disk (the compiled tree is large)
         run: |
@@ -42,13 +75,6 @@ jobs:
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { fetch-depth: 0, filter: "blob:none", persist-credentials: false }
-      - name: The inputs
-        env: { ROUND: "${{ inputs.round }}", CHECKS: "${{ inputs.checks }}", MODULES: "${{ inputs.modules }}" }
-        run: |
-          case "$ROUND" in [0-9]) ;; *) echo "::error::round is a digit 0-9"; exit 1 ;; esac
-          case "$CHECKS" in *[!a-z0-9,]*) echo "::error::checks is a comma-separated list of replay, lean4lean, autoimplicit, env"; exit 1 ;; esac
-          if [ -n "$MODULES" ]; then echo "$MODULES" | tr ',' '\n' | sed 's/ //g' > modules.txt; echo "rehearsal on $(wc -l < modules.txt) modules"; fi
-          python3 scripts/jinshi/partition.py --round "$ROUND" --no-records | head -8
       - name: elan
         run: |
           # the installer at a fixed commit (a moving `master` would run whatever it says today)
@@ -77,23 +103,50 @@ jobs:
           PY
           (cd "$RUNNER_TEMP/lean4lean" && lake build lean4lean 2>&1 | tail -1)
           echo "JINSHI_LEAN4LEAN=$RUNNER_TEMP/lean4lean/.lake/build/bin/lean4lean" >> "$GITHUB_ENV"
-      - name: The self-test (the fixtures, against Lean's own library)
+      - name: The self-test (the fixtures, against Lean's own library; shard 0 only)
+        if: matrix.shard == 0
         run: python3 scripts/jinshi/selftest.py
-      - name: The pinned toolchain against Lean's soundness-labelled issues
+      - name: The pinned toolchain against Lean's soundness-labelled issues (shard 0 only)
+        if: matrix.shard == 0
         env: { GH_TOKEN: "${{ github.token }}" }
         run: python3 scripts/jinshi/toolchain_watch.py --out jinshi-out
-      - name: The round
-        env: { ROUND: "${{ inputs.round }}", CHECKS: "${{ inputs.checks }}" }
+      - name: The shard
+        env: { ROUND: "${{ inputs.round }}", CHECKS: "${{ inputs.checks }}", MODULES: "${{ inputs.modules }}", SHARD: "${{ matrix.shard }}", COUNT: "${{ needs.plan.outputs.count }}" }
         run: |
-          if [ -s modules.txt ]; then extra=(--modules modules.txt); else extra=(); fi
-          python3 scripts/jinshi/run.py --round "$ROUND" --checks "$CHECKS" --jobs 3 --out jinshi-out "${extra[@]}" 2>&1 | tail -20
-      - name: Summary
-        if: always()
-        run: |
-          if [ -f jinshi-out/summary.md ]; then cat jinshi-out/summary.md >> "$GITHUB_STEP_SUMMARY"; head -40 jinshi-out/summary.md; fi
+          extra=()
+          if [ -n "$MODULES" ]; then echo "$MODULES" | tr ',' '\n' | sed 's/ //g' > modules.txt; extra=(--modules modules.txt); fi
+          python3 scripts/jinshi/run.py --round "$ROUND" --checks "$CHECKS" --jobs 3 --shard "$SHARD/$COUNT" --out jinshi-out "${extra[@]}" 2>&1 | tail -20
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
-          name: jinshi-round-${{ inputs.round }}
+          name: jinshi-round-${{ inputs.round }}-shard-${{ matrix.shard }}
           path: jinshi-out/
           if-no-files-found: warn
+  merge:
+    needs: [plan, round]
+    if: always() && needs.plan.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions: { contents: read }
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
+        with: { egress-policy: audit }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: jinshi-round-${{ inputs.round }}-shard-*
+          path: shards
+      - name: Merge the shards
+        env: { ROUND: "${{ inputs.round }}" }
+        run: |
+          ls shards
+          python3 scripts/jinshi/merge.py --round "$ROUND" --out jinshi-out shards/*/
+      - name: Summary
+        run: |
+          cat jinshi-out/summary.md >> "$GITHUB_STEP_SUMMARY"
+          head -60 jinshi-out/summary.md
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: jinshi-round-${{ inputs.round }}
+          path: jinshi-out/

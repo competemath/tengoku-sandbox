@@ -74,6 +74,17 @@ def decl_at(text: str, line: int) -> str:
 
 
 def autoimplicit_findings(path: Path, module: str, lake: bool = False, timeout: int = 1800) -> list[dict]:
+    if not path.is_file():
+        return [
+            {
+                "check": "autoimplicit",
+                "severity": "warn",
+                "module": module,
+                "name": "",
+                "line": None,
+                "detail": f"no source file at {path.relative_to(ROOT) if path.is_absolute() else path}: not a module of the tree?",
+            }
+        ]
     text = path.read_text(encoding="utf-8", errors="replace")
     cmd = (["lake", "env"] if lake else []) + ["lean", "-DautoImplicit=false", "-DrelaxedAutoImplicit=false", str(path)]
     out: list[dict] = []
@@ -220,6 +231,43 @@ def env_findings(modules: list[str]) -> list[dict]:
     return [json.loads(line) for line in r.stdout.splitlines() if line.strip()]
 
 
+def summarize(rnd: int, modules: list[str], results: dict[str, list[dict]], timings: dict[str, float]) -> list[str]:
+    """the Markdown summary of a round (or of a merged set of shards): counts per check, every fail, the warns, the Jinshi grade"""
+    lines = [f"# Jinshi — round {rnd} — {len(modules)} modules", "", "| check | fail | warn | info | time |", "|---|---:|---:|---:|---:|"]
+    for check, fs in sorted(results.items()):
+        n = {s: sum(1 for f in fs if f["severity"] == s) for s in ("fail", "warn", "info")}
+        lines.append(f"| {check} | {n['fail']} | {n['warn']} | {n['info']} | {timings.get(check, 0):.0f} s |")
+    fails = [f for fs in results.values() for f in fs if f["severity"] == "fail"]
+    if fails:
+        lines += ["", f"## Fail ({len(fails)})", ""]
+        for f in fails[:300]:
+            lines.append(
+                f"- `{f['check']}` {f['module']}"
+                + (f" `{f['name']}`" if f["name"] else "")
+                + (f" line {f['line']}" if f.get("line") else "")
+                + f": {f['detail'][:300]}"
+            )
+    warns = [f for fs in results.values() for f in fs if f["severity"] == "warn"]
+    if warns:
+        by_check: dict[str, int] = {}
+        for f in warns:
+            by_check[f["check"]] = by_check.get(f["check"], 0) + 1
+        lines += ["", f"## Warn ({len(warns)}): " + ", ".join(f"{k} {v}" for k, v in sorted(by_check.items())), ""]
+        for f in warns[:150]:
+            lines.append(f"- `{f['check']}` {f['module']}" + (f" `{f['name']}`" if f["name"] else "") + f": {f['detail'][:200]}")
+    by_module: dict[str, int] = {}
+    for fs in results.values():
+        for f in fs:
+            if f["severity"] in ("fail", "warn") and f["check"] != "summary":
+                by_module[f["module"]] = by_module.get(f["module"], 0) + 1
+    clean = [m for m in modules if m not in by_module]
+    lines += [
+        "",
+        f"**Jinshi grade**: {len(clean)} of {len(modules)} modules with no fail and no warn ({100 * len(clean) / max(1, len(modules)):.1f}%).",
+    ]
+    return lines
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--round", type=int, default=0)
@@ -227,6 +275,11 @@ def main() -> int:
     ap.add_argument("--jobs", type=int, default=max(1, (os.cpu_count() or 2) - 1))
     ap.add_argument("--checks", default="replay,lean4lean,autoimplicit,env")
     ap.add_argument("--modules", type=Path, help="one module name per line, instead of the round")
+    ap.add_argument(
+        "--shard",
+        default="",
+        help="k/N: only every N-th module of the sorted list, starting at k (0-based); the shards of a round partition it",
+    )
     ap.add_argument("--out", type=Path, required=True)
     a = ap.parse_args()
     checks = {c.strip() for c in a.checks.split(",") if c.strip()}
@@ -246,23 +299,49 @@ def main() -> int:
             if rnd == a.round:
                 modules.append(u["module"])
     modules.sort()
+    if a.shard:
+        k, n = (int(x) for x in a.shard.split("/"))
+        modules = [m for i, m in enumerate(modules) if i % n == k]
     (a.out / "modules.txt").write_text("\n".join(modules) + "\n")
+    missing = [m for m in modules if not module_path(m).is_file()]
+    results: dict[str, list[dict]] = {}
+    timings: dict[str, float] = {}
+    if missing:
+        results["input"] = [
+            {
+                "check": "input",
+                "severity": "warn",
+                "module": m,
+                "name": "",
+                "line": None,
+                "detail": "no source file in the tree for this module name",
+            }
+            for m in missing
+        ]
+        modules = [m for m in modules if m not in set(missing)]
+        print(f"{len(missing)} named modules have no source file in the tree: {missing[:5]}", flush=True)
     print(f"jinshi round {a.round}: {len(modules)} modules, checks {sorted(checks)}, {a.jobs} jobs", flush=True)
 
-    timings: dict[str, float] = {}
-    results: dict[str, list[dict]] = {}
+    def flush(check: str) -> None:
+        with (a.out / f"{check}.jsonl").open("w", encoding="utf-8") as fh:
+            for f in results.get(check, []):
+                fh.write(json.dumps(f, ensure_ascii=False) + "\n")
+        (a.out / "timings.json").write_text(json.dumps(timings))
+
     if "replay" in checks:
         t = time.time()
         with ThreadPoolExecutor(a.jobs) as pool:
             results["replay"] = [f for fs in pool.map(replay_finding, modules) for f in fs]
         timings["replay"] = time.time() - t
         print(f"replay: {len(results['replay'])} findings in {timings['replay']:.0f} s", flush=True)
+        flush("replay")
     if "lean4lean" in checks and os.environ.get("JINSHI_LEAN4LEAN"):
         t = time.time()
         with ThreadPoolExecutor(a.jobs) as pool:
             results["lean4lean"] = [f for fs in pool.map(lean4lean_finding, modules) for f in fs]
         timings["lean4lean"] = time.time() - t
         print(f"lean4lean: {len(results['lean4lean'])} findings in {timings['lean4lean']:.0f} s", flush=True)
+        flush("lean4lean")
     if "autoimplicit" in checks:
         t = time.time()
         with ThreadPoolExecutor(a.jobs) as pool:
@@ -271,6 +350,7 @@ def main() -> int:
             ]
         timings["autoimplicit"] = time.time() - t
         print(f"autoimplicit: {len(results['autoimplicit'])} findings in {timings['autoimplicit']:.0f} s", flush=True)
+        flush("autoimplicit")
     if "env" in checks:
         t = time.time()
         fs = env_findings(modules)
@@ -278,41 +358,16 @@ def main() -> int:
         for f in fs:
             results.setdefault(f["check"], []).append(f)
         print(f"env: {len(fs)} findings in {timings['env']:.0f} s", flush=True)
+        for check in {f["check"] for f in fs}:
+            flush(check)
 
     for check, fs in results.items():
         with (a.out / f"{check}.jsonl").open("w", encoding="utf-8") as fh:
             for f in fs:
                 fh.write(json.dumps(f, ensure_ascii=False) + "\n")
 
-    lines = [
-        f"# Jinshi — round {a.round} — {len(modules)} modules",
-        "",
-        "| check | fail | warn | info | time |",
-        "|---|---:|---:|---:|---:|",
-    ]
-    for check, fs in sorted(results.items()):
-        n = {s: sum(1 for f in fs if f["severity"] == s) for s in ("fail", "warn", "info")}
-        lines.append(f"| {check} | {n['fail']} | {n['warn']} | {n['info']} | {timings.get(check, timings.get('env', 0)):.0f} s |")
-    fails = [f for fs in results.values() for f in fs if f["severity"] == "fail"]
-    if fails:
-        lines += ["", f"## Fail ({len(fails)})", ""]
-        for f in fails[:200]:
-            lines.append(
-                f"- `{f['check']}` {f['module']}"
-                + (f" `{f['name']}`" if f["name"] else "")
-                + (f" line {f['line']}" if f.get("line") else "")
-                + f": {f['detail'][:300]}"
-            )
-    by_module: dict[str, int] = {}
-    for fs in results.values():
-        for f in fs:
-            if f["severity"] in ("fail", "warn") and f["check"] != "summary":
-                by_module[f["module"]] = by_module.get(f["module"], 0) + 1
-    clean = [m for m in modules if m not in by_module]
-    lines += [
-        "",
-        f"**Jinshi grade**: {len(clean)} of {len(modules)} modules with no fail and no warn ({100 * len(clean) / max(1, len(modules)):.1f}%).",
-    ]
+    (a.out / "timings.json").write_text(json.dumps(timings))
+    lines = summarize(a.round, modules, results, timings)
     (a.out / "summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     print("\n".join(lines[:8]))
     return 0
