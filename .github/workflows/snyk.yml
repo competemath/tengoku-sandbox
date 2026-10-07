@@ -47,7 +47,7 @@ jobs:
         env: { SNYK_TOKEN: "${{ secrets.SNYK_TOKEN }}" }
         run: |
           if [ -n "$SNYK_TOKEN" ]; then echo "have=true" >> "$GITHUB_OUTPUT"; else echo "::notice::no SNYK_TOKEN for this run (a fork's or Dependabot's pull request, or the secret is not set): the scan is skipped"; fi
-      - uses: snyk/actions/setup@b075801f26076be9bb50521154cafab73f44da0c # master, 2026-09-29
+      - uses: snyk/actions/setup@9adf32b1121593767fc3c057af55b55db032dc04 # v1.0.0
         if: steps.t.outputs.have == 'true'
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         if: steps.t.outputs.have == 'true'
