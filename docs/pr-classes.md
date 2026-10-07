@@ -79,6 +79,7 @@ on failed or was cancelled (a skipped job is fine), or when classification faile
 | credits, dco, secrets | ✓ | ✓ | ✓ | ✓ | ✓ |
 | imports (every `import Tengoku…` resolves; PR runs, and again on the merged result in the queue) | ✓ | ✓ | ✓ | ✓ | ✓ |
 | depends (PR runs only) | ✓ | ✓ | ✓ | ✓ | ✓ |
+| fossa (PR runs only: FOSSA's licence, dependency-quality and vulnerability verdicts on the head commit are all `success`) | ✓ | ✓ | ✓ | ✓ | ✓ |
 | sorry-advisory (advisory, never blocks) | ✓ | | ✓ | | |
 
 Every class then goes through the merge queue, whose `queue-gate` check is required. A group that changes

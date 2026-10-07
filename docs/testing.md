@@ -64,6 +64,14 @@ The jobs, in the order they matter:
 - **dco**: every commit carries `Signed-off-by:`.
 - **depends**: `Depends-On: #N` lines in the description point at PRs that
   are merged or already in the queue.
+- **fossa**: FOSSA's three verdicts on the PR's head commit (License
+  Compliance, Dependency Quality, Security Analysis) are all `success`. FOSSA
+  reports on PR commits only, never on a merge-queue entry, so it cannot be a
+  required check of the ruleset itself (a queue entry would wait for a status
+  that never comes); this job waits for the verdicts (up to 15 minutes) and
+  `pr-gate` depends on it. A verdict that never arrives fails: silence is not a
+  pass. `scripts/ci/fossa_check.py` reads the statuses of the commit, nothing
+  of the PR runs.
 - **lint-python**, **tooling-tests** (tooling only): `pre-commit run
   --all-files`, the unit tests, `actionlint` on the workflows.
 - **sorry-advisory**: lists `sorry`/`admit` in the change, in the gate comment
