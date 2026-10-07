@@ -20,18 +20,6 @@ import Jinshi.Decide
 import Jinshi.Duplicate
 import Jinshi.Instdrift
 import Jinshi.Unusedhyp
-<<<<<<< HEAD
-import Jinshi.Decide
-import Jinshi.Duplicate
-<<<<<<< HEAD
-import Jinshi.Decide
-import Jinshi.Duplicate
-=======
-import Jinshi.Instdrift
->>>>>>> jinshi/instdrift
-=======
-import Jinshi.Unusedhyp
->>>>>>> jinshi/unusedhyp
 open Lean Meta Jinshi
 
 /-- every examination this build knows: its name (the `check` field, the `--check` key) and its runner -/
@@ -45,13 +33,6 @@ def examinations : List (String × (Ctx → MetaM (Array Finding))) :=
    ("duplicate", duplicate),
    ("instdrift", instdrift),
    ("unusedhyp", unusedhyp)]
-   ("duplicate", duplicate)]
-=======
-   ("instdrift", instdrift)]
->>>>>>> jinshi/instdrift
-=======
-   ("unusedhyp", unusedhyp)]
->>>>>>> jinshi/unusedhyp
 
 unsafe def main (argv : List String) : IO UInt32 := do
   enableInitializersExecution
