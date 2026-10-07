@@ -1,0 +1,2 @@
+# check	severity	name	a word the detail must contain
+instdrift	warn	JinshiFixtures.drifted	instB

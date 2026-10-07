@@ -44,6 +44,7 @@ finding that, if confirmed, means a theorem is not what it claims; `warn` wants 
 | `dossier` | `TengokuJinshi.lean` | for each theorem of a library, the library-local constants its statement depends on, each printed; one that reduces to `True`/`False`, ignores its arguments, or is a structure without fields is flagged | fail (trivial) / info |
 | `content` | `TengokuJinshi.lean` | a conclusion that is a hypothesis, `True`, `a = a`, `p ↔ p` | warn |
 | `duplicate` | `TengokuJinshi.lean` | the same statement proved twice: every theorem of the environment is indexed by its elaborated statement with binder names and universe parameter names erased (the identity of docs/isnad.md, without its hash), and each theorem of the round is looked up; a library's theorem that proves again what the seed already has, or what the same library already has, is a warning; two libraries (or the seed twice) proving one statement is *tawatur*, several proofs of one claim | warn (seed, same library) / info (tawatur) |
+| `instdrift` | `TengokuJinshi.lean` | for each theorem (the seed included), every instance-implicit argument of its elaborated statement is compared with what instance synthesis returns in the environment of the run: the tree is one environment that keeps growing, and a module compiled later (a library, or the seed itself) that registers a global instance of the same class makes the same statement text elaborate to a different term (another norm, order, decidability), so the theorem, true for the instance it was proved with, no longer applies to what a reader now writes; a class for which no instance is found today is reported once per theorem | warn (a different instance today) / info (none today) |
 | `toolchain` | `scripts/jinshi/toolchain_watch.py` | Lean's own `soundness` and `runtime-soundness` issues against the pinned toolchain: each one's fix is an ancestor of the pinned tag or a backport on its release branch, or the toolchain has the bug; the snapshot is `tools/jinshi/lean-bugs.json` | fail (soundness) / warn (runtime) |
 | `nanoda` | `.github/workflows/independent-check.yml` (exists) | the whole tree re-typed by a kernel that shares no code with Lean | fail |
 
@@ -90,7 +91,7 @@ python3 scripts/jinshi/run.py --round 0 --out jinshi-out      # replay, autoimpl
 
 ## 6. Status
 
-Built (one file per examination under `Jinshi/`, with its own fixture and table under `tools/jinshi/fixtures/`): the partition, `tcb`, `shadow`, `arith`, `dossier`, `content`, `replay`, `lean4lean`, `autoimplicit`,
+Built (one file per examination under `Jinshi/`, with its own fixture and table under `tools/jinshi/fixtures/`): the partition, `tcb`, `shadow`, `arith`, `dossier`, `content`, `instdrift`, `replay`, `lean4lean`, `autoimplicit`,
 `toolchain`, the workflow. On 2026-10-07 the registry showed every `soundness` fix in the pinned `v4.34.0-rc2` (the July 2026 kernel fixes are its
 ancestors; the two of 18 August are backports on its release branch) and two `runtime-soundness` fixes of September 2026 that it
 lacks (reference-count overflow in the runtime, not the kernel: the next toolchain bump takes them).

@@ -18,11 +18,18 @@ file under Jinshi/, registered in `examinations` below.
 import Jinshi.Base
 import Jinshi.Decide
 import Jinshi.Duplicate
+import Jinshi.Instdrift
+<<<<<<< HEAD
+import Jinshi.Decide
+import Jinshi.Duplicate
 <<<<<<< HEAD
 import Jinshi.Decide
 =======
 import Jinshi.Duplicate
 >>>>>>> jinshi/duplicate
+=======
+import Jinshi.Instdrift
+>>>>>>> jinshi/instdrift
 open Lean Meta Jinshi
 
 /-- every examination this build knows: its name (the `check` field, the `--check` key) and its runner -/
@@ -33,10 +40,14 @@ def examinations : List (String × (Ctx → MetaM (Array Finding))) :=
    ("dossier", dossier),
    ("content", content),
    ("decide", decide),
-   ("duplicate", duplicate)]
+   ("duplicate", duplicate),
+   ("instdrift", instdrift)]
 =======
    ("duplicate", duplicate)]
 >>>>>>> jinshi/duplicate
+=======
+   ("instdrift", instdrift)]
+>>>>>>> jinshi/instdrift
 
 unsafe def main (argv : List String) : IO UInt32 := do
   enableInitializersExecution
