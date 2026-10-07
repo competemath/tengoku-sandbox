@@ -164,10 +164,10 @@ def arithUniverseLevels (mod : Name) : MetaM (Array Finding × Nat × Nat × Nat
     match levelModelAgrees l1 l2 with
     | some (a, b, c, v1, v2) =>
       -- this file's own identity does not hold on the grid: a bug in the GENERATOR, never reported as a kernel finding
-      out := out.push { check := "arithUniverse", severity := "warn", module := mod, name := Name.mkSimple label,
-        detail := s!"universe pair `{label}` is not actually a model identity: at (u,v,w)=({a},{b},{c}), " ++
-                  s!"eval l1 = {v1} ≠ eval l2 = {v2} (l1 = {levelShow l1}, l2 = {levelShow l2}) — " ++
-                  s!"this examination's own generator is wrong here, not the kernel" }
+      let detail := s!"universe pair `{label}` is not actually a model identity: at (u,v,w)=({a},{b},{c}), " ++
+        s!"eval l1 = {v1} ≠ eval l2 = {v2} (l1 = {levelShow l1}, l2 = {levelShow l2}) — " ++
+        s!"this examination's own generator is wrong here, not the kernel"
+      out := out.push { check := "arithUniverse", severity := "warn", module := mod, name := Name.mkSimple label, detail }
     | none =>
       let verdict ← arithUniverseGuard (isDefEq (Expr.sort l1) (Expr.sort l2))
       match verdict with
@@ -176,16 +176,16 @@ def arithUniverseLevels (mod : Name) : MetaM (Array Finding × Nat × Nat × Nat
         disagreed := disagreed + 1
         let trace := ([(0, 1, 2), (1, 2, 3), (3, 4, 0)] : List (Nat × Nat × Nat)).map fun (a, b, c) =>
           s!"(u={a},v={b},w={c})↦{levelEval (levelAssign a b c) l1}"
-        out := out.push { check := "arithUniverse", severity := "fail", module := mod, name := Name.mkSimple label,
-          detail := s!"universe pair `{label}`: l1 = {levelShow l1}, l2 = {levelShow l2} — the independent model says " ++
-                    s!"EQUIVALENT for every (u,v,w) in 0..4 ({", ".intercalate trace}, …) but the kernel's isDefEq on " ++
-                    s!"Sort l1 =?= Sort l2 says NOT EQUIVALENT: either a kernel bug (unsound over-conservatism on a " ++
-                    s!"case this examination can prove true independently of it) or a flaw in this model" }
+        let detail := s!"universe pair `{label}`: l1 = {levelShow l1}, l2 = {levelShow l2} — the independent model says " ++
+          s!"EQUIVALENT for every (u,v,w) in 0..4 ({", ".intercalate trace}, …) but the kernel's isDefEq on " ++
+          s!"Sort l1 =?= Sort l2 says NOT EQUIVALENT: either a kernel bug (unsound over-conservatism on a " ++
+          s!"case this examination can prove true independently of it) or a flaw in this model"
+        out := out.push { check := "arithUniverse", severity := "fail", module := mod, name := Name.mkSimple label, detail }
       | none =>
         capped := capped + 1
-        out := out.push { check := "arithUniverse", severity := "info", module := mod, name := Name.mkSimple label,
-          detail := s!"universe pair `{label}` (l1 = {levelShow l1}, l2 = {levelShow l2}): isDefEq did not finish within " ++
-                    s!"the heartbeat cap, a resource cap rather than a disagreement" }
+        let detail := s!"universe pair `{label}` (l1 = {levelShow l1}, l2 = {levelShow l2}): isDefEq did not finish within " ++
+          s!"the heartbeat cap, a resource cap rather than a disagreement"
+        out := out.push { check := "arithUniverse", severity := "info", module := mod, name := Name.mkSimple label, detail }
   return (out, tried, agreed, disagreed, capped)
 
 /-! ## (B) the Nat arithmetic fuzzer -/
@@ -286,19 +286,19 @@ def arithUniverseNat (mod : Name) : MetaM (Array Finding × Nat × Nat × Nat ×
     | some (some true) => agreed := agreed + 1
     | some (some false) =>
       disagreed := disagreed + 1
-      out := out.push { check := "arithUniverse", severity := "fail", module := mod, name := Name.mkSimple label,
-        detail := s!"Nat case `{label}`: {caseDetail} does NOT decide to true: the kernel's native {op} disagrees with " ++
-                  s!"the expected value computed independently in Python (a kernel/native-op mismatch)" }
+      let detail := s!"Nat case `{label}`: {caseDetail} does NOT decide to true: the kernel's native {op} disagrees with " ++
+        s!"the expected value computed independently in Python (a kernel/native-op mismatch)"
+      out := out.push { check := "arithUniverse", severity := "fail", module := mod, name := Name.mkSimple label, detail }
     | some none =>
       capped := capped + 1
-      out := out.push { check := "arithUniverse", severity := "info", module := mod, name := Name.mkSimple label,
-        detail := s!"Nat case `{label}`: {caseDetail} has no synthesizable Decidable instance or did not reduce to a " ++
-                  s!"Bool within the cap (not a disagreement)" }
+      let detail := s!"Nat case `{label}`: {caseDetail} has no synthesizable Decidable instance or did not reduce to a " ++
+        s!"Bool within the cap (not a disagreement)"
+      out := out.push { check := "arithUniverse", severity := "info", module := mod, name := Name.mkSimple label, detail }
     | none =>
       capped := capped + 1
-      out := out.push { check := "arithUniverse", severity := "info", module := mod, name := Name.mkSimple label,
-        detail := s!"Nat case `{label}`: {caseDetail} hit the heartbeat cap before deciding (a resource cap, not a " ++
-                  s!"disagreement)" }
+      let detail := s!"Nat case `{label}`: {caseDetail} hit the heartbeat cap before deciding (a resource cap, not a " ++
+        s!"disagreement)"
+      out := out.push { check := "arithUniverse", severity := "info", module := mod, name := Name.mkSimple label, detail }
   return (out, tried, agreed, disagreed, capped)
 
 /-! ## entry point -/
@@ -307,9 +307,9 @@ def arithUniverse (c : Ctx) : MetaM (Array Finding) := do
   let mod := c.mods.headD .anonymous
   let (levelFindings, lTried, lAgreed, lDisagreed, lCapped) ← arithUniverseLevels mod
   let (natFindings, nTried, nAgreed, nDisagreed, nCapped) ← arithUniverseNat mod
-  let summary : Finding := { check := "arithUniverse", severity := "info", module := mod, name := .anonymous,
-    detail := s!"universe: {lTried} pairs tried, {lAgreed} agree, {lDisagreed} disagree (fail), {lCapped} capped; " ++
-              s!"nat-arith: {nTried} triples tried, {nAgreed} agree, {nDisagreed} disagree (fail), {nCapped} capped" }
+  let detail := s!"universe: {lTried} pairs tried, {lAgreed} agree, {lDisagreed} disagree (fail), {lCapped} capped; " ++
+    s!"nat-arith: {nTried} triples tried, {nAgreed} agree, {nDisagreed} disagree (fail), {nCapped} capped"
+  let summary : Finding := { check := "arithUniverse", severity := "info", module := mod, name := .anonymous, detail }
   return levelFindings ++ natFindings ++ #[summary]
 
 end Jinshi
