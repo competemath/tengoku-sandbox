@@ -86,14 +86,15 @@ def main() -> int:
             # examination that exhausts a runner's memory names itself; the combined run is then skipped.
             import resource
 
-            def cap() -> None:
-                resource.setrlimit(resource.RLIMIT_AS, (3 * 1024**3, 3 * 1024**3))
-
             names = [ln.strip() for ln in sh([str(exe), "--list"]).stdout.splitlines() if ln.strip()]
             for check in names:
                 before = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss
                 t1 = time.time()
-                r = subprocess.run(args + ["--check", check], cwd=ROOT, capture_output=True, text=True, env=env, preexec_fn=cap)
+                try:  # no address-space cap: Lean reserves more than 3 GB of virtual memory at startup; the peak RSS is the measure
+                    r = subprocess.run(args + ["--check", check], cwd=ROOT, capture_output=True, text=True, env=env, timeout=900)
+                except subprocess.TimeoutExpired:
+                    print(f"[probe] {check:12s} TIMEOUT after 900 s", flush=True)
+                    continue
                 after = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss
                 n = sum(1 for ln in r.stdout.splitlines() if ln.strip())
                 print(f"[probe] {check:12s} rc={r.returncode} {time.time() - t1:5.1f} s peak-so-far {after // 1024} MB (was {before // 1024}) {n} lines; {(r.stderr or '')[-200:].strip()!r}", flush=True)
