@@ -18,6 +18,7 @@ file under Jinshi/, registered in `examinations` below.
 import Jinshi.Base
 import Jinshi.Decide
 import Jinshi.Duplicate
+import Jinshi.Forensics
 import Jinshi.Instdrift
 import Jinshi.Nearname
 import Jinshi.Roundtrip
@@ -33,6 +34,7 @@ def examinations : List (String × (Ctx → MetaM (Array Finding))) :=
    ("content", content),
    ("decide", decide),
    ("duplicate", duplicate),
+   ("forensics", forensics),
    ("instdrift", instdrift),
    ("nearname", nearname),
    ("roundtrip", roundtrip),
