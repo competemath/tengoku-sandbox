@@ -46,7 +46,7 @@ jobs:
         env: { ROUND: "${{ inputs.round }}", CHECKS: "${{ inputs.checks }}", MODULES: "${{ inputs.modules }}" }
         run: |
           case "$ROUND" in [0-9]) ;; *) echo "::error::round is a digit 0-9"; exit 1 ;; esac
-          case "$CHECKS" in *[!a-z,]*) echo "::error::checks is a comma-separated list of replay, autoimplicit, env"; exit 1 ;; esac
+          case "$CHECKS" in *[!a-z0-9,]*) echo "::error::checks is a comma-separated list of replay, lean4lean, autoimplicit, env"; exit 1 ;; esac
           if [ -n "$MODULES" ]; then echo "$MODULES" | tr ',' '\n' | sed 's/ //g' > modules.txt; echo "rehearsal on $(wc -l < modules.txt) modules"; fi
           python3 scripts/jinshi/partition.py --round "$ROUND" --no-records | head -8
       - name: elan
