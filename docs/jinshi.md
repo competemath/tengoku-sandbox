@@ -89,7 +89,7 @@ python3 scripts/jinshi/run.py --round 0 --out jinshi-out      # replay, autoimpl
 
 ## 6. Status
 
-Built: the partition, the fixtures, `tcb`, `shadow`, `arith`, `dossier`, `content`, `replay`, `lean4lean`, `autoimplicit`,
+Built (one file per examination under `Jinshi/`, with its own fixture and table under `tools/jinshi/fixtures/`): the partition, `tcb`, `shadow`, `arith`, `dossier`, `content`, `replay`, `lean4lean`, `autoimplicit`,
 `toolchain`, the workflow. On 2026-10-07 the registry showed every `soundness` fix in the pinned `v4.34.0-rc2` (the July 2026 kernel fixes are its
 ancestors; the two of 18 August are backports on its release branch) and two `runtime-soundness` fixes of September 2026 that it
 lacks (reference-count overflow in the runtime, not the kernel: the next toolchain bump takes them).
