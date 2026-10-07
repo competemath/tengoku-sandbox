@@ -58,7 +58,7 @@ jobs:
         env: { GH_TOKEN: "${{ github.token }}" }
         run: scripts/cache.sh get 2>&1 | tail -3 && lake build Tengoku.All 2>&1 | tail -1
       - name: The examinations, built
-        run: lake build tengoku-jinshi 2>&1 | tail -1 && lake env leanchecker --help 2>&1 | head -2 || true
+        run: lake build tengoku-jinshi 2>&1 | tail -1 && lake env which leanchecker   # no flag: leanchecker with no module checks every olean on the path
       # lean4lean (a kernel written in Lean) at a pinned commit, on the tree's toolchain, with the Batteries commit the tree seeded
       # (its own pin does not build on this toolchain): the third kernel of the tawatur, next to leanchecker and nanoda
       - name: lean4lean, built on the pinned toolchain
