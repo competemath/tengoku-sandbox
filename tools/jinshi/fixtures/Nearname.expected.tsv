@@ -1,0 +1,9 @@
+# check	severity	name	a word the detail must contain
+nearname	fail	JinshiFixtures.«Nаt».succ'	U+0430
+nearname	fail	JinshiFixtures.«zero​width»	U+200B
+nearname	warn	JinshiFixtures.Nat.add_com	Nat.add_comm
+nearname	warn	JinshiFixtures.Nat.Add_comm	Nat.add_comm
+nearname	warn	JinshiFixtures.Nat.add_comm1	Nat.add_comm
+nearname	warn	JinshiFixtures.List.lenght	List.length
+nearname	warn	JinshiFixtures.succ'_pos	Nat.succ'
+nearname	warn	JinshiFixtures.lenght_nil	List.lenght
