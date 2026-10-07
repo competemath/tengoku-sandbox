@@ -43,6 +43,7 @@ finding that, if confirmed, means a theorem is not what it claims; `warn` wants 
 | `arith` | `TengokuJinshi.lean` | in the elaborated statements of a library's theorems: `ℕ`/`ℤ` subtraction and division, numerals typed `ℕ` next to `ℝ`/`ℚ`/`ℂ`, `Real.sqrt`/`Real.log`/`⁻¹`/`/` whose argument no hypothesis bounds (the seed is exempt: its lemmas state these operations deliberately, they are the foundation the rest builds on; a library's theorem meets them by accident) | warn |
 | `dossier` | `TengokuJinshi.lean` | for each theorem of a library, the library-local constants its statement depends on, each printed; one that reduces to `True`/`False`, ignores its arguments, or is a structure without fields is flagged | fail (trivial) / info |
 | `content` | `TengokuJinshi.lean` | a conclusion that is a hypothesis, `True`, `a = a`, `p ↔ p` | warn |
+| `roundtrip` | `TengokuJinshi.lean` | what the reader sees against what the kernel checked: each theorem's statement is printed as a reader sees it (the default options, full names), read back as a term, re-elaborated as a type with auto-bound implicits off, and compared with the elaborated statement by `isDefEq`; the seed is examined too. A text that does not parse (a private or hygienic name shown as `x✝`) or does not elaborate (a proof shown as `⋯`) is reported; one that elaborates to a different statement (a notation that hides an argument, an invisible coercion, an instance that resolves differently, a numeral whose type the text does not show) is the finding, with both statements printed | warn (different) / info (unreadable, universes only) |
 | `toolchain` | `scripts/jinshi/toolchain_watch.py` | Lean's own `soundness` and `runtime-soundness` issues against the pinned toolchain: each one's fix is an ancestor of the pinned tag or a backport on its release branch, or the toolchain has the bug; the snapshot is `tools/jinshi/lean-bugs.json` | fail (soundness) / warn (runtime) |
 | `nanoda` | `.github/workflows/independent-check.yml` (exists) | the whole tree re-typed by a kernel that shares no code with Lean | fail |
 
@@ -89,7 +90,7 @@ python3 scripts/jinshi/run.py --round 0 --out jinshi-out      # replay, autoimpl
 
 ## 6. Status
 
-Built (one file per examination under `Jinshi/`, with its own fixture and table under `tools/jinshi/fixtures/`): the partition, `tcb`, `shadow`, `arith`, `dossier`, `content`, `replay`, `lean4lean`, `autoimplicit`,
+Built (one file per examination under `Jinshi/`, with its own fixture and table under `tools/jinshi/fixtures/`): the partition, `tcb`, `shadow`, `arith`, `dossier`, `content`, `roundtrip`, `replay`, `lean4lean`, `autoimplicit`,
 `toolchain`, the workflow. On 2026-10-07 the registry showed every `soundness` fix in the pinned `v4.34.0-rc2` (the July 2026 kernel fixes are its
 ancestors; the two of 18 August are backports on its release branch) and two `runtime-soundness` fixes of September 2026 that it
 lacks (reference-count overflow in the runtime, not the kernel: the next toolchain bump takes them).
