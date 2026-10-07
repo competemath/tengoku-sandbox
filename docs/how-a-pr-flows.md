@@ -36,6 +36,7 @@ failed and what to do:
 | [credits](../scripts/ci/credits.py) | No credit or source line is removed. |
 | [dco](../scripts/ci/dco.py) | Every commit is signed off. |
 | secrets | No password or key anywhere in the change. |
+| [fossa](../scripts/ci/fossa_check.py) | FOSSA's licence, dependency-quality and vulnerability verdicts on your commit are all green (it can take a few minutes to report). |
 | [vacuity](../scripts/ci/vacuity.py) | A theorem whose assumptions contradict each other proves nothing; say so in the PR description if it is intended. |
 | [goals](../scripts/ci/goals_check.py) | If you changed GOALS.md: its format, and that every theorem it names exists. |
 | [workflows](../scripts/ci/workflow_rules.py) | If you changed a workflow: pinned actions. |

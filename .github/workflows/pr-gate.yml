@@ -435,6 +435,22 @@ jobs:
         env: { GH_TOKEN: "${{ github.token }}", BODY: "${{ github.event.pull_request.body }}" }
         run: printf '%s' "$BODY" > body.txt && python3 scripts/ci/depends.py body.txt
 
+  # FOSSA's three verdicts (licences, dependency quality, known vulnerabilities) on the PR's head commit. FOSSA reports on PR commits only,
+  # never on a queue entry, so it cannot be a check of the ruleset itself: this job waits for its statuses and `pr-gate` depends on it.
+  fossa:
+    if: github.event_name == 'pull_request_target'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions: { contents: read, statuses: read }
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
+        with: { egress-policy: audit }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { ref: "${{ env.BASE }}", filter: "blob:none", persist-credentials: false }
+      - name: fossa
+        env: { GH_TOKEN: "${{ github.token }}", FOSSA_WAIT_MINUTES: "15" }
+        run: python3 scripts/ci/fossa_check.py "$GITHUB_REPOSITORY" "$HEAD"
+
   # The merge queue's re-check of an entry (the PR merged onto what is ahead of it) against its new base. It reads the entry's commits as data
   # and runs main's scripts; it holds no write token. The privileged `pr-gate` job below never touches the entry's commits.
   queue-recheck:
@@ -483,7 +499,7 @@ jobs:
           python3 scripts/ci/lint_banked.py "$BASE" "$HEAD"
 
   pr-gate:
-    needs: [classify, data-rules, credits, dco, secrets, workflows, depends, vacuity, goals, intake, scope-fix, tag, native, restructure, imports, sorry-advisory, queue-recheck]
+    needs: [classify, data-rules, credits, dco, secrets, workflows, depends, vacuity, goals, intake, scope-fix, tag, native, restructure, imports, sorry-advisory, fossa, queue-recheck]
     # `!cancelled()`, not `always()`: a run that a newer run has cancelled (the PR was pushed to or edited again: CodeRabbit rewrites the description after its review, which is an
     # `edited` event) would still run this job, and its failure stays on the commit as the latest `pr-gate` after the newer run has passed: the PR is blocked for nothing
     if: ${{ !cancelled() }}

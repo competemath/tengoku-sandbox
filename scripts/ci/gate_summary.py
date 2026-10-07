@@ -93,6 +93,11 @@ ADVICE: dict[str, tuple[str, str, str]] = {
         "`Depends-On: #N` lines in the description point at PRs that are merged or already queued",
         "wait for #N, or queue it first; the gate re-runs when the description or the branch changes",
     ),
+    "fossa": (
+        "medium",
+        "FOSSA's three verdicts on your head commit (License Compliance, Dependency Quality, Security Analysis) are all `success`; a verdict that does not arrive within 15 minutes fails too",
+        "open FOSSA's report (linked in the message) and fix what it names, or push again if FOSSA never reported; the gate re-runs on every push",
+    ),
     "lint-python": (
         "low",
         "`pre-commit run --all-files` (ruff, formatting, hooks) on tooling changes",
