@@ -78,7 +78,9 @@ def main() -> int:
         found = [json.loads(line) for line in r.stdout.splitlines() if line.strip()]
         found = [f for f in found if f["check"] != "summary"]
         for name in fixtures:
-            found += autoimplicit_findings(FIX / f"{name}.lean", f"JinshiFixtures.{name}", lake=True)
+            found += [
+                f for f in autoimplicit_findings(FIX / f"{name}.lean", f"JinshiFixtures.{name}", lake=True) if f["check"] != "reproduce"
+            ]
         # judged per fixture: the findings on its module against its table
         for name in examined:
             text = (FIX / f"{name}.lean").read_text(encoding="utf-8")

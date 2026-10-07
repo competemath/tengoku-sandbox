@@ -5,6 +5,9 @@ On a built tree (scripts/cache.sh get; lake build Tengoku.All; lake build tengok
 
   replay        `leanchecker <module>`: the toolchain's own kernel re-adds every declaration of the module to the environment of its
                 imports. A module whose .olean holds something the kernel would not accept fails. One process per module, J at a time.
+  reproduce     the same re-elaboration writes an .olean; when the module re-elaborates without error, its bytes are compared with the
+                cached .olean the tree ships (the attested cache): a difference is a compiled artefact that is not what the source gives
+                (tampering, a stale cache, or a non-reproducible compile), reported as `warn`; identical ones are counted as `info`.
   autoimplicit  `lean -DautoImplicit=false -DrelaxedAutoImplicit=false <file>`: the module re-elaborated with auto-bound implicits off.
                 Every `unknown identifier` error is a declaration in which Lean silently quantified a name (fail); any other error is
                 reported as `warn` (the re-elaboration should otherwise succeed: the module built). A module that sets
@@ -20,11 +23,14 @@ verdict, the workflow decides. `--modules FILE` (one module name per line) repla
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -86,7 +92,15 @@ def autoimplicit_findings(path: Path, module: str, lake: bool = False, timeout: 
             }
         ]
     text = path.read_text(encoding="utf-8", errors="replace")
-    cmd = (["lake", "env"] if lake else []) + ["lean", "-DautoImplicit=false", "-DrelaxedAutoImplicit=false", str(path)]
+    olean_out = Path(tempfile.mkdtemp(prefix="jinshi-")) / "out.olean"
+    cmd = (["lake", "env"] if lake else []) + [
+        "lean",
+        "-DautoImplicit=false",
+        "-DrelaxedAutoImplicit=false",
+        "-o",
+        str(olean_out),
+        str(path),
+    ]
     out: list[dict] = []
     if OPT_IN.search(text):
         out.append(
@@ -113,8 +127,22 @@ def autoimplicit_findings(path: Path, module: str, lake: bool = False, timeout: 
             }
         ]
     log = r.stdout + r.stderr
+    errors = list(ERROR.finditer(log))
+    # reproduce: an error-free re-elaboration gives the same bytes as the cached olean, or the cache is not what the source gives
+    cached = ROOT / ".lake" / "build" / "lib" / "lean" / (module.replace(".", "/") + ".olean")
+    if not errors and olean_out.is_file() and cached.is_file():
+        same = hashlib.sha256(olean_out.read_bytes()).digest() == hashlib.sha256(cached.read_bytes()).digest()
+        detail = (
+            "the re-elaborated olean is byte-identical to the cached one"
+            if same
+            else f"the re-elaborated olean DIFFERS from the cached one ({olean_out.stat().st_size} vs {cached.stat().st_size} bytes): the cache is not what the source gives today (tampering, a stale cache, or a non-reproducible compile)"
+        )
+        out.append(
+            {"check": "reproduce", "severity": "info" if same else "warn", "module": module, "name": "", "line": None, "detail": detail}
+        )
+    shutil.rmtree(olean_out.parent, ignore_errors=True)
     seen = set()
-    for m in ERROR.finditer(log):
+    for m in errors:
         line = int(m.group("line"))
         u = UNKNOWN.match(m.group(0))
         name = decl_at(text, line)
@@ -345,9 +373,11 @@ def main() -> int:
     if "autoimplicit" in checks:
         t = time.time()
         with ThreadPoolExecutor(a.jobs) as pool:
-            results["autoimplicit"] = [
-                f for fs in pool.map(lambda m: autoimplicit_findings(module_path(m), m, lake=True), modules) for f in fs
-            ]
+            both = [f for fs in pool.map(lambda m: autoimplicit_findings(module_path(m), m, lake=True), modules) for f in fs]
+        results["autoimplicit"] = [f for f in both if f["check"] == "autoimplicit"]
+        results["reproduce"] = [f for f in both if f["check"] == "reproduce"]
+        timings["reproduce"] = 0.0
+        flush("reproduce")
         timings["autoimplicit"] = time.time() - t
         print(f"autoimplicit: {len(results['autoimplicit'])} findings in {timings['autoimplicit']:.0f} s", flush=True)
         flush("autoimplicit")
