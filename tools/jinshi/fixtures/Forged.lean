@@ -14,6 +14,6 @@ run_cmd liftCoreM do
   let decl := Declaration.thmDecl { name := `JinshiFixtures.forged, levelParams := [], type := mkConst ``False, value := mkConst ``True.intro }
   withOptions (fun o => o.setBool `debug.skipKernelTC true) (addDecl decl)
 
-theorem honest : True := trivial
+theorem honest_beside_forged : True := trivial
 
 end JinshiFixtures
