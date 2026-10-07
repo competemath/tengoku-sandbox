@@ -89,7 +89,10 @@ def main() -> int:
             print(r.stdout + r.stderr)
             return 2
         found = [json.loads(line) for line in r.stdout.splitlines() if line.strip()]
-        found = [f for f in found if f["check"] != "summary"]
+        # arithUniverse is self-contained and synthetic (docs/jinshi.md): it reads no fixture module, but its findings are
+        # still attributed to whatever module happens to be first on the command line (c.mods.headD, as `decide`'s summary
+        # already does), so it is examined on its own below instead of against a fixture's expected table
+        found = [f for f in found if f["check"] not in ("summary", "arithUniverse")]
         for name in fixtures:
             found += [
                 f for f in autoimplicit_findings(FIX / f"{name}.lean", f"JinshiFixtures.{name}", lake=True) if f["check"] != "reproduce"
@@ -121,6 +124,28 @@ def main() -> int:
                     problems.append(f"{name}: UNEXPECTED {f['check']}/{f['severity']} {f['name']}: {f['detail'][:120]}")
                 elif not any(f["check"] == c and f["severity"] == s and w in f["detail"] for c, s, d, w in expected if d == f["name"]):
                     problems.append(f"{name}: EXTRA    {f['check']}/{f['severity']} {f['name']}: {f['detail'][:120]}")
+        # arithUniverse: self-contained, no fixture of its own — the smallest smoke test is that the executable knows it
+        # and that a standalone run over one trivial seed module returns its summary line with 0 "fail"s
+        lst = subprocess.run([str(exe), "--list"], cwd=ROOT, capture_output=True, text=True)
+        if "arithUniverse" not in lst.stdout.splitlines():
+            problems.append("arithUniverse: MISSING from --list")
+        else:
+            au = subprocess.run(
+                [str(exe), "--seed", "Init", "--module", f"JinshiFixtures.{fixtures[0]}", "--check", "arithUniverse"],
+                cwd=ROOT, capture_output=True, text=True, env=env,
+            )
+            au_lines = [json.loads(l) for l in au.stdout.splitlines() if l.strip()]
+            au_findings = [l for l in au_lines if l.get("check") == "arithUniverse"]
+            au_summary = [f for f in au_findings if f.get("name") in ("", "[anonymous]") and "universe:" in f.get("detail", "")]
+            au_fails = [f for f in au_findings if f.get("severity") == "fail"]
+            if au.returncode or not au_summary:
+                problems.append(
+                    f"arithUniverse: MISSING standalone summary line; returncode {au.returncode}: {(au.stdout + au.stderr)[-300:]}"
+                )
+            elif au_fails:
+                problems.append(f"arithUniverse: {len(au_fails)} fail finding(s) on a standalone run: {[f['detail'][:160] for f in au_fails]}")
+            else:
+                print(f"arithUniverse: {au_summary[0]['detail']}")
         # the replay: the forged module refused, every other accepted, by every kernel at hand
         os.environ["LEAN_PATH"] = lean_path
         for kernel, fn in (("replay", replay_finding), ("lean4lean", lean4lean_finding)):
