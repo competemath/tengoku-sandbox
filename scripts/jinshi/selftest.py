@@ -21,6 +21,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -62,16 +63,27 @@ def main() -> int:
         out.mkdir()
         lean_path = os.pathsep.join(p for p in [sh(["lake", "env", "printenv", "LEAN_PATH"]).stdout.strip(), tmp] if p)
         env = dict(os.environ, LEAN_PATH=lean_path)
+        def mark(what: str) -> None:  # progress with the children's peak memory: a runner that dies says where
+            import resource
+
+            peak = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss
+            peak_mb = peak // (1024 if sys.platform != "darwin" else 1024 * 1024)
+            print(f"[selftest {time.time() - t0:5.0f} s, peak child {peak_mb} MB] {what}", flush=True)
+
+        t0 = time.time()
         for name in fixtures + ["Forged"]:
             r = sh(["lake", "env", "lean", "-o", str(out / f"{name}.olean"), "-i", str(out / f"{name}.ilean"), str(FIX / f"{name}.lean")])
             if r.returncode:
                 print(f"{name}.lean does not compile:\n" + r.stdout + r.stderr)
                 return 2
+            mark(f"compiled {name}")
         # the environment examinations, one process, every fixture a module
         args = [str(exe), "--seed", "Init"]
         for name in examined:
             args += ["--module", f"JinshiFixtures.{name}"]
+        mark("running every examination over every fixture in one process")
         r = subprocess.run(args, cwd=ROOT, capture_output=True, text=True, env=env)
+        mark(f"the executable returned {r.returncode}")
         if r.returncode:
             print(r.stdout + r.stderr)
             return 2
