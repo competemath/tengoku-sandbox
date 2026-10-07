@@ -26,8 +26,8 @@ defaults:
     shell: bash
 env:
   TENGOKU_REPO: ${{ github.repository }}
-  LEAN4LEAN_COMMIT: 8223d223ed98661882e95d9d6a7126df7097cd76   # digama0/lean4lean, 2026-08-29
-  BATTERIES_COMMIT: d54dddc581e08be364c278052863524bff7a99a9   # SEED.md: the Batteries the tree seeded
+  LEAN4LEAN_COMMIT: 8223d223ed98661882e95d9d6a7126df7097cd76   # pragma: allowlist secret (a commit id: digama0/lean4lean, 2026-08-29)
+  BATTERIES_COMMIT: d54dddc581e08be364c278052863524bff7a99a9   # pragma: allowlist secret (a commit id: the Batteries the tree seeded, SEED.md)
 jobs:
   round:
     runs-on: ubuntu-latest
