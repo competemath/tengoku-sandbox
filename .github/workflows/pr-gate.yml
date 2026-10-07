@@ -5,7 +5,7 @@
 #
 # The checks always come from main: a PR never supplies the rules that judge it. `pull_request_target`
 # runs this file as it is on main (a `pull_request` run would take the PR's copy, which a PR can edit
-# to pass), and every job checks out main's commit and reads the PR only as data (git objects, and for
+# to pass), and every job checks out main's tip (env SCRIPTS) and reads the PR only as data (git objects, and for
 # vacuity the PR's data/ files laid over main's tree). Nothing here runs the PR's scripts, and every
 # checkout drops its token (persist-credentials: false). The PR's own test suite runs in pr-tests.yml.
 # A change to this file therefore takes effect only once merged: prove it in tengoku-sandbox first.
@@ -26,7 +26,10 @@ concurrency:
 env:
   BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
   HEAD: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha }}
-  # The checks come from the base branch's TIP, not from the base commit the event recorded (see the production file).
+  # The checks come from the base branch's TIP, not from the base commit the event recorded: that commit is the branch as it was at the
+  # PR's last push, and a gate script merged since is missing there (every PR opened before the FOSSA gate landed failed its new job
+  # with "can't open file", and a re-run or a description edit did not help: only a push did, 2026-10-07). BASE stays the commit the
+  # diff is measured against. In the merge queue the entry's base is that tip already.
   SCRIPTS: ${{ github.event.pull_request.base.ref && format('refs/heads/{0}', github.event.pull_request.base.ref) || github.event.merge_group.base_sha }}
   # where the PR's commits are fetched from (a fork's commits are reachable from refs/pull/<n>/head)
   PR_REF: ${{ github.event.pull_request.number && format('refs/pull/{0}/head', github.event.pull_request.number) || github.event.merge_group.head_ref }}
@@ -68,9 +71,9 @@ jobs:
       - name: Label the PR with its class
         env: { GH_TOKEN: "${{ github.token }}", CLASS: "${{ needs.classify.outputs.class }}", PR: "${{ github.event.pull_request.number }}" }
         run: |
-          case "$CLASS" in content|tombstone|tooling|docs|promotion|derived|intake|extend|scope-fix|restructure|tag|native) ;; *) echo "::error::not a class name"; exit 1 ;; esac
+          case "$CLASS" in content|tombstone|tooling|docs|promotion|derived|intake|extend|scope-fix|restructure|tag) ;; *) echo "::error::not a class name"; exit 1 ;; esac
           # one class label at a time: a PR whose class changes (docs, then content) loses the old one
-          old=$(gh pr view "$PR" -R "$GITHUB_REPOSITORY" --json labels --jq '.labels[].name' | grep -xE 'content|tombstone|tooling|docs|promotion|derived|intake|extend|scope-fix|restructure|tag|native' | grep -vxF "$CLASS" | paste -sd, - || true)
+          old=$(gh pr view "$PR" -R "$GITHUB_REPOSITORY" --json labels --jq '.labels[].name' | grep -xE 'content|tombstone|tooling|docs|promotion|derived|intake|extend|scope-fix|restructure|tag' | grep -vxF "$CLASS" | paste -sd, - || true)
           args=(--add-label "$CLASS"); [ -n "$old" ] && args+=(--remove-label "$old")
           gh pr edit "$PR" -R "$GITHUB_REPOSITORY" "${args[@]}" || echo "::warning::could not label the PR '$CLASS' (scripts/ci/labels.sh creates the class labels)"
 
@@ -198,29 +201,6 @@ jobs:
         run: git fetch -q --no-tags --filter=blob:none origin "+$PR_REF:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
       - name: tag checks
         run: python3 scripts/ci/tag_check.py "$BASE" "$HEAD"
-
-  # A native PR (novel Lean modules under Tengoku/Native/) is judged from git objects only: shape, umbrella, credit, imports, the intake allow-list in strict mode, no
-  # sorry, no tag (scripts/ci/native_check.py). Nothing of the PR runs; the merge queue builds the modules and checks their axioms.
-  native:
-    needs: classify
-    if: github.event_name == 'pull_request_target' && needs.classify.outputs.class == 'native'
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    permissions: { contents: read }
-    steps:
-      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
-        with: { egress-policy: audit }
-      # The base commit with plain git (see the scope-fix job): only the base is checked out, the PR is read as git objects.
-      - name: The base commit (the checks are main's)
-        run: |
-          git init -q .
-          git remote add origin "https://github.com/$GITHUB_REPOSITORY"
-          git fetch -q --no-tags --filter=blob:none origin "+$SCRIPTS:refs/remotes/origin/scripts" "$BASE"
-          git checkout -q --detach origin/scripts
-      - name: The PR's commits, as data (the checks are main's)
-        run: git fetch -q --no-tags --filter=blob:none origin "+$PR_REF:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
-      - name: native checks
-        run: python3 scripts/ci/native_check.py "$BASE" "$HEAD"
 
   # A scope-fix PR (a merged intake library's global registrations made local) is judged line by line: only `local ` inserted before
   # instance/simp, the library's own registrations repeated as local attributes, blank lines and one note comment. Nothing of the PR runs.
@@ -378,8 +358,10 @@ jobs:
           ./elan-init -y --default-toolchain none && echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
           sudo apt-get install -y -q zstd >/dev/null
           "$HOME/.elan/bin/lake" --version   # installs the tree's toolchain now, while there is network
-      - name: The PR's records over main's tree (data only; every script and tool stays main's)
-        run: git checkout -q "$HEAD" -- data
+      - name: The PR's record changes over main's tree (data only; every script and tool stays main's)
+        # The BASE..HEAD diff as a three-way patch: what main changed under data/ since the PR's base stays,
+        # and a conflict fails the job instead of building stale records. A snapshot of HEAD would undo it.
+        run: git diff --binary "$BASE" "$HEAD" -- data | git apply --3way --index --allow-empty
       - name: The compiled tree
         env: { GH_TOKEN: "${{ github.token }}" }
         run: scripts/cache.sh get 2>&1 | tail -3
@@ -447,8 +429,14 @@ jobs:
     steps:
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
         with: { egress-policy: audit }
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { ref: "${{ env.SCRIPTS }}", filter: "blob:none", persist-credentials: false }
+      # The base commit with plain git, not actions/checkout (as the scope-fix and queue-recheck jobs): the repository is public, nothing needs a token,
+      # and none is written into the checkout. Only main's script runs here; the PR is read as commit statuses.
+      - name: The base commit (the checks are main's)
+        run: |
+          git init -q .
+          git remote add origin "https://github.com/$GITHUB_REPOSITORY"
+          git fetch -q --no-tags --filter=blob:none origin "+$SCRIPTS:refs/remotes/origin/scripts" "$BASE"
+          git checkout -q --detach origin/scripts
       - name: fossa
         env: { GH_TOKEN: "${{ github.token }}", FOSSA_WAIT_MINUTES: "15" }
         run: python3 scripts/ci/fossa_check.py "$GITHUB_REPOSITORY" "$HEAD"
@@ -501,7 +489,7 @@ jobs:
           python3 scripts/ci/lint_banked.py "$BASE" "$HEAD"
 
   pr-gate:
-    needs: [classify, data-rules, credits, dco, secrets, workflows, depends, vacuity, goals, intake, scope-fix, tag, native, restructure, imports, sorry-advisory, fossa, queue-recheck]
+    needs: [classify, data-rules, credits, dco, secrets, workflows, depends, vacuity, goals, intake, scope-fix, tag, restructure, imports, sorry-advisory, fossa, queue-recheck]
     # `!cancelled()`, not `always()`: a run that a newer run has cancelled (the PR was pushed to or edited again: CodeRabbit rewrites the description after its review, which is an
     # `edited` event) would still run this job, and its failure stays on the commit as the latest `pr-gate` after the newer run has passed: the PR is blocked for nothing
     if: ${{ !cancelled() }}
