@@ -133,3 +133,36 @@ jobs:
       - name: The tagger on a real compile
         if: steps.touched.outputs.run == 'yes'
         run: python3 scripts/isnad.py tagtest
+  jinshi:
+    # the examinations' self-test (docs/jinshi.md, "Running"): the fixtures with their planted faults, compiled against Lean's own
+    # library, every fault found and nothing else reported; only when a file of the recipe changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions: { contents: read }
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
+        with: { egress-policy: audit }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { fetch-depth: 2, filter: "blob:none", persist-credentials: false }   # 2: the merge commit and the base
+      - id: touched
+        name: Does this PR touch the Jinshi recipe?
+        run: |
+          files="$(git diff --name-only HEAD^1 HEAD)"
+          if grep -qE '^(TengokuJinshi\.lean|lakefile\.toml|lean-toolchain|scripts/jinshi/|tools/jinshi/fixtures/|docs/jinshi\.md|\.github/workflows/pr-tests\.yml)' <<< "$files"; then
+            echo "run=yes" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=no" >> "$GITHUB_OUTPUT"; echo "no file of the Jinshi recipe changed"
+          fi
+      - name: elan (the installer at a fixed commit, checked against its digest before it runs)
+        if: steps.touched.outputs.run == 'yes'
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSfL -o elan-init.sh https://raw.githubusercontent.com/leanprover/elan/0e36a07b9bbcc5381fa6250df109f9a4f94d7bac/elan-init.sh
+          echo "a620ff1641616222c8d37c54845492004bb84d6877cdbc944dd65c1aa685bf53  elan-init.sh" | sha256sum -c -
+          sh elan-init.sh -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: Build the examinations (they import only Lean, no cache and no tree)
+        if: steps.touched.outputs.run == 'yes'
+        run: lake build tengoku-jinshi
+      - name: The fixtures
+        if: steps.touched.outputs.run == 'yes'
+        run: python3 scripts/jinshi/selftest.py

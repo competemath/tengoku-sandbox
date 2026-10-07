@@ -1,0 +1,24 @@
+# check	severity	name	a word the detail must contain
+shadow	warn	JinshiFixtures.Nat.succ	Nat.succ
+shadow	warn	JinshiFixtures.List.length	List.length
+shadow	warn	JinshiFixtures.uses_shadowed	Nat.succ
+dossier	info	JinshiFixtures.uses_shadowed	Nat.succ
+dossier	fail	JinshiFixtures.rh_holds	True
+dossier	fail	JinshiFixtures.everything_is_big	ignores
+dossier	fail	JinshiFixtures.witness_exists	fields
+dossier	info	JinshiFixtures.two_even	IsEven
+content	warn	JinshiFixtures.conclusion_is_hypothesis	hypothesis
+content	warn	JinshiFixtures.conclusion_true	True
+content	warn	JinshiFixtures.refl_only	a = a
+content	warn	JinshiFixtures.iff_self_only	p ↔ p
+arith	warn	JinshiFixtures.nat_sub_claim	ℕ-subtraction
+arith	warn	JinshiFixtures.nat_div_claim	ℕ-division
+tcb	info	JinshiFixtures.unsafeLength	unsafe
+tcb	info	JinshiFixtures.loopForever	opaque
+tcb	info	JinshiFixtures.secret	opaque
+tcb	info	JinshiFixtures.slowId	implemented_by
+tcb	warn	JinshiFixtures.about_secret	secret
+content	warn	JinshiFixtures.about_secret	a = a
+dossier	info	JinshiFixtures.about_secret	secret
+autoimplicit	fail	JinshiFixtures.typo_quantified	m
+autoimplicit	warn	JinshiFixtures.List.length	α
