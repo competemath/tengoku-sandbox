@@ -1,0 +1,4 @@
+# check	severity	name	a word the detail must contain
+duplicate	warn	JinshiFixtures.dupOfSeed	Nat.add_zero
+duplicate	warn	JinshiFixtures.twinA	twinB
+duplicate	warn	JinshiFixtures.twinB	twinA
