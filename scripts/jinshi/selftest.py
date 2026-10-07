@@ -143,7 +143,9 @@ def main() -> int:
                     f"arithUniverse: MISSING standalone summary line; returncode {au.returncode}: {(au.stdout + au.stderr)[-300:]}"
                 )
             elif au_fails:
-                problems.append(f"arithUniverse: {len(au_fails)} fail finding(s) on a standalone run: {[f['detail'][:160] for f in au_fails]}")
+                problems.append(
+                    f"arithUniverse: {len(au_fails)} fail finding(s) on a standalone run: {[f['detail'][:160] for f in au_fails]}"
+                )
             else:
                 print(f"arithUniverse: {au_summary[0]['detail']}")
         # the replay: the forged module refused, every other accepted, by every kernel at hand
