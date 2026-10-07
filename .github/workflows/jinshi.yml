@@ -59,6 +59,9 @@ jobs:
         run: lake build tengoku-jinshi 2>&1 | tail -1 && lake env leanchecker --help 2>&1 | head -2 || true
       - name: The self-test (the fixtures, against Lean's own library)
         run: python3 scripts/jinshi/selftest.py
+      - name: The pinned toolchain against Lean's soundness-labelled issues
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: python3 scripts/jinshi/toolchain_watch.py --out jinshi-out
       - name: The round
         env: { ROUND: "${{ inputs.round }}", CHECKS: "${{ inputs.checks }}" }
         run: |
