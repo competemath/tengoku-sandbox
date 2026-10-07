@@ -61,6 +61,10 @@ example : ¬ Equation1723 ℕ := fun h => by
 
 Anyone can contribute, by hand or with AI: a theorem, a project, or a goal ([CONTRIBUTING.md](CONTRIBUTING.md), [GOALS.md](GOALS.md)). Cite [DOI 10.5281/zenodo.23050400](https://doi.org/10.5281/zenodo.23050400). Apache-2.0; each theorem keeps its upstream licence.
 
+## Security, with Snyk
+
+<a href="https://snyk.io"><img src="https://cdn.simpleicons.org/snyk" height="18" alt="Snyk"></a>&nbsp;Tengoku is a proud member of [Snyk](https://snyk.io)'s [Secure Developer Program](https://snyk.io/open-source/), which equips open-source maintainers with its developer-security platform. Thank you for backing open source.
+
 ## Dedication
 
 This project is founded for the sake of God (فِي سَبِيلِ ٱللَّٰهِ) - the prophet PBUH said:
