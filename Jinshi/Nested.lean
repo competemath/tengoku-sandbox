@@ -66,36 +66,38 @@ def containsHeadOf (names : List Name) (cap : Nat) (root : Expr) : Bool := Id.ru
 /-- one constructor's fields (the binders after the inductive's own parameters), each checked for a nested occurrence of `v`'s
 own type names (`v.all`) -/
 def describeCtor (env : Environment) (v : InductiveVal) (ctorName : Name) : MetaM (Array String) := do
-  let some (.ctorInfo cv) := env.find? ctorName | return #[]
-  forallTelescope cv.type fun xs _ => do
-    let mut out := #[]
-    let fields := (xs.toList.drop cv.numParams).toArray
-    let shortCtor := toString ((ctorName.components.getLast?).getD ctorName)
-    for x in fields do
-      let fty ← instantiateMVars (← inferType x)
-      let label := toString (← x.fvarId!.getUserName)
-      match fty.getAppFn.constName? with
-      | some h =>
-        if v.all.contains h then
-          pure ()  -- a direct recursive occurrence at this position (`v`'s own type applied directly): not nested
-        else if containsHeadOf v.all nestedSearchCap fty then
-          let shown ← (try
-              let s ← withOptions (fun o => pp.maxSteps.set (pp.proofs.set o false) 200) (ppExpr fty)
-              pure (toString s)
-            catch _ => pure "?")
-          let shown := if shown.length > 120 then String.mk (shown.toList.take 120) ++ "…" else shown
-          out := out.push s!"constructor `{shortCtor}`, argument `{label} : {shown}`: `{v.name}` occurs nested inside `{h}`"
-        else
-          pure ()
-      | none =>
-        -- the argument's own head is not a plain constant application (a function type, a bound variable, …): too oddly
-        -- shaped to confidently name the outer type former, even though `v`'s type occurs somewhere inside it
-        if containsHeadOf v.all nestedSearchCap fty then
-          out := out.push
-            s!"constructor `{shortCtor}`, argument `{label}`: a nested occurrence exists (kernel reports numNested = {v.numNested})"
-        else
-          pure ()
-    return out
+  match env.find? ctorName with
+  | some (.ctorInfo cv) =>
+    forallTelescope cv.type fun xs _ => do
+      let mut out := #[]
+      let fields := (xs.toList.drop cv.numParams).toArray
+      let shortCtor := toString ((ctorName.components.getLast?).getD ctorName)
+      for x in fields do
+        let fty ← instantiateMVars (← inferType x)
+        let label := toString (← x.fvarId!.getUserName)
+        match fty.getAppFn.constName? with
+        | some h =>
+          if v.all.contains h then
+            pure ()  -- a direct recursive occurrence at this position (`v`'s own type applied directly): not nested
+          else if containsHeadOf v.all nestedSearchCap fty then
+            let shown ← try
+                let s ← withOptions (fun o => pp.maxSteps.set (pp.proofs.set o false) 200) (ppExpr fty)
+                pure (toString s)
+              catch _ => pure "?"
+            let shown := if shown.length > 120 then String.mk (shown.toList.take 120) ++ "…" else shown
+            out := out.push s!"constructor `{shortCtor}`, argument `{label} : {shown}`: `{v.name}` occurs nested inside `{h}`"
+          else
+            pure ()
+        | none =>
+          -- the argument's own head is not a plain constant application (a function type, a bound variable, …): too oddly
+          -- shaped to confidently name the outer type former, even though `v`'s type occurs somewhere inside it
+          if containsHeadOf v.all nestedSearchCap fty then
+            out := out.push
+              s!"constructor `{shortCtor}`, argument `{label}`: a nested occurrence exists (kernel reports numNested = {v.numNested})"
+          else
+            pure ()
+      return out
+  | _ => return #[]
 
 /-- every constructor of `v`, each constructor's fields in turn -/
 def describeNested (env : Environment) (v : InductiveVal) : MetaM (Array String) := do
@@ -122,9 +124,10 @@ def nested (c : Ctx) : MetaM (Array Finding) := do
     unless okName n do continue
     unless v.isNested do continue
     count := count + 1
-    let occs ← match ← nestedGuard env v with
-      | .ok os => pure os
-      | .error msg => pure #[s!"the occurrence walk did not complete: {msg}"]
+    let guarded ← nestedGuard env v
+    let occs := match guarded with
+      | .ok os => os
+      | .error msg => #[s!"the occurrence walk did not complete: {msg}"]
     let occDetail :=
       if occs.isEmpty then
         "no constructor argument's occurrence could be structurally characterized"
