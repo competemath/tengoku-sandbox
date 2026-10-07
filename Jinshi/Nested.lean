@@ -134,12 +134,12 @@ def nested (c : Ctx) : MetaM (Array Finding) := do
       else
         "; ".intercalate occs.toList
     out := out.push { check := "nested", severity := "info", module := m, name := n, line := ← lineOf n,
-      detail := s!"nested inductive, numNested = {v.numNested}: {occDetail} — not separately re-verified by this check: " ++
-        "every declaration of the module, this one included, is already re-type-checked at the whole-module level by " ++
-        "`replay` (leanchecker) and `lean4lean`; `nested` exists to make it visible and searchable, not to duplicate " ++
-        "that verification" }
+                      detail := s!"nested inductive, numNested = {v.numNested}: {occDetail} — not separately re-verified by this check: " ++
+                        "every declaration of the module, this one included, is already re-type-checked at the whole-module level by " ++
+                        "`replay` (leanchecker) and `lean4lean`; `nested` exists to make it visible and searchable, not to duplicate " ++
+                        "that verification" }
   out := out.push { check := "nested", severity := "info", module := c.mods.headD .anonymous, name := .anonymous,
-    detail := s!"{count} nested inductive declaration(s) found" }
+                    detail := s!"{count} nested inductive declaration(s) found" }
   return out
 
 end Jinshi
