@@ -1,0 +1,76 @@
+# Jinshi, one round of the tree (docs/jinshi.md): the kernel replay (leanchecker), the re-elaboration with auto-bound implicits off,
+# and the environment examinations (tengoku-jinshi), on the attested cache. On demand only; the round is an input, and the maintainer
+# opens a round by running it. ADVISORY: nothing here is a required check; the findings are the artifact and the run's summary.
+name: jinshi
+on:
+  workflow_dispatch:
+    inputs:
+      round:
+        description: "The round of tools/jinshi/partition.tsv to examine (0-9)"
+        required: false
+        default: "0"
+      checks:
+        description: "Comma-separated: replay, autoimplicit, env"
+        required: false
+        default: "replay,autoimplicit,env"
+      modules:
+        description: "Only these modules, comma-separated (a rehearsal); empty: the whole round"
+        required: false
+        default: ""
+permissions: {}
+concurrency:
+  group: jinshi
+  cancel-in-progress: false
+defaults:
+  run:
+    shell: bash
+env:
+  TENGOKU_REPO: ${{ github.repository }}
+jobs:
+  round:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    permissions: { contents: read }
+    steps:
+      - name: Free disk (the compiled tree is large)
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/local/share/boost /usr/share/swift || true
+          df -h / | tail -1
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
+        with: { egress-policy: audit }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { fetch-depth: 0, filter: "blob:none", persist-credentials: false }
+      - name: The inputs
+        env: { ROUND: "${{ inputs.round }}", CHECKS: "${{ inputs.checks }}", MODULES: "${{ inputs.modules }}" }
+        run: |
+          case "$ROUND" in [0-9]) ;; *) echo "::error::round is a digit 0-9"; exit 1 ;; esac
+          case "$CHECKS" in *[!a-z,]*) echo "::error::checks is a comma-separated list of replay, autoimplicit, env"; exit 1 ;; esac
+          if [ -n "$MODULES" ]; then echo "$MODULES" | tr ',' '\n' | sed 's/ //g' > modules.txt; echo "rehearsal on $(wc -l < modules.txt) modules"; fi
+          python3 scripts/jinshi/partition.py --round "$ROUND" --no-records | head -8
+      - name: elan
+        run: |
+          # the installer at a fixed commit (a moving `master` would run whatever it says today)
+          curl -sSfL https://raw.githubusercontent.com/leanprover/elan/0e36a07b9bbcc5381fa6250df109f9a4f94d7bac/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: The compiled tree (the attested cache)
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: scripts/cache.sh get 2>&1 | tail -3 && lake build Tengoku.All 2>&1 | tail -1
+      - name: The examinations, built
+        run: lake build tengoku-jinshi 2>&1 | tail -1 && lake env leanchecker --help 2>&1 | head -2 || true
+      - name: The self-test (the fixtures, against Lean's own library)
+        run: python3 scripts/jinshi/selftest.py
+      - name: The round
+        env: { ROUND: "${{ inputs.round }}", CHECKS: "${{ inputs.checks }}" }
+        run: |
+          if [ -s modules.txt ]; then extra=(--modules modules.txt); else extra=(); fi
+          python3 scripts/jinshi/run.py --round "$ROUND" --checks "$CHECKS" --jobs 3 --out jinshi-out "${extra[@]}" 2>&1 | tail -20
+      - name: Summary
+        if: always()
+        run: |
+          if [ -f jinshi-out/summary.md ]; then cat jinshi-out/summary.md >> "$GITHUB_STEP_SUMMARY"; head -40 jinshi-out/summary.md; fi
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: jinshi-round-${{ inputs.round }}
+          path: jinshi-out/
+          if-no-files-found: warn
