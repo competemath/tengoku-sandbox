@@ -81,6 +81,23 @@ def main() -> int:
         args = [str(exe), "--seed", "Init"]
         for name in examined:
             args += ["--module", f"JinshiFixtures.{name}"]
+        if os.environ.get("JINSHI_SELFTEST_PROBE", "1") != "0":  # on by default for this diagnostic commit
+            # DIAGNOSTIC (temporary): one process per examination over every fixture, each under a 3 GB address-space cap, so the
+            # examination that exhausts a runner's memory names itself; the combined run is then skipped.
+            import resource
+
+            def cap() -> None:
+                resource.setrlimit(resource.RLIMIT_AS, (3 * 1024**3, 3 * 1024**3))
+
+            names = [ln.strip() for ln in sh([str(exe), "--list"]).stdout.splitlines() if ln.strip()]
+            for check in names:
+                before = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss
+                t1 = time.time()
+                r = subprocess.run(args + ["--check", check], cwd=ROOT, capture_output=True, text=True, env=env, preexec_fn=cap)
+                after = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss
+                n = sum(1 for ln in r.stdout.splitlines() if ln.strip())
+                print(f"[probe] {check:12s} rc={r.returncode} {time.time() - t1:5.1f} s peak-so-far {after // 1024} MB (was {before // 1024}) {n} lines; {(r.stderr or '')[-200:].strip()!r}", flush=True)
+            return 3
         mark("running every examination over every fixture in one process")
         r = subprocess.run(args, cwd=ROOT, capture_output=True, text=True, env=env)
         mark(f"the executable returned {r.returncode}")
