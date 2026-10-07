@@ -15,9 +15,9 @@ on:
         required: false
         default: "8"
       checks:
-        description: "Comma-separated: replay, lean4lean, autoimplicit, options, env"
+        description: "Comma-separated: replay, lean4lean, autoimplicit, reproduce, options, env"
         required: false
-        default: "replay,lean4lean,autoimplicit,options,env"
+        default: "replay,lean4lean,autoimplicit,reproduce,options,env"
       modules:
         description: "Only these modules, comma-separated (a rehearsal); empty: the whole round"
         required: false
@@ -115,7 +115,7 @@ jobs:
         run: |
           extra=()
           if [ -n "$MODULES" ]; then echo "$MODULES" | tr ',' '\n' | sed 's/ //g' > modules.txt; extra=(--modules modules.txt); fi
-          python3 scripts/jinshi/run.py --round "$ROUND" --checks "$CHECKS" --jobs 3 --shard "$SHARD/$COUNT" --out jinshi-out "${extra[@]}" 2>&1 | tail -20
+          python3 scripts/jinshi/run.py --round "$ROUND" --checks "$CHECKS" --jobs 2 --shard "$SHARD/$COUNT" --out jinshi-out "${extra[@]}" 2>&1 | tee run.log | tail -20
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:

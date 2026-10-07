@@ -65,7 +65,16 @@ unsafe def main (argv : List String) : IO UInt32 := do
   let mut all : Array Finding := #[]
   for (name, run) in examinations do
     if c.on name then
-      let (r, _) ← ((run c).run' {} {}).toIO ctx { env }
+      -- an examination that throws (a heartbeat or recursion cap, a bug) loses only its own findings, as one warn
+      let lost (why : String) : Finding :=
+        { check := name, severity := "warn", module := c.mods.headD .anonymous, name := .anonymous,
+          detail := s!"the examination threw and its findings for these modules are lost: {why}" }
+      let guarded : MetaM (Array Finding) :=
+        tryCatchRuntimeEx (run c) fun e => do return #[lost (← e.toMessageData.toString)]
+      let r ← try
+          let (r, _) ← (guarded.run' {} {}).toIO ctx { env }
+          pure r
+        catch e => pure #[lost (toString e)]
       all := all ++ r
   for f in all do IO.println f.json
   let count (s : String) := (all.filter (·.severity == s)).size

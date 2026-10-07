@@ -38,9 +38,9 @@ def decide (c : Ctx) : MetaM (Array Finding) := do
     if ty.isForall || ty.hasLooseBVars || ty.hasMVar then continue
     unless (← isProp ty) do continue
     tried := tried + 1
-    let verdict ← try
-        withTheReader Core.Context (fun ctx => { ctx with maxHeartbeats := 2000 * 1000 }) (decideOne ty)
-      catch _ => pure none
+    let verdict ← tryCatchRuntimeEx
+        (withCurrHeartbeats <| withTheReader Core.Context (fun ctx => { ctx with maxHeartbeats := 2000 * 1000 }) (decideOne ty))
+        (fun _ => pure none)
     match verdict with
     | some true => confirmed := confirmed + 1
     | some false =>
