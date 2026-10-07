@@ -74,8 +74,19 @@ def reproduce_findings(path: Path, module: str, timeout: int = 1800) -> list[dic
     """The module compiled again with lake's own options: the olean must be byte-identical to the cached one, or the cache is not what the
     source gives today."""
     cached = ROOT / ".lake" / "build" / "lib" / "lean" / (module.replace(".", "/") + ".olean")
-    if not path.is_file() or not cached.is_file():
-        return []
+    if not path.is_file():
+        return []  # the missing source is reported once, by the driver's input check
+    if not cached.is_file():
+        return [
+            {
+                "check": "reproduce",
+                "severity": "warn",
+                "module": module,
+                "name": "",
+                "line": None,
+                "detail": "no cached .olean for this module in .lake/build: nothing to compare the compile with (the cache does not cover the module, or was not fetched)",
+            }
+        ]
     out_dir = Path(tempfile.mkdtemp(prefix="jinshi-rep-"))
     olean_out = out_dir / "out.olean"
     try:
@@ -210,9 +221,11 @@ def autoimplicit_findings(path: Path, module: str, lake: bool = False, timeout: 
     errors = list(ERROR.finditer(log))
     shutil.rmtree(olean_out.parent, ignore_errors=True)
     seen = set()
-    declared = {
-        d.rsplit(".", 1)[-1] for d in DECL.findall(text)
-    }  # a declaration that failed makes every later use of it "unknown": not a finding
+    # a declaration that failed makes every LATER use of it "unknown": not a finding. Only an earlier declaration can have failed, so
+    # the short name is suppressed only below the line that declares it (`theorem t : P → P` before `def P` keeps its auto-bound `P`).
+    declared_at: dict[str, int] = {}
+    for d in DECL.finditer(text):
+        declared_at.setdefault(d.group(1).rsplit(".", 1)[-1], text[: d.start()].count("\n") + 1)
     for m in errors:
         line = int(m.group("line"))
         u = UNKNOWN.match(m.group(0))
@@ -221,7 +234,7 @@ def autoimplicit_findings(path: Path, module: str, lake: bool = False, timeout: 
         if key in seen:
             continue
         seen.add(key)
-        if u and u.group("ident").rsplit(".", 1)[-1] in declared:
+        if u and declared_at.get(u.group("ident").rsplit(".", 1)[-1], 10**9) < line:
             continue
         if u:
             ident = u.group("ident")
@@ -527,6 +540,9 @@ def main() -> int:
         with ThreadPoolExecutor(a.jobs) as pool:
             both = [f for fs in pool.map(lambda m: autoimplicit_findings(module_path(m), m, lake=True), modules) for f in fs]
         results["autoimplicit"] = [f for f in both if f["check"] == "autoimplicit"]
+        timings["autoimplicit"] = time.time() - t
+        print(f"autoimplicit: {len(results['autoimplicit'])} findings in {timings['autoimplicit']:.0f} s", flush=True)
+        flush("autoimplicit")
     if "reproduce" in checks:
         t = time.time()
         with ThreadPoolExecutor(a.jobs) as pool:
@@ -534,9 +550,6 @@ def main() -> int:
         timings["reproduce"] = time.time() - t
         print(f"reproduce: {len(results['reproduce'])} findings in {timings['reproduce']:.0f} s", flush=True)
         flush("reproduce")
-        timings["autoimplicit"] = time.time() - t
-        print(f"autoimplicit: {len(results['autoimplicit'])} findings in {timings['autoimplicit']:.0f} s", flush=True)
-        flush("autoimplicit")
     if "options" in checks:
         t = time.time()
         results["options"] = [f for m in modules for f in options_findings(module_path(m), m)]
