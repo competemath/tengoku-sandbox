@@ -24,8 +24,10 @@ def uses(job: dict) -> list[str]:
 class OneTestRun(unittest.TestCase):
     def test_the_suite_runs_under_coverage_once_and_the_report_is_an_artifact(self):
         tests = runs(PR_TESTS["jobs"]["tooling-tests"])
-        self.assertEqual(tests.count("coverage run -m unittest discover"), 2)  # scripts/tests and scripts/ci/tests
+        self.assertEqual(tests.count("coverage run -m unittest discover"), 1)  # one function…
+        self.assertEqual((tests.count("suite scripts/tests "), tests.count("suite scripts/ci/tests ")), (1, 1))  # …run on each suite once
         self.assertNotIn("python3 -m unittest discover", tests)  # not a plain run as well
+        self.assertIn("grep -E '^(FAIL|ERROR):'", tests)  # a failure names its tests
         self.assertIn("coverage xml", tests)
         up = [s for s in PR_TESTS["jobs"]["tooling-tests"]["steps"] if s.get("uses", "").startswith("actions/upload-artifact@")]
         self.assertEqual((up[0]["with"]["name"], up[0]["with"]["path"]), ("coverage", "coverage.xml"))

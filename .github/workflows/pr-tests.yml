@@ -48,11 +48,17 @@ jobs:
       - name: Unit tests, measured
         shell: bash
         run: |
-          set -o pipefail
-          coverage run -m unittest discover -s scripts/tests -v 2>&1 | tail -5
+          # A suite's full output goes to a log; the job shows its last lines, and on a failure every `FAIL:`/`ERROR:` line first (a
+          # `| tail -5` alone named no failing test, and once hid a failure altogether: the campaign).
+          suite() {
+            if coverage run -m unittest discover -s "$1" -p "$2" -v > "$RUNNER_TEMP/tests.log" 2>&1; then tail -3 "$RUNNER_TEMP/tests.log"; else
+              grep -E '^(FAIL|ERROR):' "$RUNNER_TEMP/tests.log" || true; tail -30 "$RUNNER_TEMP/tests.log"; exit 1
+            fi
+          }
+          suite scripts/tests 'test*.py'
           # every module in scripts/ci/tests, found the same way CONTRIBUTING.md runs them (naming modules here left
           # the goals, retractions, headlines and promotion-notify tests out of CI)
-          coverage run -m unittest discover -s scripts/ci/tests -p 'test_*.py' -v 2>&1 | tail -5
+          suite scripts/ci/tests 'test_*.py'
           coverage combine
           coverage xml
           coverage report --skip-empty | tail -3
