@@ -63,6 +63,7 @@ def main() -> int:
         out.mkdir()
         lean_path = os.pathsep.join(p for p in [sh(["lake", "env", "printenv", "LEAN_PATH"]).stdout.strip(), tmp] if p)
         env = dict(os.environ, LEAN_PATH=lean_path)
+
         def mark(what: str) -> None:  # progress with the children's peak memory: a runner that dies says where
             import resource
 
@@ -81,24 +82,6 @@ def main() -> int:
         args = [str(exe), "--seed", "Init"]
         for name in examined:
             args += ["--module", f"JinshiFixtures.{name}"]
-        if os.environ.get("JINSHI_SELFTEST_PROBE"):  # JINSHI_SELFTEST_PROBE=1: one process per examination, with its peak memory
-            # DIAGNOSTIC (temporary): one process per examination over every fixture, each under a 3 GB address-space cap, so the
-            # examination that exhausts a runner's memory names itself; the combined run is then skipped.
-            import resource
-
-            names = [ln.strip() for ln in sh([str(exe), "--list"]).stdout.splitlines() if ln.strip()]
-            for check in names:
-                before = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss
-                t1 = time.time()
-                try:  # no address-space cap: Lean reserves more than 3 GB of virtual memory at startup; the peak RSS is the measure
-                    r = subprocess.run(args + ["--check", check], cwd=ROOT, capture_output=True, text=True, env=env, timeout=900)
-                except subprocess.TimeoutExpired:
-                    print(f"[probe] {check:12s} TIMEOUT after 900 s", flush=True)
-                    continue
-                after = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss
-                n = sum(1 for ln in r.stdout.splitlines() if ln.strip())
-                print(f"[probe] {check:12s} rc={r.returncode} {time.time() - t1:5.1f} s peak-so-far {after // 1024} MB (was {before // 1024}) {n} lines; {(r.stderr or '')[-200:].strip()!r}", flush=True)
-            return 3
         mark("running every examination over every fixture in one process")
         r = subprocess.run(args, cwd=ROOT, capture_output=True, text=True, env=env)
         mark(f"the executable returned {r.returncode}")
