@@ -1,0 +1,5 @@
+# check	severity	name	a word the detail must contain
+roundtrip	info	JinshiFixtures.usesPrivate	does not parse
+roundtrip	info	JinshiFixtures.withProof	does not elaborate
+roundtrip	warn	JinshiFixtures.hiddenInstance	different statement
+roundtrip	warn	JinshiFixtures.intNumerals	different statement

@@ -20,6 +20,7 @@ import Jinshi.Decide
 import Jinshi.Duplicate
 import Jinshi.Instdrift
 import Jinshi.Nearname
+import Jinshi.Roundtrip
 import Jinshi.Unusedhyp
 open Lean Meta Jinshi
 
@@ -34,6 +35,7 @@ def examinations : List (String × (Ctx → MetaM (Array Finding))) :=
    ("duplicate", duplicate),
    ("instdrift", instdrift),
    ("nearname", nearname),
+   ("roundtrip", roundtrip),
    ("unusedhyp", unusedhyp)]
 
 unsafe def main (argv : List String) : IO UInt32 := do
