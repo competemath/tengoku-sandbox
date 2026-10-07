@@ -15,9 +15,9 @@ on:
         required: false
         default: "8"
       checks:
-        description: "Comma-separated: replay, lean4lean, autoimplicit, env"
+        description: "Comma-separated: replay, lean4lean, autoimplicit, options, env"
         required: false
-        default: "replay,lean4lean,autoimplicit,env"
+        default: "replay,lean4lean,autoimplicit,options,env"
       modules:
         description: "Only these modules, comma-separated (a rehearsal); empty: the whole round"
         required: false
@@ -52,7 +52,7 @@ jobs:
         run: |
           case "$ROUND" in [0-9]) ;; *) echo "::error::round is a digit 0-9"; exit 1 ;; esac
           case "$SHARDS" in [1-9]|1[0-6]) ;; *) echo "::error::shards is 1 to 16"; exit 1 ;; esac
-          case "$CHECKS" in *[!a-z0-9,]*) echo "::error::checks is a comma-separated list of replay, lean4lean, autoimplicit, env"; exit 1 ;; esac
+          case "$CHECKS" in *[!a-z0-9,]*) echo "::error::checks is a comma-separated list of replay, lean4lean, autoimplicit, options, env"; exit 1 ;; esac
           case "$MODULES" in *[!A-Za-z0-9_.,\ ]*) echo "::error::modules is a comma-separated list of module names"; exit 1 ;; esac
           python3 scripts/jinshi/partition.py --round "$ROUND" --no-records | head -8
           echo "shards=$(python3 -c "import json,sys; print(json.dumps(list(range(int(sys.argv[1])))))" "$SHARDS")" >> "$GITHUB_OUTPUT"

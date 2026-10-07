@@ -14,7 +14,10 @@ On a built tree (scripts/cache.sh get; lake build Tengoku.All; lake build tengok
                 `autoImplicit true` itself is reported as opting in (warn), since the option on the command line cannot override it.
   lean4lean     `lean4lean <module>` (digama0/lean4lean: a kernel written in Lean, independent of the C++ one in its code if not in its
                 design), the same replay by a second implementation, when the binary is given by JINSHI_LEAN4LEAN (the workflow builds it).
-  env           tengoku-jinshi over the round's modules in one process: tcb, shadow, arith, dossier, content.
+  options       the module's `set_option` lines (in code, never in comments or strings): a heartbeat or recursion limit raised above the
+                default, or set to 0 (no limit), is a module that compiles only with extra budget (fragile under any toolchain change:
+                warn); `debug.*` options and `autoImplicit true` are warn; a linter switched off is info. No Lean runs.
+  env           tengoku-jinshi over the round's modules in one process: the examinations the executable lists (--list).
 
 Writes DIR/<check>.jsonl (one finding per line, the same shape for every check) and DIR/summary.md. Exit 0 always: the summary is the
 verdict, the workflow decides. `--modules FILE` (one module name per line) replaces the round's list (a rehearsal on a few modules).
@@ -178,6 +181,80 @@ def autoimplicit_findings(path: Path, module: str, lake: bool = False, timeout: 
     return out
 
 
+SET_OPTION = re.compile(r"^[ \t]*set_option[ \t]+([\w.]+)[ \t]+([^\s]+)", re.M)
+BUDGETS = {
+    "maxHeartbeats": 200000,
+    "synthInstance.maxHeartbeats": 20000,
+    "maxRecDepth": 512,
+    "synthInstance.maxSize": 128,
+    "exponentiation.threshold": 256,
+}
+
+
+def options_findings(path: Path, module: str) -> list[dict]:
+    """the module's set_option lines, read from the code (scripts/ci/lean_lex.py blanks comments and strings)"""
+    if not path.is_file():
+        return []
+    sys.path.insert(0, str(ROOT / "scripts" / "ci"))
+    from lean_lex import code_only  # noqa: E402
+
+    code = code_only(path.read_text(encoding="utf-8", errors="replace"))
+    out = []
+    for m in SET_OPTION.finditer(code):
+        name, value = m.group(1), m.group(2)
+        line = code.count("\n", 0, m.start()) + 1
+        if name in BUDGETS:
+            try:
+                v = int(value)
+            except ValueError:
+                continue
+            if v == 0 or v > BUDGETS[name]:
+                out.append(
+                    {
+                        "check": "options",
+                        "severity": "warn",
+                        "module": module,
+                        "name": "",
+                        "line": line,
+                        "detail": f"`set_option {name} {value}`: the module compiles only with {'no limit' if v == 0 else 'more budget than the default ' + str(BUDGETS[name])} (fragile under any toolchain change)",
+                    }
+                )
+        elif name.startswith("debug."):
+            out.append(
+                {
+                    "check": "options",
+                    "severity": "warn",
+                    "module": module,
+                    "name": "",
+                    "line": line,
+                    "detail": f"`set_option {name} {value}`: a debug option in shipped code",
+                }
+            )
+        elif name in ("autoImplicit", "relaxedAutoImplicit") and value == "true":
+            out.append(
+                {
+                    "check": "options",
+                    "severity": "warn",
+                    "module": module,
+                    "name": "",
+                    "line": line,
+                    "detail": f"`set_option {name} true`: auto-bound implicits switched on by the module itself",
+                }
+            )
+        elif name.startswith("linter.") and value == "false":
+            out.append(
+                {
+                    "check": "options",
+                    "severity": "info",
+                    "module": module,
+                    "name": "",
+                    "line": line,
+                    "detail": f"`set_option {name} false`: a linter switched off",
+                }
+            )
+    return out
+
+
 def replay_finding(module: str, timeout: int = 1800) -> list[dict]:
     try:
         r = subprocess.run(["lake", "env", "leanchecker", module], cwd=ROOT, capture_output=True, text=True, timeout=timeout)
@@ -301,7 +378,7 @@ def main() -> int:
     ap.add_argument("--round", type=int, default=0)
     ap.add_argument("--rounds", type=int, default=10)
     ap.add_argument("--jobs", type=int, default=max(1, (os.cpu_count() or 2) - 1))
-    ap.add_argument("--checks", default="replay,lean4lean,autoimplicit,env")
+    ap.add_argument("--checks", default="replay,lean4lean,autoimplicit,options,env")
     ap.add_argument("--modules", type=Path, help="one module name per line, instead of the round")
     ap.add_argument(
         "--shard",
@@ -381,6 +458,12 @@ def main() -> int:
         timings["autoimplicit"] = time.time() - t
         print(f"autoimplicit: {len(results['autoimplicit'])} findings in {timings['autoimplicit']:.0f} s", flush=True)
         flush("autoimplicit")
+    if "options" in checks:
+        t = time.time()
+        results["options"] = [f for m in modules for f in options_findings(module_path(m), m)]
+        timings["options"] = time.time() - t
+        flush("options")
+        print(f"options: {len(results['options'])} findings in {timings['options']:.0f} s", flush=True)
     if "env" in checks:
         t = time.time()
         fs = env_findings(modules)
