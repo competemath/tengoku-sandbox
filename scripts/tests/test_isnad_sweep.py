@@ -60,6 +60,9 @@ class Selection(unittest.TestCase):
             "@[simp] lemma a : True := trivial\n",
             "protected theorem Nat.x : True := trivial\n",
             "  theorem indented : True := trivial\n",
+            "@[simp]\ntheorem own_line : True := trivial\n",
+            "@[simp, norm_cast] @[inline] private lemma two_attrs : True := trivial\n",
+            "noncomputable protected theorem Nat.x : True := trivial\n",
         ):
             self.assertTrue(sw.has_theorem(text), text)
         for text in (
@@ -73,6 +76,27 @@ class Selection(unittest.TestCase):
             'def s := "\ntheorem in a string : True\n"\n',
         ):
             self.assertFalse(sw.has_theorem(text), text)
+
+    def test_what_is_not_a_theorem_command(self):
+        for text in (
+            "theorem\n",
+            "theorem",
+            "@[simp def x := 1\n",
+            "def theorem_x := 1\n",
+            "@[simp] def x := 1\n",
+            "private def lemma_x := 1\n",
+            "mytheorem x : True\n",
+        ):
+            self.assertFalse(sw.has_theorem(text), text)
+
+    def test_a_crafted_line_does_not_make_it_slow(self):
+        """CodeQL: the old attribute pattern backtracked exponentially on '@[]' followed by many '\t@[]'"""
+        import time
+
+        t0 = time.time()
+        self.assertFalse(sw.has_theorem("@[]" + "\t@[]" * 5000 + "\n"))
+        self.assertTrue(sw.has_theorem("@[]" + "\t@[]" * 5000 + " theorem t : True := trivial\n"))
+        self.assertLess(time.time() - t0, 2.0)
 
     def test_a_tag_anywhere_in_a_docstring_marks_the_module_done(self):
         self.assertTrue(sw.is_tagged(TAGGED))

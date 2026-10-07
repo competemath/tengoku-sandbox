@@ -26,10 +26,7 @@ ROOT = Path(__file__).resolve().parent.parent
 MAX_PART = 400
 SCOPES = ("seed", "native", "libs", "all")
 IMPORT = re.compile(r"^[ \t]*(?:public[ \t]+)?(?:meta[ \t]+)?import[ \t]+(Tengoku[\w.«»']*)", re.M)
-THEOREM = re.compile(
-    r"^[ \t]*(?:@\[[^\]]*\][ \t]*\n?[ \t]*)*(?:(?:private|protected|noncomputable|nonrec|public|meta|unsafe|partial)[ \t]+)*(?:theorem|lemma)[ \t]",
-    re.M,
-)
+DECL_MODIFIERS = {"private", "protected", "noncomputable", "nonrec", "public", "meta", "unsafe", "partial"}
 
 
 def pascal(s: str) -> str:
@@ -62,8 +59,23 @@ def code_of(text: str) -> str:
     return "".join(text[a:b] if kind == "code" else re.sub(r"[^\n]", " ", text[a:b]) for kind, a, b in tg.scan(text))
 
 
+def starts_theorem(line: str) -> bool:
+    """the line is a `theorem` or `lemma` command: attributes (`@[…]`) and modifiers first, then the keyword and a name (no regular expression: the nested repeat of
+    attributes backtracks exponentially on a crafted line, which CodeQL found)"""
+    rest = line.lstrip()
+    while rest.startswith("@["):
+        end = rest.find("]")
+        if end < 0:
+            return False
+        rest = rest[end + 1 :].lstrip()
+    words = rest.split()
+    while words and words[0] in DECL_MODIFIERS:
+        words = words[1:]
+    return len(words) >= 2 and words[0] in ("theorem", "lemma")
+
+
 def has_theorem(text: str) -> bool:
-    return bool(THEOREM.search(code_of(text)))
+    return any(starts_theorem(ln) for ln in code_of(text).split("\n"))
 
 
 def is_tagged(text: str) -> bool:
