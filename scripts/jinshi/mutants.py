@@ -37,7 +37,7 @@ def _env(out_dir: Path, env: dict | None) -> dict:
     return env
 
 
-def generate(modules: list[str], out_dir: Path, seed: str | None = None, env: dict | None = None) -> list[dict]:
+def generate(modules: list[str], out_dir: Path, seed: str | None = None, env: dict | None = None, timeout: int = 3600) -> list[dict]:
     """tengoku-jinshi --check mutants on the modules; returns its findings (the per-mutant lines carry Lean's in-process verdict)"""
     exe = ROOT / ".lake" / "build" / "bin" / "tengoku-jinshi"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -46,7 +46,19 @@ def generate(modules: list[str], out_dir: Path, seed: str | None = None, env: di
         args += ["--seed", seed]
     for m in modules:
         args += ["--module", m]
-    r = subprocess.run(args, cwd=ROOT, capture_output=True, text=True, env=_env(out_dir, env))
+    try:
+        r = subprocess.run(args, cwd=ROOT, capture_output=True, text=True, env=_env(out_dir, env), timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return [
+            {
+                "check": "mutants",
+                "severity": "warn",
+                "module": "",
+                "name": "",
+                "line": None,
+                "detail": f"tengoku-jinshi --check mutants exceeded {timeout} s: no mutants were judged",
+            }
+        ]
     if r.returncode:
         return [
             {
