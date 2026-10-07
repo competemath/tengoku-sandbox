@@ -81,9 +81,9 @@ The jobs, in the order they matter:
   event recorded (`BASE`). A gate script merged after a PR was pushed is
   therefore in force for that PR too, with no push needed.
   The one job that compiles the PR's records (`vacuity`) lays the PR's data
-  changes over that tip as a `BASE..HEAD` three-way patch, so what main changed
-  since the PR's base stays, and a conflict fails the job instead of building
-  stale records.
+  changes over that tip (the PR's data files, then main's versions of the ones
+  the PR did not change), so what main changed since the PR's base stays; a
+  file both changed fails the job instead of building stale records.
 - **pr-gate**: the required check. Passes only when every job of the PR's
   class passed. It also posts **one comment per PR**, updated in place: each
   failed check with its step, the first lines of its error, what the check

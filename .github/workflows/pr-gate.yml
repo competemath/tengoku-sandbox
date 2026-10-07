@@ -359,9 +359,18 @@ jobs:
           sudo apt-get install -y -q zstd >/dev/null
           "$HOME/.elan/bin/lake" --version   # installs the tree's toolchain now, while there is network
       - name: The PR's record changes over main's tree (data only; every script and tool stays main's)
-        # The BASE..HEAD diff as a three-way patch: what main changed under data/ since the PR's base stays,
-        # and a conflict fails the job instead of building stale records. A snapshot of HEAD would undo it.
-        run: git diff --binary "$BASE" "$HEAD" -- data | git apply --3way --index --allow-empty
+        # The PR's data files, then main's versions of the data files the PR did not change: what main changed
+        # under data/ since the PR's base stays (a snapshot of HEAD alone would undo it), and a file both changed
+        # fails here, before anything is built — the queue would conflict on it too. No patch: pr-code allows only
+        # `git checkout <pr> -- data` in a job that holds the token.
+        run: |
+          git checkout -q "$HEAD" -- data
+          mine=$(git diff --name-only "$BASE" "$HEAD" -- data | sort)
+          mains=$(git diff --name-only "$BASE" origin/scripts -- data | sort)
+          both=$(comm -12 <(echo "$mine") <(echo "$mains"))
+          [ -z "$both" ] || { echo "::error::changed under data/ on main since this PR's base and in the PR, rebase: $both"; exit 1; }
+          theirs=$(comm -13 <(echo "$mine") <(echo "$mains"))
+          [ -z "$theirs" ] || echo "$theirs" | xargs git checkout -q origin/scripts --
       - name: The compiled tree
         env: { GH_TOKEN: "${{ github.token }}" }
         run: scripts/cache.sh get 2>&1 | tail -3
