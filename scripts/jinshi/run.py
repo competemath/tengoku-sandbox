@@ -574,7 +574,7 @@ def main() -> int:
         from mutants import generate, judge  # noqa: E402
 
         mdir = a.out / "mutants"
-        gen = generate(modules, mdir)
+        gen = generate(modules, mdir, timeout=3600)
         fs, verdicts = judge(mdir, jobs=a.jobs)
         results["mutants"] = [f for f in gen if not f["detail"].startswith("lean: ")] + fs
         timings["mutants"] = time.time() - t
