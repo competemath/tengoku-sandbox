@@ -26,6 +26,8 @@ concurrency:
 env:
   BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
   HEAD: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha }}
+  # The checks come from the base branch's TIP, not from the base commit the event recorded (see the production file).
+  SCRIPTS: ${{ github.event.pull_request.base.ref && format('refs/heads/{0}', github.event.pull_request.base.ref) || github.event.merge_group.base_sha }}
   # where the PR's commits are fetched from (a fork's commits are reachable from refs/pull/<n>/head)
   PR_REF: ${{ github.event.pull_request.number && format('refs/pull/{0}/head', github.event.pull_request.number) || github.event.merge_group.head_ref }}
 jobs:
@@ -41,7 +43,7 @@ jobs:
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { ref: "${{ env.BASE }}", fetch-depth: 0, filter: "blob:none", persist-credentials: false }
+        with: { ref: "${{ env.SCRIPTS }}", fetch-depth: 0, filter: "blob:none", persist-credentials: false }
       - name: The PR's commits, as data (the checks are main's)
         run: git fetch -q --no-tags --filter=blob:none origin "+$PR_REF:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
       - id: c
@@ -82,7 +84,7 @@ jobs:
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { ref: "${{ env.BASE }}", fetch-depth: 0, filter: "blob:none", persist-credentials: false }
+        with: { ref: "${{ env.SCRIPTS }}", fetch-depth: 0, filter: "blob:none", persist-credentials: false }
       - name: The PR's commits, as data (the checks are main's)
         run: git fetch -q --no-tags --filter=blob:none origin "+$PR_REF:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
       - name: append-only
@@ -102,7 +104,7 @@ jobs:
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { ref: "${{ env.BASE }}", fetch-depth: 0, filter: "blob:none", persist-credentials: false }
+        with: { ref: "${{ env.SCRIPTS }}", fetch-depth: 0, filter: "blob:none", persist-credentials: false }
       - name: The PR's commits, as data (the checks are main's)
         run: git fetch -q --no-tags --filter=blob:none origin "+$PR_REF:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
       - name: credits
@@ -118,7 +120,7 @@ jobs:
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { ref: "${{ env.BASE }}", fetch-depth: 0, filter: "blob:none", persist-credentials: false }
+        with: { ref: "${{ env.SCRIPTS }}", fetch-depth: 0, filter: "blob:none", persist-credentials: false }
       - name: The PR's commits, as data (the checks are main's)
         run: git fetch -q --no-tags --filter=blob:none origin "+$PR_REF:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
       - name: goals
@@ -133,7 +135,7 @@ jobs:
     permissions: { contents: read }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { ref: "${{ env.BASE }}", fetch-depth: 0, filter: "blob:none", persist-credentials: false }
+        with: { ref: "${{ env.SCRIPTS }}", fetch-depth: 0, filter: "blob:none", persist-credentials: false }
       - name: The PR's commits, as data (the checks are main's)
         run: git fetch -q --no-tags --filter=blob:none origin "+$PR_REF:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
       - name: dco
@@ -157,8 +159,8 @@ jobs:
         run: |
           git init -q .
           git remote add origin "https://github.com/$GITHUB_REPOSITORY"
-          git fetch -q --no-tags --filter=blob:none origin "$BASE"
-          git checkout -q --detach "$BASE"
+          git fetch -q --no-tags --filter=blob:none origin "+$SCRIPTS:refs/remotes/origin/scripts" "$BASE"
+          git checkout -q --detach origin/scripts
       - name: The PR's commits, as data (the checks are main's)
         run: git fetch -q --no-tags --filter=blob:none origin "+$PR_REF:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
       - name: intake checks
@@ -190,8 +192,8 @@ jobs:
         run: |
           git init -q .
           git remote add origin "https://github.com/$GITHUB_REPOSITORY"
-          git fetch -q --no-tags --filter=blob:none origin "$BASE"
-          git checkout -q --detach "$BASE"
+          git fetch -q --no-tags --filter=blob:none origin "+$SCRIPTS:refs/remotes/origin/scripts" "$BASE"
+          git checkout -q --detach origin/scripts
       - name: The PR's commits, as data (the checks are main's)
         run: git fetch -q --no-tags --filter=blob:none origin "+$PR_REF:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
       - name: tag checks
@@ -213,8 +215,8 @@ jobs:
         run: |
           git init -q .
           git remote add origin "https://github.com/$GITHUB_REPOSITORY"
-          git fetch -q --no-tags --filter=blob:none origin "$BASE"
-          git checkout -q --detach "$BASE"
+          git fetch -q --no-tags --filter=blob:none origin "+$SCRIPTS:refs/remotes/origin/scripts" "$BASE"
+          git checkout -q --detach origin/scripts
       - name: The PR's commits, as data (the checks are main's)
         run: git fetch -q --no-tags --filter=blob:none origin "+$PR_REF:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
       - name: native checks
@@ -237,8 +239,8 @@ jobs:
         run: |
           git init -q .
           git remote add origin "https://github.com/$GITHUB_REPOSITORY"
-          git fetch -q --no-tags --filter=blob:none origin "$BASE"
-          git checkout -q --detach "$BASE"
+          git fetch -q --no-tags --filter=blob:none origin "+$SCRIPTS:refs/remotes/origin/scripts" "$BASE"
+          git checkout -q --detach origin/scripts
       - name: The PR's commits, as data (the checks are main's)
         run: git fetch -q --no-tags --filter=blob:none origin "+$PR_REF:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
       - name: scope-fix checks
@@ -260,8 +262,8 @@ jobs:
         run: |
           git init -q .
           git remote add origin "https://github.com/$GITHUB_REPOSITORY"
-          git fetch -q --no-tags --filter=blob:none origin "$BASE"
-          git checkout -q --detach "$BASE"
+          git fetch -q --no-tags --filter=blob:none origin "+$SCRIPTS:refs/remotes/origin/scripts" "$BASE"
+          git checkout -q --detach origin/scripts
       - name: The PR's commits, as data (the checks are main's)
         run: git fetch -q --no-tags --filter=blob:none origin "+$PR_REF:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
       - name: every import resolves
@@ -282,8 +284,8 @@ jobs:
         run: |
           git init -q .
           git remote add origin "https://github.com/$GITHUB_REPOSITORY"
-          git fetch -q --no-tags --filter=blob:none origin "$BASE"
-          git checkout -q --detach "$BASE"
+          git fetch -q --no-tags --filter=blob:none origin "+$SCRIPTS:refs/remotes/origin/scripts" "$BASE"
+          git checkout -q --detach origin/scripts
       - name: The PR's commits, as data (the checks are main's)
         run: git fetch -q --no-tags --filter=blob:none origin "+$PR_REF:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
       - name: restructure checks
@@ -296,7 +298,7 @@ jobs:
     permissions: { contents: read }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { ref: "${{ env.BASE }}", fetch-depth: 0, persist-credentials: false }
+        with: { ref: "${{ env.SCRIPTS }}", fetch-depth: 0, persist-credentials: false }
       - name: The PR's commits, as data (the checks are main's)
         run: git fetch -q --no-tags origin "+$PR_REF:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
       - uses: trufflesecurity/trufflehog@4dd8831c5f12599465d4d45c3c447b4018a34c85 # v3.97.9
@@ -339,7 +341,7 @@ jobs:
     permissions: { contents: read }   # advisory: what it finds is quoted in the gate comment, which the one privileged job writes
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { ref: "${{ env.BASE }}", fetch-depth: 0, filter: "blob:none", persist-credentials: false }
+        with: { ref: "${{ env.SCRIPTS }}", fetch-depth: 0, filter: "blob:none", persist-credentials: false }
       - name: The PR's commits, as data (the checks are main's)
         run: git fetch -q --no-tags --filter=blob:none origin "+$PR_REF:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
       - id: s
@@ -367,7 +369,7 @@ jobs:
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { ref: "${{ env.BASE }}", fetch-depth: 0, filter: "blob:none", persist-credentials: false }
+        with: { ref: "${{ env.SCRIPTS }}", fetch-depth: 0, filter: "blob:none", persist-credentials: false }
       - name: The PR's commits, as data (the checks are main's)
         run: git fetch -q --no-tags --filter=blob:none origin "+$PR_REF:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
       - name: Lean
@@ -405,7 +407,7 @@ jobs:
     permissions: { contents: read }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { ref: "${{ env.BASE }}", fetch-depth: 0, filter: "blob:none", persist-credentials: false }
+        with: { ref: "${{ env.SCRIPTS }}", fetch-depth: 0, filter: "blob:none", persist-credentials: false }
       - name: The PR's commits, as data (the checks are main's)
         run: git fetch -q --no-tags --filter=blob:none origin "+$PR_REF:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -430,7 +432,7 @@ jobs:
     permissions: { contents: read, pull-requests: read }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { ref: "${{ env.BASE }}", filter: "blob:none", persist-credentials: false }
+        with: { ref: "${{ env.SCRIPTS }}", filter: "blob:none", persist-credentials: false }
       - name: depends
         env: { GH_TOKEN: "${{ github.token }}", BODY: "${{ github.event.pull_request.body }}" }
         run: printf '%s' "$BODY" > body.txt && python3 scripts/ci/depends.py body.txt
@@ -446,7 +448,7 @@ jobs:
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { ref: "${{ env.BASE }}", filter: "blob:none", persist-credentials: false }
+        with: { ref: "${{ env.SCRIPTS }}", filter: "blob:none", persist-credentials: false }
       - name: fossa
         env: { GH_TOKEN: "${{ github.token }}", FOSSA_WAIT_MINUTES: "15" }
         run: python3 scripts/ci/fossa_check.py "$GITHUB_REPOSITORY" "$HEAD"
@@ -467,8 +469,8 @@ jobs:
         run: |
           git init -q .
           git remote add origin "https://github.com/$GITHUB_REPOSITORY"
-          git fetch -q --no-tags --filter=blob:none origin "$BASE"
-          git checkout -q --detach "$BASE"
+          git fetch -q --no-tags --filter=blob:none origin "+$SCRIPTS:refs/remotes/origin/scripts" "$BASE"
+          git checkout -q --detach origin/scripts
       - name: The entry's commits, as data (the checks are main's)
         if: github.event_name == 'merge_group'
         run: git fetch -q --no-tags --filter=blob:none origin "+$PR_REF:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
@@ -508,7 +510,7 @@ jobs:
     permissions: { contents: read, actions: write, pull-requests: write }   # actions: write — to stop the runs of removed queue entries
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { ref: "${{ env.BASE }}", fetch-depth: 0, filter: "blob:none", persist-credentials: false }
+        with: { ref: "${{ env.SCRIPTS }}", fetch-depth: 0, filter: "blob:none", persist-credentials: false }
       # In the merge queue. Each entry is built on the entry ahead of it, so BASE...HEAD is still only this PR's
       # change, and its own gate already passed on that change: credits, sign-off, secrets and the workflow rules
       # would give the same answer again. What the new base can change is checked by `queue-recheck` (above): the class,
