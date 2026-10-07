@@ -421,7 +421,8 @@ def env_findings(modules: list[str]) -> list[dict]:
                 "detail": f"tengoku-jinshi failed (exit {r.returncode}): {(r.stderr or r.stdout)[-600:]}",
             }
         ]
-    return [json.loads(line) for line in r.stdout.splitlines() if line.strip()]
+    # the executable ends with one {"check": "summary", ...} line of counts: not a finding
+    return [f for f in (json.loads(line) for line in r.stdout.splitlines() if line.strip()) if f.get("check") != "summary"]
 
 
 def summarize(rnd: int, modules: list[str], results: dict[str, list[dict]], timings: dict[str, float]) -> list[str]:
