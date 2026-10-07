@@ -14,6 +14,7 @@ label intake    1d76db "Bot: a verified library bundle from the translation fact
 label extend    1d76db "Bot: the next part of a library that arrived in parts (more modules, appended manifest, same checks)"
 label scope-fix 1d76db "Bot: a merged library's global instances/simp lemmas made local (checked line by line)"
 label tag 0e8a16 "Bot: isnad tags written into existing modules (nothing else changes; every tag recomputed in the merge queue)"
+label native 5319e7 "Bot: novel Lean modules under Tengoku/Native/ (CompeteMath's own certified theorems, Leak-proved results)"
 label restructure 1d76db "Bot: the seed moved into Tengoku/Seed/, recomputed from the base by scripts/restructure.py"
 label tooling   1d76db "Scripts, workflows, schemas, build files"
 label docs      c5def5 "Documentation only"

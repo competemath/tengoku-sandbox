@@ -66,9 +66,9 @@ jobs:
       - name: Label the PR with its class
         env: { GH_TOKEN: "${{ github.token }}", CLASS: "${{ needs.classify.outputs.class }}", PR: "${{ github.event.pull_request.number }}" }
         run: |
-          case "$CLASS" in content|tombstone|tooling|docs|promotion|derived|intake|extend|scope-fix|restructure|tag) ;; *) echo "::error::not a class name"; exit 1 ;; esac
+          case "$CLASS" in content|tombstone|tooling|docs|promotion|derived|intake|extend|scope-fix|restructure|tag|native) ;; *) echo "::error::not a class name"; exit 1 ;; esac
           # one class label at a time: a PR whose class changes (docs, then content) loses the old one
-          old=$(gh pr view "$PR" -R "$GITHUB_REPOSITORY" --json labels --jq '.labels[].name' | grep -xE 'content|tombstone|tooling|docs|promotion|derived|intake|extend|scope-fix|restructure|tag' | grep -vxF "$CLASS" | paste -sd, - || true)
+          old=$(gh pr view "$PR" -R "$GITHUB_REPOSITORY" --json labels --jq '.labels[].name' | grep -xE 'content|tombstone|tooling|docs|promotion|derived|intake|extend|scope-fix|restructure|tag|native' | grep -vxF "$CLASS" | paste -sd, - || true)
           args=(--add-label "$CLASS"); [ -n "$old" ] && args+=(--remove-label "$old")
           gh pr edit "$PR" -R "$GITHUB_REPOSITORY" "${args[@]}" || echo "::warning::could not label the PR '$CLASS' (scripts/ci/labels.sh creates the class labels)"
 
@@ -196,6 +196,29 @@ jobs:
         run: git fetch -q --no-tags --filter=blob:none origin "+$PR_REF:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
       - name: tag checks
         run: python3 scripts/ci/tag_check.py "$BASE" "$HEAD"
+
+  # A native PR (novel Lean modules under Tengoku/Native/) is judged from git objects only: shape, umbrella, credit, imports, the intake allow-list in strict mode, no
+  # sorry, no tag (scripts/ci/native_check.py). Nothing of the PR runs; the merge queue builds the modules and checks their axioms.
+  native:
+    needs: classify
+    if: github.event_name == 'pull_request_target' && needs.classify.outputs.class == 'native'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions: { contents: read }
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
+        with: { egress-policy: audit }
+      # The base commit with plain git (see the scope-fix job): only the base is checked out, the PR is read as git objects.
+      - name: The base commit (the checks are main's)
+        run: |
+          git init -q .
+          git remote add origin "https://github.com/$GITHUB_REPOSITORY"
+          git fetch -q --no-tags --filter=blob:none origin "$BASE"
+          git checkout -q --detach "$BASE"
+      - name: The PR's commits, as data (the checks are main's)
+        run: git fetch -q --no-tags --filter=blob:none origin "+$PR_REF:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
+      - name: native checks
+        run: python3 scripts/ci/native_check.py "$BASE" "$HEAD"
 
   # A scope-fix PR (a merged intake library's global registrations made local) is judged line by line: only `local ` inserted before
   # instance/simp, the library's own registrations repeated as local attributes, blank lines and one note comment. Nothing of the PR runs.
@@ -460,7 +483,7 @@ jobs:
           python3 scripts/ci/lint_banked.py "$BASE" "$HEAD"
 
   pr-gate:
-    needs: [classify, data-rules, credits, dco, secrets, workflows, depends, vacuity, goals, intake, scope-fix, tag, restructure, imports, sorry-advisory, queue-recheck]
+    needs: [classify, data-rules, credits, dco, secrets, workflows, depends, vacuity, goals, intake, scope-fix, tag, native, restructure, imports, sorry-advisory, queue-recheck]
     # `!cancelled()`, not `always()`: a run that a newer run has cancelled (the PR was pushed to or edited again: CodeRabbit rewrites the description after its review, which is an
     # `edited` event) would still run this job, and its failure stays on the commit as the latest `pr-gate` after the newer run has passed: the PR is blocked for nothing
     if: ${{ !cancelled() }}

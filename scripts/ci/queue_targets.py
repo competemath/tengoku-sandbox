@@ -30,6 +30,8 @@ from _git import (
     run,
     unplaced,
 )
+from native_check import is_native
+from native_check import module_of as native_module_of
 from restructure_check import is_restructure
 from tag_check import is_tag, module_of
 
@@ -44,6 +46,13 @@ if is_restructure(
 if is_tag(base, head):
     if not regenerate:
         print("\n".join(module_of(p) for _, p in changed_files(base, head)))
+    sys.exit(0)
+# a native PR (scripts/ci/native_check.py): the queue builds the modules it adds or edits, and the whole of Native when it edits one (what imports it is checked by that)
+if is_native(base, head):
+    if not regenerate:
+        files_ = [(st, p) for st, p in changed_files(base, head) if p.startswith("Tengoku/Native/")]
+        targets_ = [native_module_of(p) for _, p in files_] + (["Tengoku.Native"] if any(st == "M" for st, _ in files_) else [])
+        print("\n".join(dict.fromkeys(targets_)))
     sys.exit(0)
 corpora = load_schema("sources.json").get("corpora", {})
 
