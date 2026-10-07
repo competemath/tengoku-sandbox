@@ -96,10 +96,13 @@ python3 scripts/jinshi/run.py --round 0 --out jinshi-out      # replay, autoimpl
 
 ## 6. Status
 
-Built (one file per examination under `Jinshi/`, with its own fixture and table under `tools/jinshi/fixtures/`): the partition, `tcb`, `shadow`, `arith`, `dossier`, `content`, `instdrift`, `replay`, `lean4lean`, `autoimplicit`,
-Built (one file per examination under `Jinshi/`, with its own fixture and table under `tools/jinshi/fixtures/`): the partition, `tcb`, `shadow`, `arith`, `dossier`, `content`, `unusedhyp`, `replay`, `lean4lean`, `autoimplicit`,
-Built (one file per examination under `Jinshi/`, with its own fixture and table under `tools/jinshi/fixtures/`): the partition, `tcb`, `shadow`, `arith`, `dossier`, `content`, `roundtrip`, `replay`, `lean4lean`, `autoimplicit`,
-`toolchain`, the workflow. On 2026-10-07 the registry showed every `soundness` fix in the pinned `v4.34.0-rc2` (the July 2026 kernel fixes are its
-ancestors; the two of 18 August are backports on its release branch) and two `runtime-soundness` fixes of September 2026 that it
-lacks (reference-count overflow in the runtime, not the kernel: the next toolchain bump takes them).
-Not yet: the per-module Jinshi grade as a tag; notation overloading under `shadow`; the dossier for the seed's own definitions.
+Built, one file per examination under `Jinshi/` with its own fixture and table under `tools/jinshi/fixtures/`: the partition;
+`replay`, `lean4lean`, `autoimplicit`, `reproduce`, `options` and `toolchain` in the driver; `tcb`, `shadow`, `nearname`, `arith`,
+`dossier`, `content`, `decide`, `duplicate`, `instdrift`, `unusedhyp` and `roundtrip` in the executable; the round in shards. On
+2026-10-07 the registry showed every `soundness` fix in the pinned `v4.34.0-rc2` (the July 2026 kernel fixes are its ancestors;
+the two of 18 August are backports on its release branch) and two `runtime-soundness` fixes of September 2026 that it lacks
+(reference-count overflow in the runtime, not the kernel: the next toolchain bump takes them).
+
+Not yet: `forensics` (what the proof term tells); the per-module Jinshi grade as a tag; notation overloading under `shadow`; the
+dossier for the seed's own definitions; the examinations at pull-request time on the PR's own modules, with the near-name and
+notation report as one comment.
