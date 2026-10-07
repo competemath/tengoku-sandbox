@@ -10,9 +10,9 @@ on:
         required: false
         default: "0"
       checks:
-        description: "Comma-separated: replay, autoimplicit, env"
+        description: "Comma-separated: replay, lean4lean, autoimplicit, env"
         required: false
-        default: "replay,autoimplicit,env"
+        default: "replay,lean4lean,autoimplicit,env"
       modules:
         description: "Only these modules, comma-separated (a rehearsal); empty: the whole round"
         required: false
@@ -26,6 +26,8 @@ defaults:
     shell: bash
 env:
   TENGOKU_REPO: ${{ github.repository }}
+  LEAN4LEAN_COMMIT: 8223d223ed98661882e95d9d6a7126df7097cd76   # digama0/lean4lean, 2026-08-29
+  BATTERIES_COMMIT: d54dddc581e08be364c278052863524bff7a99a9   # SEED.md: the Batteries the tree seeded
 jobs:
   round:
     runs-on: ubuntu-latest
@@ -57,6 +59,24 @@ jobs:
         run: scripts/cache.sh get 2>&1 | tail -3 && lake build Tengoku.All 2>&1 | tail -1
       - name: The examinations, built
         run: lake build tengoku-jinshi 2>&1 | tail -1 && lake env leanchecker --help 2>&1 | head -2 || true
+      # lean4lean (a kernel written in Lean) at a pinned commit, on the tree's toolchain, with the Batteries commit the tree seeded
+      # (its own pin does not build on this toolchain): the third kernel of the tawatur, next to leanchecker and nanoda
+      - name: lean4lean, built on the pinned toolchain
+        env: { LEAN4LEAN_COMMIT: "${{ env.LEAN4LEAN_COMMIT }}", BATTERIES_COMMIT: "${{ env.BATTERIES_COMMIT }}" }
+        run: |
+          git clone -q https://github.com/digama0/lean4lean "$RUNNER_TEMP/lean4lean"
+          git -C "$RUNNER_TEMP/lean4lean" checkout -q "$LEAN4LEAN_COMMIT"
+          cp lean-toolchain "$RUNNER_TEMP/lean4lean/lean-toolchain"
+          python3 - "$RUNNER_TEMP/lean4lean/lake-manifest.json" "$BATTERIES_COMMIT" <<'PY'
+          import json, sys
+          m = json.load(open(sys.argv[1]))
+          for p in m["packages"]:
+              if p["name"] == "batteries":
+                  p["rev"] = p["inputRev"] = sys.argv[2]
+          json.dump(m, open(sys.argv[1], "w"), indent=2)
+          PY
+          (cd "$RUNNER_TEMP/lean4lean" && lake build lean4lean 2>&1 | tail -1)
+          echo "JINSHI_LEAN4LEAN=$RUNNER_TEMP/lean4lean/.lake/build/bin/lean4lean" >> "$GITHUB_ENV"
       - name: The self-test (the fixtures, against Lean's own library)
         run: python3 scripts/jinshi/selftest.py
       - name: The pinned toolchain against Lean's soundness-labelled issues

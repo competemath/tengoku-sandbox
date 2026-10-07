@@ -36,6 +36,7 @@ finding that, if confirmed, means a theorem is not what it claims; `warn` wants 
 | Check | Program | What it does | Severity |
 |---|---|---|---|
 | `replay` | `scripts/jinshi/run.py` → `leanchecker <module>` | the toolchain's own kernel re-adds every declaration of the module to the environment of its imports: an `.olean` whose contents the kernel would not accept, or that bypassed the kernel, fails here | fail |
+| `lean4lean` | `scripts/jinshi/run.py` → `lean4lean <module>` | the same replay by [lean4lean](https://github.com/digama0/lean4lean), a kernel written in Lean (derived from the C++ one, so not independent in design, but a second implementation); built by the workflow on the pinned toolchain with the Batteries commit the tree seeded | fail |
 | `autoimplicit` | `scripts/jinshi/run.py` → `lean -DautoImplicit=false -DrelaxedAutoImplicit=false <file>` | re-elaborates the module with auto-bound implicits off; every `unknown identifier` names a statement in which Lean quantified a name the author never bound. A module that itself sets `autoImplicit true` is reported as opting in | fail |
 | `tcb` | `TengokuJinshi.lean` | the trusted-computing-base inventory of the round: every `unsafe`, `partial`, `opaque`, `implemented_by`, `extern`, `axiom`, `initialize`, and every declaration whose type lives in the elaborator's monads; a theorem whose statement mentions one | warn (statement) / info (inventory) |
 | `shadow` | `TengokuJinshi.lean` | a library constant whose name, minus any prefix, is a name the seed declares; the theorems of the library whose statements mention it | warn |
@@ -45,9 +46,11 @@ finding that, if confirmed, means a theorem is not what it claims; `warn` wants 
 | `toolchain` | `scripts/jinshi/toolchain_watch.py` | Lean's own `soundness` and `runtime-soundness` issues against the pinned toolchain: each one's fix is an ancestor of the pinned tag or a backport on its release branch, or the toolchain has the bug; the snapshot is `tools/jinshi/lean-bugs.json` | fail (soundness) / warn (runtime) |
 | `nanoda` | `.github/workflows/independent-check.yml` (exists) | the whole tree re-typed by a kernel that shares no code with Lean | fail |
 
-Together `replay` and `nanoda` are the *tawatur* of kernels: a kernel bug would have to be shared by independent
-implementations before a false theorem survives both. A third checker, lean4lean (a kernel written in Lean and partly
-verified), joins when it builds on the pinned toolchain.
+Together `replay`, `lean4lean` and `nanoda` are the *tawatur* of kernels: a kernel bug would have to be shared by three
+implementations before a false theorem survives them all. The fixture `tools/jinshi/fixtures/Forged.lean` shows why the replay
+matters: it adds `forged : False := True.intro` to the environment under `debug.skipKernelTC`, the module compiles, and Lean's own
+`#print axioms` reports that `forged` depends on no axioms, so an axiom check alone would trust it; leanchecker and lean4lean both
+refuse the module, and the self-test requires that they do.
 
 ## 3. What Jinshi can and cannot promise
 
@@ -73,7 +76,8 @@ python3 scripts/jinshi/partition.py --round 0 --json round0.json    # the round'
 
 Local, no cache (the fixtures, against Lean's own library): `python3 scripts/jinshi/selftest.py` compiles
 `tools/jinshi/fixtures/Cases.lean`, runs every examination on it and compares the findings with `expected.tsv`: every planted
-fault must be found and nothing else reported. This is what `pr-tests` runs when the recipe changes.
+fault must be found and nothing else reported; then `Forged.lean` must be refused by leanchecker (and by lean4lean when
+`JINSHI_LEAN4LEAN` names its binary). This is what `pr-tests` runs when the recipe changes.
 
 A round, on a built tree (the attested cache; this is what the `jinshi` workflow does in the sandbox):
 
@@ -85,8 +89,8 @@ python3 scripts/jinshi/run.py --round 0 --out jinshi-out      # replay, autoimpl
 
 ## 6. Status
 
-Built: the partition, the fixtures, `tcb`, `shadow`, `arith`, `dossier`, `content`, `replay`, `autoimplicit`, `toolchain`, the
-workflow. On 2026-10-07 the registry showed every `soundness` fix in the pinned `v4.34.0-rc2` (the July 2026 kernel fixes are its
+Built: the partition, the fixtures, `tcb`, `shadow`, `arith`, `dossier`, `content`, `replay`, `lean4lean`, `autoimplicit`,
+`toolchain`, the workflow. On 2026-10-07 the registry showed every `soundness` fix in the pinned `v4.34.0-rc2` (the July 2026 kernel fixes are its
 ancestors; the two of 18 August are backports on its release branch) and two `runtime-soundness` fixes of September 2026 that it
 lacks (reference-count overflow in the runtime, not the kernel: the next toolchain bump takes them).
-Not yet: lean4lean as a third kernel; the per-module Jinshi grade in the report; notation overloading under `shadow`.
+Not yet: the per-module Jinshi grade as a tag; notation overloading under `shadow`; the dossier for the seed's own definitions.

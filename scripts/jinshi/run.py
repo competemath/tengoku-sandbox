@@ -9,6 +9,8 @@ On a built tree (scripts/cache.sh get; lake build Tengoku.All; lake build tengok
                 Every `unknown identifier` error is a declaration in which Lean silently quantified a name (fail); any other error is
                 reported as `warn` (the re-elaboration should otherwise succeed: the module built). A module that sets
                 `autoImplicit true` itself is reported as opting in (warn), since the option on the command line cannot override it.
+  lean4lean     `lean4lean <module>` (digama0/lean4lean: a kernel written in Lean, independent of the C++ one in its code if not in its
+                design), the same replay by a second implementation, when the binary is given by JINSHI_LEAN4LEAN (the workflow builds it).
   env           tengoku-jinshi over the round's modules in one process: tcb, shadow, arith, dossier, content.
 
 Writes DIR/<check>.jsonl (one finding per line, the same shape for every check) and DIR/summary.md. Exit 0 always: the summary is the
@@ -166,6 +168,38 @@ def replay_finding(module: str, timeout: int = 1800) -> list[dict]:
     ]
 
 
+def lean4lean_finding(module: str, timeout: int = 1800) -> list[dict]:
+    binary = os.environ.get("JINSHI_LEAN4LEAN", "")
+    if not binary:
+        return []
+    try:
+        r = subprocess.run(["lake", "env", binary, module], cwd=ROOT, capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return [
+            {
+                "check": "lean4lean",
+                "severity": "warn",
+                "module": module,
+                "name": "",
+                "line": None,
+                "detail": f"lean4lean exceeded {timeout} s",
+            }
+        ]
+    if r.returncode == 0:
+        return []
+    tail = (r.stdout + r.stderr).strip().splitlines()[-5:]
+    return [
+        {
+            "check": "lean4lean",
+            "severity": "fail",
+            "module": module,
+            "name": "",
+            "line": None,
+            "detail": f"lean4lean refused the module (exit {r.returncode}): " + " | ".join(tail)[:600],
+        }
+    ]
+
+
 def env_findings(modules: list[str]) -> list[dict]:
     exe = ROOT / ".lake" / "build" / "bin" / "tengoku-jinshi"
     args = [str(exe)]
@@ -191,7 +225,7 @@ def main() -> int:
     ap.add_argument("--round", type=int, default=0)
     ap.add_argument("--rounds", type=int, default=10)
     ap.add_argument("--jobs", type=int, default=max(1, (os.cpu_count() or 2) - 1))
-    ap.add_argument("--checks", default="replay,autoimplicit,env")
+    ap.add_argument("--checks", default="replay,lean4lean,autoimplicit,env")
     ap.add_argument("--modules", type=Path, help="one module name per line, instead of the round")
     ap.add_argument("--out", type=Path, required=True)
     a = ap.parse_args()
@@ -223,6 +257,12 @@ def main() -> int:
             results["replay"] = [f for fs in pool.map(replay_finding, modules) for f in fs]
         timings["replay"] = time.time() - t
         print(f"replay: {len(results['replay'])} findings in {timings['replay']:.0f} s", flush=True)
+    if "lean4lean" in checks and os.environ.get("JINSHI_LEAN4LEAN"):
+        t = time.time()
+        with ThreadPoolExecutor(a.jobs) as pool:
+            results["lean4lean"] = [f for fs in pool.map(lean4lean_finding, modules) for f in fs]
+        timings["lean4lean"] = time.time() - t
+        print(f"lean4lean: {len(results['lean4lean'])} findings in {timings['lean4lean']:.0f} s", flush=True)
     if "autoimplicit" in checks:
         t = time.time()
         with ThreadPoolExecutor(a.jobs) as pool:
