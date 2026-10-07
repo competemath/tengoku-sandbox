@@ -444,8 +444,10 @@ def env_run(modules: list[str], timeout: int) -> tuple[int, list[dict], str]:
         )
     except subprocess.TimeoutExpired:
         return -1, [], f"timeout after {timeout} s"
+    if r.returncode != 0:  # a process that died may have died mid-line: its stdout is not parsed
+        return r.returncode, [], (r.stderr or r.stdout)[-600:]
     found = [f for f in (json.loads(line) for line in r.stdout.splitlines() if line.strip()) if f.get("check") != "summary"]
-    return r.returncode, found, (r.stderr or r.stdout)[-600:]
+    return 0, found, (r.stderr or r.stdout)[-600:]
 
 
 def env_findings(
@@ -455,6 +457,8 @@ def env_findings(
 ) -> list[dict]:
     """The executable over the modules in batches of `batch`: a process that dies (a runner's memory, a cap no examination caught)
     loses one batch, not the shard; the modules of a dead batch are then run alone, and the one that dies alone is named."""
+    if batch < 1:
+        raise SystemExit(f"JINSHI_ENV_BATCH must be a positive number of modules, not {batch}")
     out: list[dict] = []
     for i in range(0, len(modules), batch):
         chunk = modules[i : i + batch]
