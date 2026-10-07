@@ -17,6 +17,12 @@ file under Jinshi/, registered in `examinations` below.
 -/
 import Jinshi.Base
 import Jinshi.Decide
+import Jinshi.Duplicate
+<<<<<<< HEAD
+import Jinshi.Decide
+=======
+import Jinshi.Duplicate
+>>>>>>> jinshi/duplicate
 open Lean Meta Jinshi
 
 /-- every examination this build knows: its name (the `check` field, the `--check` key) and its runner -/
@@ -26,7 +32,11 @@ def examinations : List (String × (Ctx → MetaM (Array Finding))) :=
    ("arith", fun c => arith c),
    ("dossier", dossier),
    ("content", content),
-   ("decide", decide)]
+   ("decide", decide),
+   ("duplicate", duplicate)]
+=======
+   ("duplicate", duplicate)]
+>>>>>>> jinshi/duplicate
 
 unsafe def main (argv : List String) : IO UInt32 := do
   enableInitializersExecution
