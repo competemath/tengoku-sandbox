@@ -1,0 +1,157 @@
+name: isnad-tag
+# The sweep that writes isnad tags into the tree (docs/pr-classes.md, section 7; docs/isnad.md, "The sweep"). One run takes the next part of the plan
+# (scripts/isnad_sweep.py: at most 400 modules, dependents first), tags it with the tagger (scripts/isnad.py tag) on the attested cache, and VERIFIES the result before
+# anything is proposed: the tag class's own gate (scripts/ci/tag_check.py) on the commit, then the tagged modules are built and every tag is recomputed from the build
+# (isnad.py check-tags), as the merge queue will do again. With `propose` it opens ONE tag PR as the bot (secret TENGOKU_BOT_TOKEN, held only by the job that never runs
+# the tree's code), the PR waits for its approval like any other, and the next run takes the next part. Without it the run only computes and verifies (a dry run:
+# the counts and the skipped theorems are in the summary, the patch is an artifact).
+on:
+  workflow_dispatch:
+    inputs:
+      scope:
+        description: "seed, native, libs (the libraries that arrived as intake bundles) or all"
+        required: false
+        default: "seed"
+      prefix:
+        description: "Only modules whose name starts with this (empty: from the first module of the plan)"
+        required: false
+        default: ""
+      max_modules:
+        description: "Modules in the part (at most 400, what a tag PR may hold)"
+        required: false
+        default: "400"
+      propose:
+        description: "true: open the tag PR as the bot. false: compute and verify only."
+        required: false
+        default: "false"
+
+permissions: {}
+
+concurrency:
+  group: isnad-tag
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  TENGOKU_REPO: ${{ github.repository }}
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    permissions: { contents: read }
+    outputs:
+      branch: ${{ steps.tag.outputs.branch }}
+      first: ${{ steps.tag.outputs.first }}
+      modules: ${{ steps.tag.outputs.modules }}
+      tags: ${{ steps.tag.outputs.tags }}
+    steps:
+      - name: Free disk (the compiled tree is large)
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/local/share/boost /usr/share/swift || true
+          df -h / | tail -1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { ref: main, fetch-depth: 0, filter: "blob:none", persist-credentials: false }
+      - name: The next part of the plan
+        id: plan
+        env: { SCOPE: "${{ inputs.scope }}", PREFIX: "${{ inputs.prefix }}", MAX: "${{ inputs.max_modules }}" }
+        run: |
+          case "$SCOPE" in seed|native|libs|all) ;; *) echo "::error::scope is seed, native, libs or all"; exit 1 ;; esac
+          case "$MAX" in ''|*[!0-9]*) echo "::error::max_modules is a number"; exit 1 ;; esac
+          python3 scripts/isnad_sweep.py plan --scope "$SCOPE" --prefix "$PREFIX" --max "$MAX" > modules.txt
+          echo "modules to tag in this part: $(wc -l < modules.txt)"; head -3 modules.txt
+          echo "any=$([ -s modules.txt ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+      - name: elan
+        if: steps.plan.outputs.any == 'true'
+        run: |
+          # the installer at a fixed commit (a moving `master` would run whatever it says today)
+          curl -sSfL https://raw.githubusercontent.com/leanprover/elan/0e36a07b9bbcc5381fa6250df109f9a4f94d7bac/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: The compiled tree (the attested cache)
+        if: steps.plan.outputs.any == 'true'
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: scripts/cache.sh get 2>&1 | tail -3 && lake build Tengoku.All 2>&1 | tail -1
+      - name: Tag the part
+        id: tag
+        if: steps.plan.outputs.any == 'true'
+        env: { BOT: "${{ vars.TENGOKU_BOT }}" }
+        run: |
+          lake build tengoku-isnad 2>&1 | tail -1
+          args=(); while read -r m; do args+=(--module "$m"); done < modules.txt
+          python3 scripts/isnad.py tag "${args[@]}" --write 2>&1 | tee tag.log | tail -5
+          if git diff --quiet -- Tengoku; then echo "nothing was tagged"; echo "branch=" >> "$GITHUB_OUTPUT"; exit 0; fi
+          first=$(head -1 modules.txt)
+          branch="isnad/tags-$(echo "$first" | sed -E 's/^Tengoku\.//; s/[^A-Za-z0-9]+/-/g' | cut -c1-60)"
+          git add -A -- Tengoku
+          git -c user.name="${BOT:-tengoku-bot}" -c user.email="${BOT:-tengoku-bot}@users.noreply.github.com" \
+            commit -q -s -m "isnad: tags for $(git diff --cached --name-only | wc -l) modules from $first" -m "Written by scripts/isnad.py tag (the isnad-tag workflow), part of the sweep."
+          git diff --stat HEAD~1 | tail -1
+          tags=$(git diff HEAD~1 | grep -c '^+@isnad' || true)
+          { echo "branch=$branch"; echo "first=$first"; echo "modules=$(git diff --name-only HEAD~1 | wc -l)"; echo "tags=$tags"; } >> "$GITHUB_OUTPUT"
+      - name: The tag class's gate on the result
+        if: steps.tag.outputs.branch != ''
+        run: python3 scripts/ci/tag_check.py HEAD~1 HEAD
+      - name: Build the tagged modules and recompute every tag from the build
+        if: steps.tag.outputs.branch != ''
+        run: |
+          # the part's own modules, as the merge queue builds them; check-tags must find every tag right (no tag missing, stale or without a theorem)
+          mods=(); while read -r m; do mods+=("$m"); done < modules.txt
+          lake build "${mods[@]}" 2>&1 | tail -3
+          args=(); for m in "${mods[@]}"; do args+=(--module "$m"); done
+          python3 scripts/isnad.py check-tags "${args[@]}" 2>&1 | tee check.log
+      - name: Summary
+        if: always() && steps.plan.outputs.any == 'true'
+        env: { SCOPE: "${{ inputs.scope }}", PREFIX: "${{ inputs.prefix }}", CHANGED: "${{ steps.tag.outputs.modules }}", TAGS: "${{ steps.tag.outputs.tags }}" }
+        run: |
+          {
+            echo '### isnad-tag'
+            echo "scope \`$SCOPE\`, prefix \`$PREFIX\`: ${CHANGED:-0} modules changed, ${TAGS:-0} tags written"
+            echo '```'
+            tail -5 tag.log 2>/dev/null || true
+            tail -1 check.log 2>/dev/null || true
+            echo '```'
+            echo 'Skipped by rule (first 40):'
+            echo '```'
+            grep '^skipped' tag.log 2>/dev/null | head -40 || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: The patch
+        if: steps.tag.outputs.branch != ''
+        run: git format-patch -1 --stdout > tags.patch && ls -la tags.patch
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: steps.tag.outputs.branch != ''
+        with: { name: tags, path: "tags.patch\ntag.log\ncheck.log\nmodules.txt", retention-days: 14 }
+
+  propose:
+    needs: tag
+    if: inputs.propose == 'true' && needs.tag.outputs.branch != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions: { contents: read, pull-requests: read }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { ref: main, fetch-depth: 0, filter: "blob:none", persist-credentials: false }
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with: { name: tags, path: tags }
+      - name: The tag PR, as the bot
+        env:
+          BOT_TOKEN: ${{ secrets.TENGOKU_BOT_TOKEN }}
+          BRANCH: ${{ needs.tag.outputs.branch }}
+          FIRST: ${{ needs.tag.outputs.first }}
+          MODULES: ${{ needs.tag.outputs.modules }}
+          TAGS: ${{ needs.tag.outputs.tags }}
+        run: |  # pragma: allowlist secret (the token is a variable here, never a value)
+          git switch -q -c "$BRANCH"
+          git -c user.name=isnad-tag -c user.email=isnad-tag@invalid am -3 -q --committer-date-is-author-date tags/tags.patch
+          git log -1 --format='%h %an: %s' && git diff --stat HEAD~1 | tail -1
+          if [ -z "$BOT_TOKEN" ]; then echo "::notice::no TENGOKU_BOT_TOKEN secret: the tags were computed and verified, but not proposed (the patch is the artifact)"; exit 0; fi
+          git push -q "https://x-access-token:${BOT_TOKEN}@github.com/${TENGOKU_REPO}.git" "$BRANCH"
+          body="Part of the isnad sweep: $TAGS tags written into $MODULES modules, from \`$FIRST\` on (\`scripts/isnad_sweep.py\`, dependents first).
+
+          The tag class (docs/pr-classes.md, section 7): the code is the base's bytes and every docstring the base's words; the tag lines are the only change. The modules were built and every tag recomputed from the build (\`isnad.py check-tags\`) before this PR was opened; the merge queue builds them and does it again. Theorems the tagger leaves alone by rule are listed in the run summary."
+          url=$(GH_TOKEN="$BOT_TOKEN" gh pr create -R "$TENGOKU_REPO" --head "$BRANCH" --title "isnad: tags for $MODULES modules (from $FIRST)" --body "$body")
+          GH_TOKEN="$BOT_TOKEN" gh pr merge "$url" -R "$TENGOKU_REPO" --auto || true
+          echo "$url"
