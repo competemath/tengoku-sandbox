@@ -137,8 +137,10 @@ def main() -> int:
                 f"{kernel}: the forged module {'refused' if forged else 'ACCEPTED'}, {len(fixtures)} honest module(s) {'accepted' if not honest else 'REFUSED'}"
             )
     # mutants (appended block): the fixture's mutant modules, generated into a directory of their own, judged by every kernel at hand
-    # (leanchecker; lean4lean when JINSHI_LEAN4LEAN names it): no disagreement with Lean's in-process verdict, and at least one mutant
-    # refused by every kernel and one accepted by every kernel
+    # (leanchecker; lean4lean when JINSHI_LEAN4LEAN names it; nanoda when NANODA_BIN and JINSHI_LEAN4EXPORT name their binaries): no
+    # disagreement with Lean's in-process verdict, and at least one mutant refused by every kernel and one accepted by every kernel.
+    # Neither NANODA_BIN nor JINSHI_LEAN4EXPORT set: nanoda.py's nanoda_verdict is never called (mutants.py's judge() adds the
+    # "nanoda" column only when NANODA_BIN is set), so everything below this comment behaves exactly as it did before nanoda existed.
     from mutants import generate, judge  # noqa: E402
 
     # (the mutants' directory is NOT under the fixtures' LEAN_PATH entry: a module is named by the search-path entry it is found under)
@@ -159,8 +161,12 @@ def main() -> int:
                     problems.append(f"Mutants: KERNELS DISAGREE {f['name']}: {f['detail'][:300]}")
                 elif f["severity"] == "warn":
                     problems.append(f"Mutants: WARN {f['name']}: {f['detail'][:300]}")
-            accepted = sum(1 for v in verdicts if all(x == "accept" for x in v["verdicts"].values()))
-            refused = sum(1 for v in verdicts if all(x == "reject" for x in v["verdicts"].values()))
+            # a nanoda "skip" (a trusted-head mutant, nanoda.py's TRUSTED_HEADS) is not a verdict to agree or disagree with — judge()
+            # already drops it the same way before comparing kernels, so the two invariants below ("every kernel") are judged on
+            # the same (non-skip) verdicts judge() itself compared, never penalising a mutant nanoda chose not to judge
+            judged = [{k: x for k, x in v["verdicts"].items() if x != "skip"} for v in verdicts]
+            accepted = sum(1 for j in judged if all(x == "accept" for x in j.values()))
+            refused = sum(1 for j in judged if all(x == "reject" for x in j.values()))
             if not verdicts:
                 problems.append("Mutants: MISSING  no mutant module was generated")
             if verdicts and not accepted:
@@ -168,6 +174,14 @@ def main() -> int:
             if verdicts and not refused:
                 problems.append("Mutants: MISSING  no mutant refused by every kernel")
             kernels = ["lean", "leanchecker"] + (["lean4lean"] if os.environ.get("JINSHI_LEAN4LEAN") else [])
+            if os.environ.get("NANODA_BIN"):
+                kernels.append("nanoda")
+                # NANODA_BIN is set: if no verdict even carries a "nanoda" key, judge() silently treated it as unset (a wiring bug
+                # between this script's env and judge()'s kenv.get("NANODA_BIN") — the whole point of exercising this path here)
+                if verdicts and not any("nanoda" in v["verdicts"] for v in verdicts):
+                    problems.append("Mutants: MISSING  NANODA_BIN is set but no mutant's verdicts carry a nanoda column")
+                skipped = sum(1 for v in verdicts if v["verdicts"].get("nanoda") == "skip")
+                print(f"mutants: nanoda judged {len(verdicts) - skipped} mutant(s), skipped {skipped} (trusted head)")
             print(
                 f"mutants: {len(verdicts)} mutants, {accepted} accepted by every kernel, {refused} refused by every kernel, "
                 f"{len(verdicts) - accepted - refused} disagreements or timeouts (kernels: {', '.join(kernels)})"
