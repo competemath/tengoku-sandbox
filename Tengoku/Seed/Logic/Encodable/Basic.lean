@@ -65,18 +65,30 @@ variable {α : Type*} {β : Type*}
 
 universe u
 
+/--
+@isnad1 id=injectiv.0h1v.s3.90528fec7a9d from=seed src=0 shape=cadbfeb1 vocab=aca9454f
+-/
 theorem encode_injective [Encodable α] : Function.Injective (@encode α _)
   | x, y, e => Option.some.inj <| by rw [← encodek, e, encodek]
 
+/--
+@isnad1 id=iff.0h3v.s4.9768b37407a5 from=seed src=0 shape=ff9b306f vocab=b17bc31c
+-/
 @[simp]
 theorem encode_inj [Encodable α] {a b : α} : encode a = encode b ↔ a = b :=
   encode_injective.eq_iff
 
 -- The priority of the instance below is less than the priorities of `Subtype.Countable`
 -- and `Quotient.Countable`
+/--
+@isnad1 id=countabl.0h1v.s2.9de9a5c92c35 from=seed src=0 shape=c6850a32 vocab=6c010bf4
+-/
 instance (priority := 400) countable [Encodable α] : Countable α where
   exists_injective_nat' := ⟨_,encode_injective⟩
 
+/--
+@isnad1 id=surjecti.0h2v.s4.0ecdb81ab35c from=seed src=0 shape=9c3f8d08 vocab=36fac712
+-/
 theorem surjective_decode_getD (α : Type*) [Encodable α] (d : α) :
     Surjective fun n => (Encodable.decode n).getD d := fun x =>
   ⟨Encodable.encode x, by simp_rw [Encodable.encodek]; rfl⟩
@@ -105,10 +117,16 @@ def ofLeftInverse [Encodable α] (f : β → α) (finv : α → β) (linv : ∀ 
 def ofEquiv (α) [Encodable α] (e : β ≃ α) : Encodable β :=
   ofLeftInverse e e.symm e.left_inv
 
+/--
+@isnad1 id=eq.0h4v.s5.e22208f01306 from=seed src=0 shape=dce615ac vocab=ddb74b20
+-/
 theorem encode_ofEquiv {α β} [Encodable α] (e : β ≃ α) (b : β) :
     @encode _ (ofEquiv _ e) b = encode (e b) :=
   rfl
 
+/--
+@isnad1 id=eq.0h4v.s5.04aa6691e5ed from=seed src=0 shape=9abec224 vocab=5ed97dec
+-/
 theorem decode_ofEquiv {α β} [Encodable α] (e : β ≃ α) (n : ℕ) :
     @decode _ (ofEquiv _ e) n = (decode n).map e.symm :=
   show Option.bind _ _ = Option.map _ _
@@ -117,10 +135,16 @@ theorem decode_ofEquiv {α β} [Encodable α] (e : β ≃ α) (n : ℕ) :
 instance _root_.Nat.encodable : Encodable ℕ :=
   ⟨id, some, fun _ => rfl⟩
 
+/--
+@isnad1 id=eq.0h1v.s3.59aa45c88cc9 from=seed src=0 shape=9023e767 vocab=91876a8c
+-/
 @[simp]
 theorem encode_nat (n : ℕ) : encode n = n :=
   rfl
 
+/--
+@isnad1 id=eq.0h1v.s3.e148a8958a21 from=seed src=0 shape=076a5e7a vocab=77992e0d
+-/
 @[simp 1100]
 theorem decode_nat (n : ℕ) : decode n = some n :=
   rfl
@@ -131,14 +155,23 @@ instance (priority := 100) _root_.IsEmpty.toEncodable [IsEmpty α] : Encodable �
 instance _root_.PUnit.encodable : Encodable PUnit :=
   ⟨fun _ => 0, fun n => Nat.casesOn n (some PUnit.unit) fun _ => none, fun _ => by simp⟩
 
+/--
+@isnad1 id=eq.0h0v.s3.8309ca427021 from=seed src=0 shape=b3c4969c vocab=4af11e54
+-/
 @[simp]
 theorem encode_star : encode PUnit.unit = 0 :=
   rfl
 
+/--
+@isnad1 id=eq.0h0v.s3.72bd361ff63f from=seed src=0 shape=004fa072 vocab=b54c7ff9
+-/
 @[simp]
 theorem decode_unit_zero : decode 0 = some PUnit.unit :=
   rfl
 
+/--
+@isnad1 id=eq.0h1v.s3.28084c38b6c7 from=seed src=0 shape=cbcaddce vocab=5ceec226
+-/
 @[simp]
 theorem decode_unit_succ (n) : decode (succ n) = (none : Option PUnit) :=
   rfl
@@ -149,18 +182,30 @@ instance _root_.Option.encodable {α : Type*} [h : Encodable α] : Encodable (Op
     Nat.casesOn n (some none) fun m => (decode m).map some, fun o => by
     cases o <;> simp [encodek]⟩
 
+/--
+@isnad1 id=eq.0h1v.s4.9ac7cef5d771 from=seed src=0 shape=46a7a1bc vocab=dc5108f8
+-/
 @[simp]
 theorem encode_none [Encodable α] : encode (@none α) = 0 :=
   rfl
 
+/--
+@isnad1 id=eq.0h2v.s4.f1c7bbf206c3 from=seed src=0 shape=ed0d216a vocab=2abb2f0f
+-/
 @[simp]
 theorem encode_some [Encodable α] (a : α) : encode (some a) = succ (encode a) :=
   rfl
 
+/--
+@isnad1 id=eq.0h1v.s4.21a52f6ffca4 from=seed src=0 shape=06142186 vocab=47344919
+-/
 @[simp]
 theorem decode_option_zero [Encodable α] : (decode 0 : Option (Option α)) = some none :=
   rfl
 
+/--
+@isnad1 id=eq.0h2v.s4.d9f2e330d70c from=seed src=0 shape=658e3b85 vocab=e89c466a
+-/
 @[simp]
 theorem decode_option_succ [Encodable α] (n) :
     (decode (succ n) : Option (Option α)) = (decode n).map some :=
@@ -172,34 +217,61 @@ is not to help make the definition easier to use. -/
 def decode₂ (α) [Encodable α] (n : ℕ) : Option α :=
   (decode n).bind (Option.guard fun a => encode a = n)
 
+/--
+@isnad1 id=iff.0h3v.s5.c68a1ed98b80 from=seed src=0 shape=0746dccc vocab=f05d09b1
+-/
 theorem mem_decode₂' [Encodable α] {n : ℕ} {a : α} :
     a ∈ decode₂ α n ↔ a ∈ decode n ∧ encode a = n := by
   simp [decode₂, Option.bind_eq_some_iff]
 
+/--
+@isnad1 id=iff.0h3v.s4.b76d26766be9 from=seed src=0 shape=ea553a07 vocab=313f2ae2
+-/
 theorem mem_decode₂ [Encodable α] {n : ℕ} {a : α} : a ∈ decode₂ α n ↔ encode a = n :=
   mem_decode₂'.trans (and_iff_right_of_imp fun e => e ▸ encodek _)
 
+/--
+@isnad1 id=iff.0h3v.s4.4aee34521548 from=seed src=0 shape=63ad7c14 vocab=28152b2f
+-/
 theorem decode₂_eq_some [Encodable α] {n : ℕ} {a : α} : decode₂ α n = some a ↔ encode a = n :=
   mem_decode₂
 
+/--
+@isnad1 id=eq.0h2v.s4.028d6619c704 from=seed src=0 shape=8d0b357a vocab=76bf17e0
+-/
 @[simp]
 theorem decode₂_encode [Encodable α] (a : α) : decode₂ α (encode a) = some a := by
   simp [decode₂_eq_some]
 
+/--
+@isnad1 id=iff.0h2v.s4.9a4e31bdb863 from=seed src=0 shape=60cd8047 vocab=b764123a
+-/
 theorem decode₂_ne_none_iff [Encodable α] {n : ℕ} :
     decode₂ α n ≠ none ↔ n ∈ Set.range (encode : α → ℕ) := by
   simp_rw [Set.range, Set.mem_ofPred_eq, Ne, Option.eq_none_iff_forall_not_mem,
     Encodable.mem_decode₂, not_forall, not_not]
 
+/--
+@isnad1 id=ispartia.0h1v.s3.28cfc144b1b7 from=seed src=0 shape=2a2734c3 vocab=cfce74be
+-/
 theorem decode₂_isPartialInv [Encodable α] : IsPartialInv encode (decode₂ α) := fun _ _ =>
   mem_decode₂
 
+/--
+@isnad1 id=ispartia.0h1v.s3.28cfc144b1b7 from=seed src=0 shape=2a2734c3 vocab=cfce74be
+-/
 @[deprecated (since := "2026-03-11")] alias decode₂_is_partial_inv := decode₂_isPartialInv
 
+/--
+@isnad1 id=eq.2h4v.s5.41eb7d495400 from=seed src=0 shape=87f8a10e vocab=e19d6304
+-/
 theorem decode₂_inj [Encodable α] {n : ℕ} {a₁ a₂ : α} (h₁ : a₁ ∈ decode₂ α n)
     (h₂ : a₂ ∈ decode₂ α n) : a₁ = a₂ :=
   encode_injective <| (mem_decode₂.1 h₁).trans (mem_decode₂.1 h₂).symm
 
+/--
+@isnad1 id=eq.0h2v.s4.028d6619c704 from=seed src=0 shape=8d0b357a vocab=76bf17e0
+-/
 theorem encodek₂ [Encodable α] (a : α) : decode₂ α (encode a) = some a :=
   mem_decode₂.2 rfl
 
@@ -244,14 +316,23 @@ def decodeSum (n : ℕ) : Option (α ⊕ β) :=
 instance _root_.Sum.encodable : Encodable (α ⊕ β) :=
   ⟨encodeSum, decodeSum, fun s => by cases s <;> simp [encodeSum, div2_val, decodeSum, encodek]⟩
 
+/--
+@isnad1 id=eq.0h3v.s5.98ff88a1eb64 from=seed src=0 shape=b1d2bd19 vocab=b9ce5012
+-/
 @[simp]
 theorem encode_inl (a : α) : @encode (α ⊕ β) _ (Sum.inl a) = 2 * (encode a) :=
   rfl
 
+/--
+@isnad1 id=eq.0h3v.s5.2d3d997e113c from=seed src=0 shape=c40af2b8 vocab=37afc29f
+-/
 @[simp]
 theorem encode_inr (b : β) : @encode (α ⊕ β) _ (Sum.inr b) = 2 * (encode b) + 1 :=
   rfl
 
+/--
+@isnad1 id=eq.0h3v.s5.1c2fc30ed66a from=seed src=0 shape=902256ba vocab=aeddda0c
+-/
 @[simp]
 theorem decode_sum_val (n : ℕ) : (decode n : Option (α ⊕ β)) = decodeSum n :=
   rfl
@@ -261,22 +342,37 @@ end Sum
 instance _root_.Bool.encodable : Encodable Bool :=
   ofEquiv (Unit ⊕ Unit) Equiv.boolEquivPUnitSumPUnit
 
+/--
+@isnad1 id=eq.0h0v.s3.757cc9d72536 from=seed src=0 shape=b3c4969c vocab=a4567dcb
+-/
 @[simp]
 theorem encode_true : encode true = 1 :=
   rfl
 
+/--
+@isnad1 id=eq.0h0v.s3.bba432b175e0 from=seed src=0 shape=b3c4969c vocab=eef58133
+-/
 @[simp]
 theorem encode_false : encode false = 0 :=
   rfl
 
+/--
+@isnad1 id=eq.0h0v.s3.63f877059666 from=seed src=0 shape=004fa072 vocab=8182816c
+-/
 @[simp]
 theorem decode_zero : (decode 0 : Option Bool) = some false :=
   rfl
 
+/--
+@isnad1 id=eq.0h0v.s3.48776e301b6d from=seed src=0 shape=004fa072 vocab=c672601c
+-/
 @[simp]
 theorem decode_one : (decode 1 : Option Bool) = some true :=
   rfl
 
+/--
+@isnad1 id=eq.1h1v.s4.1e837a61e509 from=seed src=0 shape=500137cd vocab=d1590b83
+-/
 theorem decode_ge_two (n) (h : 2 ≤ n) : (decode n : Option Bool) = none := by
   suffices decodeSum n = none by
     change (decodeSum n).bind _ = none
@@ -308,12 +404,18 @@ instance _root_.Sigma.encodable : Encodable (Sigma γ) :=
   ⟨encodeSigma, decodeSigma, fun ⟨a, b⟩ => by
     simp [encodeSigma, decodeSigma, unpair_pair, encodek]⟩
 
+/--
+@isnad1 id=eq.0h3v.s6.f60f28a072d1 from=seed src=0 shape=17ed7549 vocab=0437017e
+-/
 @[simp]
 theorem decode_sigma_val (n : ℕ) :
     (decode n : Option (Sigma γ)) =
       (decode n.unpair.1).bind fun a => (decode n.unpair.2).map <| Sigma.mk a :=
   rfl
 
+/--
+@isnad1 id=eq.0h4v.s5.b5892ac6e2e8 from=seed src=0 shape=5526c3d5 vocab=4e95c9c4
+-/
 @[simp]
 theorem encode_sigma_val (a b) : @encode (Sigma γ) _ ⟨a, b⟩ = pair (encode a) (encode b) :=
   rfl
@@ -328,6 +430,9 @@ variable [Encodable α] [Encodable β]
 instance Prod.encodable : Encodable (α × β) :=
   ofEquiv _ (Equiv.sigmaEquivProd α β).symm
 
+/--
+@isnad1 id=eq.0h3v.s5.609014934d8c from=seed src=0 shape=0f2ace49 vocab=eb5ae307
+-/
 @[simp]
 theorem decode_prod_val (n : ℕ) :
     (@decode (α × β) _ n : Option (α × β))
@@ -336,6 +441,9 @@ theorem decode_prod_val (n : ℕ) :
   cases (decode n.unpair.1 : Option α) <;> cases (decode n.unpair.2 : Option β)
   <;> rfl
 
+/--
+@isnad1 id=eq.0h4v.s5.5b9b83ea3c98 from=seed src=0 shape=b55b8d63 vocab=fa755b8f
+-/
 @[simp]
 theorem encode_prod_val (a b) : @encode (α × β) _ (a, b) = pair (encode a) (encode b) :=
   rfl
@@ -360,6 +468,9 @@ def decodeSubtype (v : ℕ) : Option { a : α // P a } :=
 instance _root_.Subtype.encodable : Encodable { a : α // P a } :=
   ⟨encodeSubtype, decodeSubtype, fun ⟨v, h⟩ => by simp [encodeSubtype, decodeSubtype, encodek, h]⟩
 
+/--
+@isnad1 id=eq.0h3v.s5.cb2f62bdbdf2 from=seed src=0 shape=1aa02f4c vocab=076660ef
+-/
 theorem Subtype.encode_eq (a : Subtype P) : encode a = encode a.val := by cases a; rfl
 
 end Subtype
@@ -393,13 +504,18 @@ noncomputable def ofCountable (α : Type*) [Countable α] : Encodable α :=
     let ⟨f, hf⟩ := exists_injective_nat α
     ⟨ofInj f hf⟩
 
+/--
+@isnad1 id=iff.0h1v.s3.c0fc21db7aca from=seed src=0 shape=34fcea4e vocab=0a870d71
+-/
 @[simp]
 theorem nonempty_encodable : Nonempty (Encodable α) ↔ Countable α :=
   ⟨fun ⟨h⟩ => @Encodable.countable α h, fun h => ⟨@ofCountable _ h⟩⟩
 
 end Encodable
 
-/-- See also `nonempty_fintype`, `nonempty_denumerable`. -/
+/-- See also `nonempty_fintype`, `nonempty_denumerable`.
+@isnad1 id=nonempty.0h1v.s3.2b77da89ca05 from=seed src=0 shape=1666ae32 vocab=0a870d71
+-/
 theorem nonempty_encodable (α : Type*) [Countable α] : Nonempty (Encodable α) :=
   ⟨Encodable.ofCountable _⟩
 
@@ -443,22 +559,37 @@ instance [Inhabited α] : Inhabited (ULower α) :=
 def up (a : ULower α) : α :=
   (equiv α).symm a
 
+/--
+@isnad1 id=eq.0h2v.s4.9597a48437ce from=seed src=0 shape=2896fe98 vocab=56e7bef9
+-/
 @[simp]
 theorem down_up {a : ULower α} : down a.up = a :=
   Equiv.right_inv _ _
 
+/--
+@isnad1 id=eq.0h2v.s4.ab6e8063d03d from=seed src=0 shape=1c9622f3 vocab=acebfd65
+-/
 @[simp]
 theorem up_down {a : α} : (down a).up = a := by
   simp [up, down, Equiv.symm_apply_apply]
 
+/--
+@isnad1 id=iff.0h3v.s4.de15d20e4abd from=seed src=0 shape=d886d640 vocab=369a2e52
+-/
 @[simp]
 theorem up_eq_up {a b : ULower α} : a.up = b.up ↔ a = b :=
   Equiv.apply_eq_iff_eq _
 
+/--
+@isnad1 id=iff.0h3v.s4.29e0a438880d from=seed src=0 shape=89f3a64e vocab=4c5acd0c
+-/
 @[simp]
 theorem down_eq_down {a b : α} : down a = down b ↔ a = b :=
   Equiv.apply_eq_iff_eq _
 
+/--
+@isnad1 id=eq.1h3v.s4.0f628da4fcf6 from=seed src=0 shape=e7b12cb8 vocab=369a2e52
+-/
 @[ext]
 protected theorem ext {a b : ULower α} : a.up = b.up → a = b :=
   up_eq_up.1
@@ -507,17 +638,24 @@ def chooseX (h : ∃ x, p x) : { a : α // p a } :=
 def choose (h : ∃ x, p x) : α :=
   (chooseX h).1
 
+/--
+@isnad1 id=var.1h2v.s4.39bb4ee4dbd7 from=seed src=0 shape=c37a1b56 vocab=b0cd3d57
+-/
 theorem choose_spec (h : ∃ x, p x) : p (choose h) :=
   (chooseX h).2
 
 end FindA
 
-/-- A constructive version of `Classical.axiom_of_choice` for `Encodable` types. -/
+/-- A constructive version of `Classical.axiom_of_choice` for `Encodable` types.
+@isnad1 id=ex.1h3v.s6.c64f1da59185 from=seed src=0 shape=6f3a50c4 vocab=db69c415
+-/
 theorem axiom_of_choice {α : Type*} {β : α → Type*} {R : ∀ x, β x → Prop} [∀ a, Encodable (β a)]
     [∀ x y, Decidable (R x y)] (H : ∀ x, ∃ y, R x y) : ∃ f : ∀ a, β a, ∀ x, R x (f x) :=
   ⟨fun x => choose (H x), fun x => choose_spec (H x)⟩
 
-/-- A constructive version of `Classical.skolem` for `Encodable` types. -/
+/-- A constructive version of `Classical.skolem` for `Encodable` types.
+@isnad1 id=iff.0h3v.s6.51aa00362409 from=seed src=0 shape=71a19264 vocab=db69c415
+-/
 theorem skolem {α : Type*} {β : α → Type*} {P : ∀ x, β x → Prop} [∀ a, Encodable (β a)]
     [∀ x y, Decidable (P x y)] : (∀ x, ∃ y, P x y) ↔ ∃ f : ∀ a, β a, ∀ x, P x (f x) :=
   ⟨axiom_of_choice, fun ⟨_, H⟩ x => ⟨_, H x⟩⟩
@@ -554,6 +692,9 @@ protected noncomputable def sequence {r : β → β → Prop} (f : α → β) (h
     | none => Classical.choose (hf p p)
     | some a => Classical.choose (hf p a)
 
+/--
+@isnad1 id=var.1h5v.s6.21d403fad376 from=seed src=0 shape=b90790ac vocab=428282b1
+-/
 theorem sequence_mono_nat {r : β → β → Prop} {f : α → β} (hf : Directed r f) (n : ℕ) :
     r (f (hf.sequence f n)) (f (hf.sequence f (n + 1))) := by
   dsimp [Directed.sequence]
@@ -562,6 +703,9 @@ theorem sequence_mono_nat {r : β → β → Prop} {f : α → β} (hf : Directe
   · exact (Classical.choose_spec (hf p p)).1
   · exact (Classical.choose_spec (hf p a)).1
 
+/--
+@isnad1 id=var.1h5v.s5.6fb6d99083d3 from=seed src=0 shape=d952438f vocab=45b825d8
+-/
 theorem rel_sequence {r : β → β → Prop} {f : α → β} (hf : Directed r f) (a : α) :
     r (f a) (f (hf.sequence f (encode a + 1))) := by
   simp only [Directed.sequence, encodek]
@@ -573,9 +717,15 @@ section
 
 variable (hf : Directed (· ≤ ·) f)
 
+/--
+@isnad1 id=monotone.1h3v.s5.0daf789e451e from=seed src=0 shape=b177d1f8 vocab=f1471f97
+-/
 theorem sequence_mono : Monotone (f ∘ hf.sequence f) :=
   monotone_nat_of_le_succ <| hf.sequence_mono_nat
 
+/--
+@isnad1 id=le.1h4v.s6.de8b5cdef007 from=seed src=0 shape=7a37a9c9 vocab=c20901e3
+-/
 theorem le_sequence (a : α) : f a ≤ f (hf.sequence f (encode a + 1)) :=
   hf.rel_sequence a
 
@@ -585,9 +735,15 @@ section
 
 variable (hf : Directed (· ≥ ·) f)
 
+/--
+@isnad1 id=antitone.1h3v.s5.9013ccae96e2 from=seed src=0 shape=b177d1f8 vocab=1a31ae75
+-/
 theorem sequence_anti : Antitone (f ∘ hf.sequence f) :=
   antitone_nat_of_succ_le <| hf.sequence_mono_nat
 
+/--
+@isnad1 id=le.1h4v.s6.e69ee69dcb2e from=seed src=0 shape=78fa08af vocab=ee4aec3d
+-/
 theorem sequence_le (a : α) : f (hf.sequence f (Encodable.encode a + 1)) ≤ f a :=
   hf.rel_sequence a
 
@@ -606,6 +762,9 @@ on an encodable type. -/
 def Quotient.rep (q : Quotient s) : α :=
   choose (exists_rep q)
 
+/--
+@isnad1 id=eq.0h3v.s5.f763876b94c8 from=seed src=0 shape=b2995c41 vocab=8da76f5e
+-/
 theorem Quotient.rep_spec (q : Quotient s) : ⟦q.rep⟧ = q :=
   choose_spec (exists_rep q)
 

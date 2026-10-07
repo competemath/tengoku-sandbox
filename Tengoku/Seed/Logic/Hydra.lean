@@ -60,6 +60,9 @@ def CutExpand (r : α → α → Prop) (s' s : Multiset α) : Prop :=
 
 variable {r : α → α → Prop}
 
+/--
+@isnad1 id=le.0h2v.s7.ab45dcd666c0 from=seed src=0 shape=a1a191bc vocab=84811b94
+-/
 theorem cutExpand_le_invImage_lex [DecidableEq α] [Std.Irrefl r] :
     CutExpand r ≤ InvImage (Finsupp.Lex (rᶜ ⊓ (· ≠ ·)) (· < ·)) toFinsupp := by
   rintro s t ⟨u, a, hr, he⟩
@@ -73,26 +76,47 @@ theorem cutExpand_le_invImage_lex [DecidableEq α] [Std.Irrefl r] :
       add_zero] at he
     exact he ▸ Nat.lt_succ_self _
 
+/--
+@isnad1 id=cutexpan.0h5v.s5.4ee8d605ef3b from=seed src=0 shape=b1c6b00c vocab=495ce0d9
+-/
 theorem cutExpand_singleton {s x} (h : ∀ x' ∈ s, r x' x) : CutExpand r s {x} :=
   ⟨s, x, h, add_comm s _⟩
 
+/--
+@isnad1 id=cutexpan.0h5v.s5.38b779237e64 from=seed src=0 shape=aa044472 vocab=a846ac1b
+-/
 theorem cutExpand_singleton_singleton {x' x} (h : r x' x) : CutExpand r {x'} {x} :=
   cutExpand_singleton fun a h ↦ by rwa [mem_singleton.1 h]
 
+/--
+@isnad1 id=iff.0h5v.s5.474f80191297 from=seed src=0 shape=6943f134 vocab=52c4b863
+-/
 theorem cutExpand_add_left {t u} (s) : CutExpand r (s + t) (s + u) ↔ CutExpand r t u :=
   exists₂_congr fun _ _ ↦ and_congr Iff.rfl <| by rw [add_assoc, add_assoc, add_left_cancel_iff]
 
+/--
+@isnad1 id=iff.0h5v.s5.9c97b9c90757 from=seed src=0 shape=0f661a5f vocab=52c4b863
+-/
 lemma cutExpand_add_right {s' s} (t) : CutExpand r (s' + t) (s + t) ↔ CutExpand r s' s := by
   convert! cutExpand_add_left t using 2 <;> apply add_comm
 
+/--
+@isnad1 id=cutexpan.0h6v.s5.c556ed054f93 from=seed src=0 shape=7b3eabb6 vocab=ca55e2a7
+-/
 theorem cutExpand_add_single {a' a : α} (s : Multiset α) (h : r a' a) :
     CutExpand r (s + {a'}) (s + {a}) :=
   (cutExpand_add_left s).2 <| cutExpand_singleton_singleton h
 
+/--
+@isnad1 id=cutexpan.0h6v.s5.d170bba22be0 from=seed src=0 shape=32ebb75b vocab=ca55e2a7
+-/
 theorem cutExpand_single_add {a' a : α} (h : r a' a) (s : Multiset α) :
     CutExpand r ({a'} + s) ({a} + s) :=
   (cutExpand_add_right s).2 <| cutExpand_singleton_singleton h
 
+/--
+@isnad1 id=iff.0h4v.s6.5f352d180560 from=seed src=0 shape=0a63fac1 vocab=d3238aa1
+-/
 theorem cutExpand_iff [DecidableEq α] [Std.Irrefl r] {s' s : Multiset α} :
     CutExpand r s' s ↔
       ∃ (t : Multiset α) (a : α), (∀ a' ∈ t, r a' a) ∧ a ∈ s ∧ s' = s.erase a + t := by
@@ -104,15 +128,23 @@ theorem cutExpand_iff [DecidableEq α] [Std.Irrefl r] {s' s : Multiset α} :
   · rintro ⟨ht, h, rfl⟩
     exact ⟨ht, mem_add.2 (Or.inl h), (erase_add_left_pos t h).symm⟩
 
+/--
+@isnad1 id=not.0h3v.s4.af9a867c38ed from=seed src=0 shape=c32ee0c3 vocab=96a2e0a8
+-/
 theorem not_cutExpand_zero [Std.Irrefl r] (s) : ¬CutExpand r s 0 := by
   classical
   rw [cutExpand_iff]
   rintro ⟨_, _, _, ⟨⟩, _⟩
 
+/--
+@isnad1 id=cutexpan.0h3v.s4.4129f7c2a9ce from=seed src=0 shape=432b2136 vocab=a846ac1b
+-/
 lemma cutExpand_zero {x} : CutExpand r 0 {x} := ⟨0, x, nofun, add_comm 0 _⟩
 
 /-- For any relation `r` on `α`, multiset addition `Multiset α × Multiset α → Multiset α` is a
-  fibration between the game sum of `CutExpand r` with itself and `CutExpand r` itself. -/
+  fibration between the game sum of `CutExpand r` with itself and `CutExpand r` itself.
+@isnad1 id=fibratio.0h2v.s5.fcd9127aded1 from=seed src=0 shape=258f365e vocab=ed751501
+-/
 theorem cutExpand_fibration (r : α → α → Prop) :
     Fibration (GameAdd (CutExpand r) (CutExpand r)) (CutExpand r) fun s ↦ s.1 + s.2 := by
   rintro ⟨s₁, s₂⟩ s ⟨t, a, hr, he⟩; dsimp at he ⊢
@@ -127,7 +159,9 @@ theorem cutExpand_fibration (r : α → α → Prop) :
     · rw [add_comm, singleton_add, cons_erase h]
     · rw [add_assoc, erase_add_right_pos _ h]
 
-/-- `CutExpand` preserves leftward-closedness under a relation. -/
+/-- `CutExpand` preserves leftward-closedness under a relation.
+@isnad1 id=var.2h8v.s6.16909a68f8d2 from=seed src=0 shape=644eb40f vocab=9c9a7790
+-/
 lemma cutExpand_closed [Std.Irrefl r] (p : α → Prop)
     (h : ∀ {a' a}, r a' a → p a → p a') {s' s : Multiset α} :
     CutExpand r s' s → (∀ a ∈ s, p a) → ∀ a ∈ s', p a := by
@@ -137,23 +171,37 @@ lemma cutExpand_closed [Std.Irrefl r] (p : α → Prop)
   obtain (h' | h') := mem_add.1 h'
   exacts [hsp a' (mem_of_mem_erase h'), h (hr a' h') (hsp a ha)]
 
+/--
+@isnad1 id=cutexpan.0h7v.s5.064c6ce0f842 from=seed src=0 shape=13a7d577 vocab=a7ebd9cf
+-/
 lemma cutExpand_double {a a₁ a₂} (h₁ : r a₁ a) (h₂ : r a₂ a) : CutExpand r {a₁, a₂} {a} :=
   cutExpand_singleton <| by
     simp only [insert_eq_cons, mem_cons, mem_singleton, forall_eq_or_imp, forall_eq]
     tauto
 
+/--
+@isnad1 id=cutexpan.0h6v.s5.bc5d1700b3a9 from=seed src=0 shape=235fa807 vocab=a7ebd9cf
+-/
 lemma cutExpand_pair_left {a' a b} (hr : r a' a) : CutExpand r {a', b} {a, b} :=
   (cutExpand_add_right {b}).2 (cutExpand_singleton_singleton hr)
 
+/--
+@isnad1 id=cutexpan.0h6v.s5.8039def1c2f8 from=seed src=0 shape=c8000db1 vocab=a7ebd9cf
+-/
 lemma cutExpand_pair_right {a b' b} (hr : r b' b) : CutExpand r {a, b'} {a, b} :=
   (cutExpand_add_left {a}).2 (cutExpand_singleton_singleton hr)
 
+/--
+@isnad1 id=cutexpan.0h8v.s6.0d070f08df4b from=seed src=0 shape=811be531 vocab=a7ebd9cf
+-/
 lemma cutExpand_double_left {a a₁ a₂ b} (h₁ : r a₁ a) (h₂ : r a₂ a) :
     CutExpand r {a₁, a₂, b} {a, b} :=
   (cutExpand_add_right {b}).2 (cutExpand_double h₁ h₂)
 
 /-- A multiset is accessible under `CutExpand` if all its singleton subsets are,
-  assuming `r` is irreflexive. -/
+  assuming `r` is irreflexive.
+@isnad1 id=acc.1h3v.s5.8bda7b81c3ce from=seed src=0 shape=ad5aceb2 vocab=78c72775
+-/
 theorem acc_of_singleton [Std.Irrefl r] {s : Multiset α} (hs : ∀ a ∈ s, Acc (CutExpand r) {a}) :
     Acc (CutExpand r) s := by
   induction s using Multiset.induction with

@@ -45,15 +45,24 @@ def Function.Embedding.toEquivRange : α ≃ Set.range f where
   left_inv := fun _ => by simp
   right_inv := fun _ => by simp
 
+/--
+@isnad1 id=eq.0h4v.s7.2cb2913b2c82 from=seed src=0 shape=d55f9151 vocab=9f3c339f
+-/
 @[simp]
 theorem Function.Embedding.toEquivRange_apply (a : α) :
     f.toEquivRange a = ⟨f a, Set.mem_range_self a⟩ :=
   rfl
 
+/--
+@isnad1 id=eq.0h4v.s7.125669d8928d from=seed src=0 shape=86e09a7b vocab=1f48ac99
+-/
 @[simp]
 theorem Function.Embedding.toEquivRange_symm_apply_self (a : α) :
     f.toEquivRange.symm ⟨f a, Set.mem_range_self a⟩ = a := by simp [Equiv.symm_apply_eq]
 
+/--
+@isnad1 id=eq.0h3v.s5.824fa9e47ac0 from=seed src=0 shape=db476f5c vocab=6b98d65a
+-/
 theorem Function.Embedding.toEquivRange_eq_ofInjective :
     f.toEquivRange = Equiv.ofInjective f f.injective := by
   ext
@@ -69,18 +78,27 @@ When `[Fintype α]` is not available, a noncomputable version is available as
 def Equiv.Perm.viaFintypeEmbedding : Equiv.Perm β :=
   e.extendDomain f.toEquivRange
 
+/--
+@isnad1 id=eq.0h5v.s6.af1a9f141c24 from=seed src=0 shape=8d09165e vocab=fc382371
+-/
 @[simp]
 theorem Equiv.Perm.viaFintypeEmbedding_apply_image (a : α) :
     e.viaFintypeEmbedding f (f a) = f (e a) := by
   rw [Equiv.Perm.viaFintypeEmbedding]
   convert! Equiv.Perm.extendDomain_apply_image e (Function.Embedding.toEquivRange f) a
 
+/--
+@isnad1 id=eq.1h5v.s7.2ff3378d4fc7 from=seed src=0 shape=6c1db68b vocab=4c7e10d2
+-/
 theorem Equiv.Perm.viaFintypeEmbedding_apply_mem_range {b : β} (h : b ∈ Set.range f) :
     e.viaFintypeEmbedding f b = f (e (f.invOfMemRange ⟨b, h⟩)) := by
   simp only [viaFintypeEmbedding, Function.Embedding.invOfMemRange]
   rw [Equiv.Perm.extendDomain_apply_subtype _ _ h]
   congr
 
+/--
+@isnad1 id=eq.1h5v.s6.7a3dc9ec6abc from=seed src=0 shape=c51ea36d vocab=36bac120
+-/
 theorem Equiv.Perm.viaFintypeEmbedding_apply_notMem_range {b : β} (h : b ∉ Set.range f) :
     e.viaFintypeEmbedding f b = b := by
   rwa [Equiv.Perm.viaFintypeEmbedding, Equiv.Perm.extendDomain_apply_not_subtype]
@@ -135,26 +153,40 @@ Note that when `p = q`, `Equiv.Perm.subtypeCongr e (Equiv.refl _)` can be used i
 noncomputable abbrev extendSubtype (e : { x // p x } ≃ { x // q x }) : Perm α :=
   subtypeCongr e e.toCompl
 
+/--
+@isnad1 id=eq.0h6v.s7.30288150e210 from=seed src=0 shape=a5ff8ee4 vocab=8e7d2a79
+-/
 theorem extendSubtype_apply_of_mem (e : { x // p x } ≃ { x // q x }) (x) (hx : p x) :
     e.extendSubtype x = e ⟨x, hx⟩ := by
   simp [extendSubtype, subtypeCongr, sumCompl_symm_apply_of_pos hx]
 
+/--
+@isnad1 id=var.0h6v.s6.8d06ab7af516 from=seed src=0 shape=362304d9 vocab=cd3460db
+-/
 theorem extendSubtype_mem (e : { x // p x } ≃ { x // q x }) (x) (hx : p x) :
     q (e.extendSubtype x) :=
   (e.extendSubtype_apply_of_mem _ hx).symm ▸ (e ⟨x, hx⟩).2
 
+/--
+@isnad1 id=eq.1h5v.s7.c1990e4044e9 from=seed src=0 shape=163fa9f7 vocab=de70c197
+-/
 theorem extendSubtype_apply_of_not_mem (e : { x // p x } ≃ { x // q x }) (x) (hx : ¬p x) :
     e.extendSubtype x = e.toCompl ⟨x, hx⟩ := by
   simp only [extendSubtype, subtypeCongr, Equiv.trans_apply,
     sumCompl_symm_apply_of_neg hx]
   rfl
 
+/--
+@isnad1 id=not.1h5v.s6.62f23349f972 from=seed src=0 shape=f6a15efe vocab=cd3460db
+-/
 theorem extendSubtype_not_mem (e : { x // p x } ≃ { x // q x }) (x) (hx : ¬p x) :
     ¬q (e.extendSubtype x) :=
   e.extendSubtype_apply_of_not_mem _ hx ▸ (e.toCompl ⟨x, hx⟩).2
 
 /-- Given two injective functions `f` and `g` from a finite type `α` to any type `β`,
-there exists a permutation of `β` that maps `f` to `g`. -/
+there exists a permutation of `β` that maps `f` to `g`.
+@isnad1 id=ex.2h4v.s5.cacb04d4fcb9 from=seed src=0 shape=3338a5d7 vocab=66f90c7a
+-/
 theorem Perm.exists_extending_pair [Finite α]
     (f g : α → β) (hf : Function.Injective f) (hg : Function.Injective g) :
     ∃ σ : Perm β, ∀ a, σ (f a) = g a := by
@@ -163,7 +195,9 @@ theorem Perm.exists_extending_pair [Finite α]
   refine ⟨((Equiv.ofInjective f hf).symm.trans (Equiv.ofInjective g hg)).extendSubtype, ?_⟩
   simp [Equiv.extendSubtype_apply_of_mem]
 
-/-- Any two same-cardinality finsets are related by a permutation. -/
+/-- Any two same-cardinality finsets are related by a permutation.
+@isnad1 id=ex.1h3v.s5.50b1a6c4f1f1 from=seed src=0 shape=81bf7b2a vocab=aafef1d3
+-/
 theorem Perm.exists_map_finset_eq
     (s t : Finset β) (h : s.card = t.card) :
     ∃ σ : Perm β, s.map σ.toEmbedding = t := by
