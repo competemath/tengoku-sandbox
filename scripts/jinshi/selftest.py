@@ -132,7 +132,10 @@ def main() -> int:
         else:
             au = subprocess.run(
                 [str(exe), "--seed", "Init", "--module", f"JinshiFixtures.{fixtures[0]}", "--check", "arithUniverse"],
-                cwd=ROOT, capture_output=True, text=True, env=env,
+                cwd=ROOT,
+                capture_output=True,
+                text=True,
+                env=env,
             )
             au_lines = [json.loads(l) for l in au.stdout.splitlines() if l.strip()]
             au_findings = [l for l in au_lines if l.get("check") == "arithUniverse"]
