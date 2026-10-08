@@ -27,6 +27,7 @@ import Jinshi.Lineage
 import Jinshi.Mutants
 import Jinshi.Nearname
 import Jinshi.Necessity
+import Jinshi.Nested
 import Jinshi.Roundtrip
 import Jinshi.Unusedhyp
 open Lean Meta Jinshi
@@ -48,6 +49,7 @@ def examinations : List (String × (Ctx → MetaM (Array Finding))) :=
    ("mutants", mutants),
    ("nearname", nearname),
    ("necessity", necessity),
+   ("nested", nested),
    ("roundtrip", roundtrip),
    ("unusedhyp", unusedhyp)]
 
