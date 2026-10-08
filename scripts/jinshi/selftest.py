@@ -29,7 +29,7 @@ FIX = ROOT / "tools" / "jinshi" / "fixtures"
 ONLY = re.compile(r"^--[ \t]*jinshi:[ \t]*only[ \t]+([\w, \t]+?)[ \t]*$", re.M)
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from run import autoimplicit_findings, lean4lean_finding, replay_finding  # noqa: E402
+from run import autoimplicit_findings, candidates_in_scope, lean4lean_finding, near_miss, replay_finding  # noqa: E402
 
 
 def sh(cmd: list[str], **kw) -> subprocess.CompletedProcess:
@@ -89,7 +89,10 @@ def main() -> int:
             print(r.stdout + r.stderr)
             return 2
         found = [json.loads(line) for line in r.stdout.splitlines() if line.strip()]
-        found = [f for f in found if f["check"] != "summary"]
+        # arithUniverse is self-contained and synthetic (docs/jinshi.md): it reads no fixture module, but its findings are
+        # still attributed to whatever module happens to be first on the command line (c.mods.headD, as `decide`'s summary
+        # already does), so it is examined on its own below instead of against a fixture's expected table
+        found = [f for f in found if f["check"] not in ("summary", "arithUniverse")]
         for name in fixtures:
             found += [
                 f for f in autoimplicit_findings(FIX / f"{name}.lean", f"JinshiFixtures.{name}", lake=True) if f["check"] != "reproduce"
@@ -121,6 +124,33 @@ def main() -> int:
                     problems.append(f"{name}: UNEXPECTED {f['check']}/{f['severity']} {f['name']}: {f['detail'][:120]}")
                 elif not any(f["check"] == c and f["severity"] == s and w in f["detail"] for c, s, d, w in expected if d == f["name"]):
                     problems.append(f"{name}: EXTRA    {f['check']}/{f['severity']} {f['name']}: {f['detail'][:120]}")
+        # arithUniverse: self-contained, no fixture of its own — the smallest smoke test is that the executable knows it
+        # and that a standalone run over one trivial seed module returns its summary line with 0 "fail"s
+        lst = subprocess.run([str(exe), "--list"], cwd=ROOT, capture_output=True, text=True)
+        if "arithUniverse" not in lst.stdout.splitlines():
+            problems.append("arithUniverse: MISSING from --list")
+        else:
+            au = subprocess.run(
+                [str(exe), "--seed", "Init", "--module", f"JinshiFixtures.{fixtures[0]}", "--check", "arithUniverse"],
+                cwd=ROOT,
+                capture_output=True,
+                text=True,
+                env=env,
+            )
+            au_lines = [json.loads(l) for l in au.stdout.splitlines() if l.strip()]
+            au_findings = [l for l in au_lines if l.get("check") == "arithUniverse"]
+            au_summary = [f for f in au_findings if f.get("name") in ("", "[anonymous]") and "universe:" in f.get("detail", "")]
+            au_fails = [f for f in au_findings if f.get("severity") == "fail"]
+            if au.returncode or not au_summary:
+                problems.append(
+                    f"arithUniverse: MISSING standalone summary line; returncode {au.returncode}: {(au.stdout + au.stderr)[-300:]}"
+                )
+            elif au_fails:
+                problems.append(
+                    f"arithUniverse: {len(au_fails)} fail finding(s) on a standalone run: {[f['detail'][:160] for f in au_fails]}"
+                )
+            else:
+                print(f"arithUniverse: {au_summary[0]['detail']}")
         # the replay: the forged module refused, every other accepted, by every kernel at hand
         os.environ["LEAN_PATH"] = lean_path
         for kernel, fn in (("replay", replay_finding), ("lean4lean", lean4lean_finding)):
@@ -161,7 +191,7 @@ def main() -> int:
                     problems.append(f"Mutants: KERNELS DISAGREE {f['name']}: {f['detail'][:300]}")
                 elif f["severity"] == "warn":
                     problems.append(f"Mutants: WARN {f['name']}: {f['detail'][:300]}")
-            # a nanoda "skip" (a trusted-head mutant, nanoda.py's TRUSTED_HEADS) is not a verdict to agree or disagree with — judge()
+            # a nanoda "skip" (a trusted-head mutant, nanoda.py's TRUSTED_HEADS) is not a verdict to agree or disagree with -- judge()
             # already drops it the same way before comparing kernels, so the two invariants below ("every kernel") are judged on
             # the same (non-skip) verdicts judge() itself compared, never penalising a mutant nanoda chose not to judge
             judged = [{k: x for k, x in v["verdicts"].items() if x != "skip"} for v in verdicts]
@@ -177,7 +207,7 @@ def main() -> int:
             if os.environ.get("NANODA_BIN"):
                 kernels.append("nanoda")
                 # NANODA_BIN is set: if no verdict even carries a "nanoda" key, judge() silently treated it as unset (a wiring bug
-                # between this script's env and judge()'s kenv.get("NANODA_BIN") — the whole point of exercising this path here)
+                # between this script's env and judge()'s kenv.get("NANODA_BIN") -- the whole point of exercising this path here)
                 if verdicts and not any("nanoda" in v["verdicts"] for v in verdicts):
                     problems.append("Mutants: MISSING  NANODA_BIN is set but no mutant's verdicts carry a nanoda column")
                 skipped = sum(1 for v in verdicts if v["verdicts"].get("nanoda") == "skip")
@@ -186,6 +216,32 @@ def main() -> int:
                 f"mutants: {len(verdicts)} mutants, {accepted} accepted by every kernel, {refused} refused by every kernel, "
                 f"{len(verdicts) - accepted - refused} disagreements or timeouts (kernels: {', '.join(kernels)})"
             )
+    # autoimplicit near-miss (scripts/jinshi/run.py): pure Python, no Lean needed. The first version
+    # of near_miss() picked an arbitrary tied candidate depending on a set's iteration order (caught
+    # locally before this ever reached a fixture); each case below is a permanent regression test,
+    # named for the exact thing it once got wrong or must keep getting right.
+    nm_cases = [
+        ("a typo of an in-scope binder is found and unique",
+         "theorem bar (xs : List alpha) (n : Nat) (hyp : foo xs m = 0) : foo xs n = 0 := by sorry",
+         1, "m", ("n", 1)),
+        ("a typo of a variable-block name is found across the whole file, not just the declaration",
+         "variable (generalResult : Nat)\n\ntheorem t2 : generalResul = generalResult := by sorry\n",
+         3, "generalResul", ("generalResult", 1)),
+        ("a tie between two equally-close candidates is ambiguous, not an arbitrary pick",
+         "theorem bar (n : Nat) (h : Nat) (hyp : foo m = 0) : True := trivial",
+         1, "m", None),
+        ("a genuinely free, intentional type variable with nothing nearby is not flagged",
+         "theorem baz (xs : List delta) : xs = xs := rfl",
+         1, "delta", None),
+        ("a long, clearly-different identifier does not match a short unrelated one",
+         "theorem t (n : Nat) (xs : List Nat) : True := trivial",
+         1, "completely_different_name", None),
+    ]
+    for label, text, line, ident, expected in nm_cases:
+        cands = candidates_in_scope(text, line) - {ident}
+        got = near_miss(ident, cands)
+        if got != expected:
+            problems.append(f"near_miss: FAIL [{label}]: near_miss({ident!r}, ...) = {got!r}, expected {expected!r}")
     for p in problems:
         print(p)
     print(f"jinshi selftest: {len(fixtures)} fixtures, {total_found} findings, {total_expected} expected, {len(problems)} problems")
