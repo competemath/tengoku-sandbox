@@ -29,7 +29,7 @@ FIX = ROOT / "tools" / "jinshi" / "fixtures"
 ONLY = re.compile(r"^--[ \t]*jinshi:[ \t]*only[ \t]+([\w, \t]+?)[ \t]*$", re.M)
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from run import autoimplicit_findings, lean4lean_finding, replay_finding  # noqa: E402
+from run import autoimplicit_findings, candidates_in_scope, lean4lean_finding, near_miss, replay_finding  # noqa: E402
 
 
 def sh(cmd: list[str], **kw) -> subprocess.CompletedProcess:
@@ -172,6 +172,32 @@ def main() -> int:
                 f"mutants: {len(verdicts)} mutants, {accepted} accepted by every kernel, {refused} refused by every kernel, "
                 f"{len(verdicts) - accepted - refused} disagreements or timeouts (kernels: {', '.join(kernels)})"
             )
+    # autoimplicit near-miss (scripts/jinshi/run.py): pure Python, no Lean needed. The first version
+    # of near_miss() picked an arbitrary tied candidate depending on a set's iteration order (caught
+    # locally before this ever reached a fixture); each case below is a permanent regression test,
+    # named for the exact thing it once got wrong or must keep getting right.
+    nm_cases = [
+        ("a typo of an in-scope binder is found and unique",
+         "theorem bar (xs : List alpha) (n : Nat) (hyp : foo xs m = 0) : foo xs n = 0 := by sorry",
+         1, "m", ("n", 1)),
+        ("a typo of a variable-block name is found across the whole file, not just the declaration",
+         "variable (generalResult : Nat)\n\ntheorem t2 : generalResul = generalResult := by sorry\n",
+         3, "generalResul", ("generalResult", 1)),
+        ("a tie between two equally-close candidates is ambiguous, not an arbitrary pick",
+         "theorem bar (n : Nat) (h : Nat) (hyp : foo m = 0) : True := trivial",
+         1, "m", None),
+        ("a genuinely free, intentional type variable with nothing nearby is not flagged",
+         "theorem baz (xs : List delta) : xs = xs := rfl",
+         1, "delta", None),
+        ("a long, clearly-different identifier does not match a short unrelated one",
+         "theorem t (n : Nat) (xs : List Nat) : True := trivial",
+         1, "completely_different_name", None),
+    ]
+    for label, text, line, ident, expected in nm_cases:
+        cands = candidates_in_scope(text, line) - {ident}
+        got = near_miss(ident, cands)
+        if got != expected:
+            problems.append(f"near_miss: FAIL [{label}]: near_miss({ident!r}, ...) = {got!r}, expected {expected!r}")
     for p in problems:
         print(p)
     print(f"jinshi selftest: {len(fixtures)} fixtures, {total_found} findings, {total_expected} expected, {len(problems)} problems")
