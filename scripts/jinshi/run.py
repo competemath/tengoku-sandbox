@@ -23,7 +23,8 @@ On a built tree (scripts/cache.sh get; lake build Tengoku.All; lake build tengok
   mutants       off by default (`--checks` must name it): `tengoku-jinshi --check mutants --mutants-out DIR/mutants` mutates the first
                 theorems of each module (eight operators at fixed positions, Jinshi/Mutants.lean), judges every mutant with Lean's kernel
                 in-process and writes it unchecked as a module of its own; then scripts/jinshi/mutants.py has leanchecker and lean4lean
-                judge each one. Kernels that disagree on a mutant: fail (one of them has a bug; the module is the reproducer).
+                judge each one, plus nanoda (scripts/jinshi/nanoda.py) when NANODA_BIN and JINSHI_LEAN4EXPORT name their binaries.
+                Kernels that disagree on a mutant: fail (one of them has a bug; the module is the reproducer).
 
 Writes DIR/<check>.jsonl (one finding per line, the same shape for every check) and DIR/summary.md. Exit 0 always: the summary is the
 verdict, the workflow decides. `--modules FILE` (one module name per line) replaces the round's list (a rehearsal on a few modules).
