@@ -16,6 +16,7 @@ modules were compiled into, as the merge queue's axiom check and the leak scan d
 examinations that read a library's theorems). `--import` loads a module without examining it (the fixtures). One examination per
 file under Jinshi/, registered in `examinations` below.
 -/
+import Jinshi.ArithUniverse
 import Jinshi.Base
 import Jinshi.Decide
 import Jinshi.Duplicate
@@ -37,6 +38,7 @@ def examinations : List (String × (Ctx → MetaM (Array Finding))) :=
   [("tcb", fun c => tcb c),
    ("shadow", fun c => shadow c),
    ("arith", fun c => arith c),
+   ("arithUniverse", arithUniverse),
    ("dossier", dossier),
    ("content", content),
    ("decide", decide),
