@@ -22,6 +22,11 @@ on:
         description: "Only these modules, comma-separated (a rehearsal); empty: the whole round"
         required: false
         default: ""
+      nanoda:
+        description: "Build and use nanoda as mutants' fourth kernel judge (adds a Rust + lean4export build to every shard; off unless you actually want it this round)"
+        required: false
+        default: false
+        type: boolean
 permissions: {}
 concurrency:
   group: jinshi
@@ -112,6 +117,11 @@ jobs:
       # to lean4lean above. JINSHI_LEAN4EXPORT and NANODA_BIN unset: mutants.py's judge() never adds the nanoda column (see its
       # docstring) — a step that failed here would still leave the round's other examinations and kernels unaffected
       - name: lean4export and nanoda, at their pinned commits
+        # gated: this clones and builds a Rust crate and a small Lean project on EVERY shard, unconditionally, the first
+        # time it was wired in -- 2-5 extra minutes of real compute per shard, paid on every round dispatch whether or not
+        # that round even runs `mutants`, let alone wants its fourth judge. Built only when the maintainer opts in AND the
+        # round's own checks actually include `mutants` (nanoda has nothing to judge otherwise).
+        if: ${{ inputs.nanoda == true && contains(inputs.checks, 'mutants') }}
         env: { LEAN4EXPORT_COMMIT: "${{ env.LEAN4EXPORT_COMMIT }}", NANODA_COMMIT: "${{ env.NANODA_COMMIT }}" }
         run: |
           git clone -q https://github.com/leanprover/lean4export "$RUNNER_TEMP/lean4export"
