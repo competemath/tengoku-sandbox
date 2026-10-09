@@ -21,9 +21,9 @@ defaults:
   run:
     shell: bash
 env:
-  JURIDICATOR_SHA: 3595a991cac214794fc5751152c9b4ac34dbd6c8
-  WOUNDER_SHA: 15372b78950c6978d9576b660d19106e1d494e27
-  PRAISER_SHA: 3cff7589277d06b77daf6d720255b6024fa71c69
+  JURIDICATOR_SHA: 3595a991cac214794fc5751152c9b4ac34dbd6c8   # pragma: allowlist secret (a commit id of the pinned tool)
+  WOUNDER_SHA: 15372b78950c6978d9576b660d19106e1d494e27   # pragma: allowlist secret (a commit id of the pinned tool)
+  PRAISER_SHA: 3cff7589277d06b77daf6d720255b6024fa71c69   # pragma: allowlist secret (a commit id of the pinned tool)
 jobs:
   judge:
     # only the PR run of pr-gate (not the merge queue's)

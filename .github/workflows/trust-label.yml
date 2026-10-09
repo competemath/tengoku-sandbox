@@ -18,7 +18,7 @@ defaults:
   run:
     shell: bash
 env:
-  JURIDICATOR_SHA: 3595a991cac214794fc5751152c9b4ac34dbd6c8
+  JURIDICATOR_SHA: 3595a991cac214794fc5751152c9b4ac34dbd6c8   # pragma: allowlist secret (a commit id of the pinned tool)
 jobs:
   label:
     runs-on: ubuntu-latest
