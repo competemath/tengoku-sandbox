@@ -1,0 +1,9 @@
+import Tengoku.Native.Competemath.Analysis
+import Tengoku.Native.Competemath.Combinatorics1
+import Tengoku.Native.Competemath.Combinatorics2
+import Tengoku.Native.Competemath.Inequalities
+import Tengoku.Native.Competemath.LinearAlgebra
+import Tengoku.Native.Competemath.Misc1
+import Tengoku.Native.Competemath.Misc2
+import Tengoku.Native.Competemath.NumberTheory
+import Tengoku.Native.Competemath.Polynomials
