@@ -1,0 +1,110 @@
+# Jinshi, advisory, on the PR's own changed Tengoku modules (docs/jinshi.md): a scoped, low-memory echo of what a
+# maintainer's round examines, run on every PR that touches Tengoku content so a problem in NEW content is seen
+# before it reaches the tree, not only when someone later dispatches a round over it. ADVISORY like sonar.yml: not
+# in pr-gate's own `needs:` list, so a finding here never blocks a merge — this file never touches pr-gate.yml.
+#
+# The PR's own Lean is UNTRUSTED (this may be the very first time any of it is ever elaborated: tengoku-jinshi
+# itself never elaborates source, only reads an already-compiled environment, so compiling the PR's candidate
+# modules -- the one step here that runs the PR's own code -- is sealed exactly as carefully as pr-gate.yml's
+# `vacuity` job seals its own compile of untrusted PR content: `pull_request_target` (this file's own copy on
+# main judges every PR, never the PR's own edited copy), the PR's commits fetched and checked out as data only,
+# and the compile+examine step itself run with no network, no token and no secrets reachable, in a fresh
+# network+PID namespace.
+#
+# Low memory and low cost are the point: the `paths:` filter below skips firing at all for a PR that touches
+# neither data/ nor Tengoku/; the candidate-module step runs before Lean is even installed, so a PR with nothing
+# to examine (queue_targets.py finds no candidate) costs a few seconds, not a build. Scoped to just the modules
+# the PR actually adds or changes (scripts/ci/queue_targets.py — the same candidate-module computation the merge
+# queue itself uses), never the whole ~9000-module tree: memory stays bounded by whichever single candidate's own
+# Mathlib dependency closure is largest, not by the tree's size, and each candidate gets its OWN tengoku-jinshi
+# process, one at a time, so nothing from an earlier module's environment stays resident while the next loads.
+# The two examinations that need an extra kernel build of their own (`mutants`: leanchecker/lean4lean/nanoda;
+# `entailed`: a library-search index built once over the whole imported corpus, wasted if rebuilt per file) are
+# left to a maintainer's round; everything else runs here.
+name: jinshi-pr
+on:
+  pull_request_target:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+    paths: ["Tengoku/**", "data/**"]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: "PR number to examine (a manual run, e.g. to try this workflow on an already-merged PR)"
+        required: true
+permissions: {}
+concurrency:
+  group: jinshi-pr-${{ github.event.pull_request.number || inputs.pr }}
+  cancel-in-progress: true
+defaults:
+  run:
+    shell: bash
+env:
+  TENGOKU_REPO: ${{ github.repository }}
+jobs:
+  examine:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions: { contents: read }
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
+        with: { egress-policy: audit }
+      - name: BASE/HEAD/PR_REF
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          if [ -n "${{ github.event.pull_request.number }}" ]; then
+            echo "BASE=${{ github.event.pull_request.base.sha }}" >> "$GITHUB_ENV"
+            echo "HEAD=${{ github.event.pull_request.head.sha }}" >> "$GITHUB_ENV"
+            echo "PR_REF=refs/pull/${{ github.event.pull_request.number }}/head" >> "$GITHUB_ENV"
+          else
+            base=$(gh api "repos/$GITHUB_REPOSITORY/pulls/${{ inputs.pr }}" --jq .base.sha)
+            head=$(gh api "repos/$GITHUB_REPOSITORY/pulls/${{ inputs.pr }}" --jq .head.sha)
+            echo "BASE=$base" >> "$GITHUB_ENV"
+            echo "HEAD=$head" >> "$GITHUB_ENV"
+            echo "PR_REF=refs/pull/${{ inputs.pr }}/head" >> "$GITHUB_ENV"
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { ref: "${{ env.BASE }}", fetch-depth: 0, filter: "blob:none", persist-credentials: false }
+      - name: The PR's commits, as data (the checks are main's)
+        run: git fetch -q --no-tags --filter=blob:none origin "+$PR_REF:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
+      - name: The PR's own records and modules, over main's tree (data only; every script and tool stays main's)
+        run: git checkout -q "$HEAD" -- data Tengoku 2>/dev/null || git checkout -q "$HEAD" -- data || true
+      # Clones each touched library's corpus and runs main's generator over the PR's own data/ records (a
+      # content-class PR's actual .lean modules do not exist until this runs); for a native/restructure/tag-class
+      # PR, which supplies modules directly, this is a no-op pass-through. Needs network for the corpus clone;
+      # nothing here runs Lean, and nothing past this step runs at all when there is nothing to examine.
+      - name: Candidate modules (no Lean runs here)
+        id: candidates
+        run: |
+          python3 scripts/ci/queue_targets.py "$BASE" "$HEAD" | tee "$RUNNER_TEMP/jinshi-targets.txt"
+          echo "count=$(wc -l < "$RUNNER_TEMP/jinshi-targets.txt")" >> "$GITHUB_OUTPUT"
+      - name: Lean
+        if: steps.candidates.outputs.count != '0'
+        run: |
+          curl -sSfL https://github.com/leanprover/elan/releases/latest/download/elan-x86_64-unknown-linux-gnu.tar.gz | tar xz
+          ./elan-init -y --default-toolchain none && echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+          sudo apt-get install -y -q zstd >/dev/null
+          "$HOME/.elan/bin/lake" --version
+      # Trusted code only (main's own Jinshi/, which imports Lean core, nothing of the tree): built unsealed.
+      - name: "tengoku-jinshi (Lean core only: no cache, no tree needed for this)"
+        if: steps.candidates.outputs.count != '0'
+        run: lake build tengoku-jinshi 2>&1 | tail -5
+      - name: The compiled tree, from the attested cache (no recompilation of anything but the PR's own changes)
+        if: steps.candidates.outputs.count != '0'
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: scripts/cache.sh get 2>&1 | tail -3
+      # Compiling the PR's candidate modules runs the PR's own Lean, quite possibly for the first time ever: no
+      # network (a new network namespace), no sight of the runner's processes (a new PID namespace with its own
+      # /proc) and an empty environment, so it can reach neither GitHub's cache service nor a token.
+      - name: jinshi (sealed)
+        if: steps.candidates.outputs.count != '0'
+        env: { JINSHI_PR_TARGETS: "${{ runner.temp }}/jinshi-targets.txt" }
+        run: |
+          sudo unshare --net --pid --fork --mount-proc runuser -u "$(id -un)" -- \
+            env -i HOME="$HOME" PATH="$HOME/.elan/bin:/usr/local/bin:/usr/bin:/bin" LANG=C.UTF-8 \
+            TENGOKU_CI_ROOT="$GITHUB_WORKSPACE" JINSHI_PR_TARGETS="$JINSHI_PR_TARGETS" \
+            python3 scripts/ci/jinshi_check.py "$BASE" "$HEAD"
+      - name: Nothing to examine
+        if: steps.candidates.outputs.count == '0'
+        run: |
+          echo "jinshi OK: this PR adds or changes no Tengoku module"
