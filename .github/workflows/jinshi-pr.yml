@@ -50,25 +50,31 @@ jobs:
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
         with: { egress-policy: audit }
       - name: BASE/HEAD/PR_REF
-        env: { GH_TOKEN: "${{ github.token }}" }
+        # inputs.pr is free-form workflow_dispatch text, never pasted into a script: it only ever
+        # reaches the shell through env:, as $PR, which GitHub Actions properly escapes as a value.
+        env: { GH_TOKEN: "${{ github.token }}", PR: "${{ inputs.pr }}" }
         run: |
           if [ -n "${{ github.event.pull_request.number }}" ]; then
             echo "BASE=${{ github.event.pull_request.base.sha }}" >> "$GITHUB_ENV"
             echo "HEAD=${{ github.event.pull_request.head.sha }}" >> "$GITHUB_ENV"
             echo "PR_REF=refs/pull/${{ github.event.pull_request.number }}/head" >> "$GITHUB_ENV"
           else
-            base=$(gh api "repos/$GITHUB_REPOSITORY/pulls/${{ inputs.pr }}" --jq .base.sha)
-            head=$(gh api "repos/$GITHUB_REPOSITORY/pulls/${{ inputs.pr }}" --jq .head.sha)
+            base=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR" --jq .base.sha)
+            head=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR" --jq .head.sha)
             echo "BASE=$base" >> "$GITHUB_ENV"
             echo "HEAD=$head" >> "$GITHUB_ENV"
-            echo "PR_REF=refs/pull/${{ inputs.pr }}/head" >> "$GITHUB_ENV"
+            echo "PR_REF=refs/pull/$PR/head" >> "$GITHUB_ENV"
           fi
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { ref: "${{ env.BASE }}", fetch-depth: 0, filter: "blob:none", persist-credentials: false }
       - name: The PR's commits, as data (the checks are main's)
         run: git fetch -q --no-tags --filter=blob:none origin "+$PR_REF:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
-      - name: The PR's own records and modules, over main's tree (data only; every script and tool stays main's)
-        run: git checkout -q "$HEAD" -- data Tengoku 2>/dev/null || git checkout -q "$HEAD" -- data || true
+      # Exactly vacuity.py's own step: ONLY data/ is ever laid over main's tree in a job holding the repository's
+      # token (docs/tengoku-security-plan.md). A native/tag/restructure-class PR's own Tengoku/*.lean is never
+      # checked out here -- queue_targets.py (called next, same as vacuity calls it) reads whatever it needs about
+      # those straight from the fetched PR commit's git objects, not from a materialized working-tree copy.
+      - name: The PR's own records, over main's tree (data only; every script and tool stays main's)
+        run: git checkout -q "$HEAD" -- data || true
       # Clones each touched library's corpus and runs main's generator over the PR's own data/ records (a
       # content-class PR's actual .lean modules do not exist until this runs); for a native/restructure/tag-class
       # PR, which supplies modules directly, this is a no-op pass-through. Needs network for the corpus clone;
