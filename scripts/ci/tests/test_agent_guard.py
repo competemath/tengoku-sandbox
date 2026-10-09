@@ -308,6 +308,14 @@ class DroppedHumanWork(unittest.TestCase):
         r.commit("one more record\n\nCo-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>")
         self.assertEqual(r.codes(r.guard(actor="a-human", sender="a-human", before=before), "dropped"), [])
 
+    def test_a_persons_pr_in_a_factorys_shape_is_judged_when_an_agent_pushes_to_it(self):
+        r, before = self.humans_pr()
+        r.write(".github/workflows/ci.yml", "name: ci\n")
+        r.commit("make it green\n\nCo-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>")
+        doc = r.guard(actor="a-human", sender="a-human", before=before, head_ref="intake/lib-1")
+        self.assertEqual(doc["scope_class"], "factory")
+        self.assertEqual(r.codes(doc, "dropped"), ["human_work_modified"])
+
     def test_a_bot_updating_its_own_pr_is_not_judged(self):
         r = Repo()
         r.write("Tengoku/Lib2/A.lean", "theorem a : True := trivial\n")
