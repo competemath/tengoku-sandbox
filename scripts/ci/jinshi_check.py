@@ -32,10 +32,7 @@ EXE = ROOT / ".lake" / "build" / "bin" / "tengoku-jinshi"
 # Exactly the examinations main's TengokuJinshi.lean registers today: `arithUniverse`, `importance`, `lineage`,
 # `necessity` and `nested` are still only on jinshi/wave2-main (not yet merged) and would make the executable
 # reject this list outright ("unknown examination") — add each here the same day it lands on main.
-DEFAULT_CHECKS = (
-    "tcb,shadow,nearname,arith,dossier,content,decide,duplicate,"
-    "instdrift,unusedhyp,roundtrip,forensics"
-)
+DEFAULT_CHECKS = "tcb,shadow,nearname,arith,dossier,content,decide,duplicate,instdrift,unusedhyp,roundtrip,forensics"
 CHECKS = os.environ.get("JINSHI_PR_CHECKS", DEFAULT_CHECKS)
 
 
