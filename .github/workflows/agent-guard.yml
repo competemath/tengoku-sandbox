@@ -13,7 +13,7 @@
 name: agent-guard
 on:
   pull_request_target:
-    branches: [main]
+    branches: [main, rehearse-ag-base]   # REHEARSAL ONLY: this branch is never merged
     types: [opened, synchronize, reopened, edited]   # edited: a title or description changed after the first scan
 permissions: {}
 concurrency:
