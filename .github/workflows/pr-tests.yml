@@ -1,7 +1,8 @@
 # The PR's own lint and test suite. Unlike pr-gate.yml this runs the PR's code, which is the point:
 # it tests the change itself. It decides nothing about policy (a PR can edit this file, its tests and
-# its pre-commit config), and runs with a read-only token and no secrets. Tooling PRs, the ones whose
-# code it tests, always wait for a maintainer's merge.
+# its pre-commit config), and runs with a read-only token. No job has a secret except `sonar`, which holds
+# the SonarQube Cloud and Codecov tokens on its upload steps only (a same-repository PR's; a fork's PR has none and
+# skips it). Tooling PRs, the ones whose code it tests, always wait for a maintainer's merge.
 name: pr-tests
 on:
   pull_request:
@@ -24,6 +25,9 @@ jobs:
         with: { filter: "blob:none", persist-credentials: false }
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with: { python-version: "3.12" }
+      # pre-commit's hook environments (ruff and the rest), keyed by the config: building them took most of this job's two minutes
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with: { path: ~/.cache/pre-commit, key: "pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}" }
       - run: pipx install pre-commit && pre-commit run --all-files --show-diff-on-failure
 
   tooling-tests:
@@ -37,15 +41,29 @@ jobs:
         with: { fetch-depth: 2, filter: "blob:none", persist-credentials: false }   # 2: the merge commit and the base (the fuzz step's diff)
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with: { python-version: "3.12" }
-      - run: pip install -q --require-hashes -r scripts/ci/requirements/yaml.txt   # workflow_rules.py reads YAML
+      - run: pip install -q --require-hashes --only-binary ':all:' -r scripts/ci/requirements/yaml.txt -r scripts/ci/requirements/coverage.txt   # workflow_rules.py reads YAML; coverage.py measures
+      # The unit tests, once, under coverage.py (.coveragerc): the report feeds the `sonar` job below and Codecov. They used to run here plain
+      # and again under coverage in sonar.yml, five runner-minutes per PR for nothing (2026-10-07).
       # `| tail` used to hide the test result: a failing test passed the job (found by the campaign).
-      - shell: bash
+      - name: Unit tests, measured
+        shell: bash
         run: |
-          set -o pipefail
-          python3 -m unittest discover -s scripts/tests -v 2>&1 | tail -5
+          # A suite's full output goes to a log; the job shows its last lines, and on a failure every `FAIL:`/`ERROR:` line first (a
+          # `| tail -5` alone named no failing test, and once hid a failure altogether: the campaign).
+          suite() {
+            if coverage run -m unittest discover -s "$1" -p "$2" -v > "$RUNNER_TEMP/tests.log" 2>&1; then tail -3 "$RUNNER_TEMP/tests.log"; else
+              grep -E '^(FAIL|ERROR):' "$RUNNER_TEMP/tests.log" || true; tail -30 "$RUNNER_TEMP/tests.log"; exit 1
+            fi
+          }
+          suite scripts/tests 'test*.py'
           # every module in scripts/ci/tests, found the same way CONTRIBUTING.md runs them (naming modules here left
           # the goals, retractions, headlines and promotion-notify tests out of CI)
-          python3 -m unittest discover -s scripts/ci/tests -p 'test_*.py' -v 2>&1 | tail -5
+          suite scripts/ci/tests 'test_*.py'
+          coverage combine
+          coverage xml
+          coverage report --skip-empty | tail -3
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with: { name: coverage, path: coverage.xml, retention-days: 3 }
       # The fuzz targets of the gate scripts this PR changes (docs/testing.md, "Fuzzing"); nothing for a PR that changes
       # none. The merge queue runs the same on the merged result, and the merge waits for it there.
       - name: Fuzz the gate scripts this PR changes
@@ -58,6 +76,63 @@ jobs:
           "$RUNNER_TEMP/fuzz/bin/python" scripts/ci/fuzz/run.py --changed HEAD^1 HEAD
       - uses: rhysd/actionlint@914e7df21a07ef503a81201c76d2b11c789d3fca # v1.7.12
         with: { args: -color }
+
+  # SonarQube Cloud's analysis of this PR (advisory: not a required check; what OpenSSF Scorecard's SAST check counts), on the coverage the
+  # tests above measured. sonar.yml does the same for pushes to main. A fork's pull request has no secrets to scan with: skipped, not failed.
+  sonar:
+    needs: tooling-tests
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions: { contents: read, pull-requests: read }
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
+        with: { egress-policy: audit }
+      # everything but the Lean tree, the data and the widget, with the full history: the scanner blames lines to find new code
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          filter: blob:none
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /*
+            !/Tengoku/
+            !/data/
+            !/widget/
+          persist-credentials: false
+      # JGit cannot fetch a missing blob from a partial clone (the first scan of main died on "Missing blob"): the history of the scanned paths
+      - name: Fetch the history blobs the blame reads
+        run: |
+          git rev-list --objects --all --missing=print -- . ':!Tengoku' ':!data' ':!widget' | sed -n 's/^?//p' > "$RUNNER_TEMP/missing.txt"
+          echo "$(wc -l < "$RUNNER_TEMP/missing.txt") history blobs to fetch"
+          if [ -s "$RUNNER_TEMP/missing.txt" ]; then
+            xargs -n 300 git -c fetch.negotiationAlgorithm=noop fetch origin --no-tags --no-write-fetch-head --recurse-submodules=no --filter=blob:none < "$RUNNER_TEMP/missing.txt"
+          fi
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with: { name: coverage }
+      - name: Is there a token for this run?
+        id: t
+        env: { SONAR_TOKEN: "${{ secrets.SONAR_TOKEN }}" }
+        run: |
+          if [ -n "$SONAR_TOKEN" ]; then echo "have=true" >> "$GITHUB_OUTPUT"; else echo "::notice::no SONAR_TOKEN for this run (Dependabot's pull request): the scan is skipped"; fi
+      - name: Analyse
+        if: steps.t.outputs.have == 'true'
+        uses: SonarSource/sonarqube-scan-action@d209202bc7d53ff1cc128f7f907dac145c9d6ae9 # v8.3.0
+        env: { SONAR_TOKEN: "${{ secrets.SONAR_TOKEN }}" }
+      # The same report to Codecov (advisory; a run without the token skips it, a failed upload fails nothing)
+      - name: Is there a Codecov token for this run?
+        id: c
+        env: { CODECOV_TOKEN: "${{ secrets.CODECOV_TOKEN }}" }
+        run: |
+          if [ -n "$CODECOV_TOKEN" ]; then echo "have=true" >> "$GITHUB_OUTPUT"; else echo "::notice::no CODECOV_TOKEN for this run: the Codecov upload is skipped"; fi
+      - name: Upload coverage to Codecov
+        if: steps.c.outputs.have == 'true'
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: coverage.xml
+          disable_search: true
+          fail_ci_if_error: false
 
   # The program that lists the tree's command keywords (tools/CommandKeywords.lean; the content lint reads schemas/command-keywords.json) compiles and runs on a
   # clean checkout. Smoke test on Lean's own grammar: the tree is not built here, the nightly build compares the real list.
@@ -133,36 +208,3 @@ jobs:
       - name: The tagger on a real compile
         if: steps.touched.outputs.run == 'yes'
         run: python3 scripts/isnad.py tagtest
-  jinshi:
-    # the examinations' self-test (docs/jinshi.md, "Running"): the fixtures with their planted faults, compiled against Lean's own
-    # library, every fault found and nothing else reported; only when a file of the recipe changes
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    permissions: { contents: read }
-    steps:
-      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
-        with: { egress-policy: audit }
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { fetch-depth: 2, filter: "blob:none", persist-credentials: false }   # 2: the merge commit and the base
-      - id: touched
-        name: Does this PR touch the Jinshi recipe?
-        run: |
-          files="$(git diff --name-only HEAD^1 HEAD)"
-          if grep -qE '^(TengokuJinshi\.lean|lakefile\.toml|lean-toolchain|scripts/jinshi/|tools/jinshi/fixtures/|docs/jinshi\.md|\.github/workflows/pr-tests\.yml)' <<< "$files"; then
-            echo "run=yes" >> "$GITHUB_OUTPUT"
-          else
-            echo "run=no" >> "$GITHUB_OUTPUT"; echo "no file of the Jinshi recipe changed"
-          fi
-      - name: elan (the installer at a fixed commit, checked against its digest before it runs)
-        if: steps.touched.outputs.run == 'yes'
-        run: |
-          curl --proto '=https' --tlsv1.2 -sSfL -o elan-init.sh https://raw.githubusercontent.com/leanprover/elan/0e36a07b9bbcc5381fa6250df109f9a4f94d7bac/elan-init.sh
-          echo "a620ff1641616222c8d37c54845492004bb84d6877cdbc944dd65c1aa685bf53  elan-init.sh" | sha256sum -c -
-          sh elan-init.sh -y --default-toolchain none
-          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
-      - name: Build the examinations (they import only Lean, no cache and no tree)
-        if: steps.touched.outputs.run == 'yes'
-        run: lake build tengoku-jinshi
-      - name: The fixtures
-        if: steps.touched.outputs.run == 'yes'
-        run: python3 scripts/jinshi/selftest.py

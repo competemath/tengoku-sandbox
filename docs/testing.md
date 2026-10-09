@@ -217,8 +217,9 @@ passes in seconds) and, for code changes, on `main`, which keeps the baseline th
 current. The default gate judges new code only: reliability, security and maintainability ratings, duplication, and
 whether new security hotspots are reviewed.
 
-**Coverage** is measured, not estimated: `sonar.yml` runs the unit tests (`scripts/tests` and `scripts/ci/tests`, the
-same two commands as `pr-tests.yml`) under coverage.py and uploads the report. `.coveragerc` says how: branches too; the
+**Coverage** is measured, not estimated: `pr-tests.yml` runs the unit tests (`scripts/tests` and `scripts/ci/tests`)
+once, under coverage.py, and its `sonar` job analyses the PR on that report in the same run; `sonar.yml` does the same
+for the main branch. `.coveragerc` says how: branches too; the
 gate scripts the tests run as subprocesses are measured as well (`patch = subprocess`); and every file under `scripts/`
 and `tools/` counts, so a script no test imports shows as 0% instead of being left out. The figure is Python only (Sonar
 has no coverage for the shell scripts or the workflows), it counts what the unit tests reach, not the fuzzers or the
@@ -331,6 +332,9 @@ tell you a check has gone silent.
 - A rule about the whole pipeline: one `sc` line in
   `scripts/ci/campaign/gate.sh`, or a `run_one` line in `queue.sh`, and run it
   against the sandbox.
+- Every interesting bug gets a test that targets exactly it, and the test is shown to fail on the buggy version (revert the fix, or put the old
+  recipe back) before it is trusted. The tests live in the repository and run in CI: for the tooling (`scripts/ci/tests`, `scripts/tests`), for the
+  content (a check on what lands in the tree, such as `imports_resolve.py`) and for whatever usually breaks.
 
 ## 8. Enforcement
 
@@ -339,7 +343,21 @@ queue tests every group on the newest `main`, so no PR ever needs *Update branch
 PR needs one approval, from someone other than whoever pushed last, plus code-owner review and every review thread
 resolved. History is linear, with no force pushes and no deletion, and nothing is pushed to `main` directly. The banking pipeline
 opens pull requests like everyone else: Emissary-Archangel's cloud translation opens the content PRs (new staging
-records), and `.github/workflows/promote.yml` opens the promotion PRs, hourly, as the bot named in the `TENGOKU_BOT`
+records), and `.github/workflows/promote.yml` opens the promotion PRs, when it is dispatched (it has no schedule since 2026-10-05: libraries arrive as factory bundles), as the bot named in the `TENGOKU_BOT`
 variable (its token is the `TENGOKU_BOT_TOKEN` secret; only the step that pushes and opens the PR sees it). Each
 promotion run builds up to `max_files` source files' modules on the attested cache, keeps staging changes to pure
 removals, and waits for its PR before the next batch. `scripts/promote-loop.sh` is the same thing for a laptop.
+
+### Who may change the tests
+
+CI tests and CI configuration are owned by the maintainer's **second account only** (`.github/CODEOWNERS`, last section): every workflow
+(pre-commit, PR, merge queue, scheduled), every gate script with its tests and fuzz targets, the hook and analysis configuration, the lint
+allow-list, the vacuity tool, and any test file anywhere (`test_*.py`, `*_test.py`, `conftest.py`). The main account, which an agent may drive,
+owns none of them, so its approval does not count for a change to them, and an author cannot approve their own pull request: a change to a test or a
+check is made, or refused, by the person who drives the second account. The ruleset also dismisses an approval when new commits are pushed and
+requires the last push to be approved by someone else, so a reviewed change cannot be swapped afterwards.
+`scripts/ci/tests/test_codeowners.py` pins this: it finds every test and CI file by what it is, not by CODEOWNERS' patterns, and fails when one is
+not owned by the second account alone (a new test directory, a renamed workflow, a loosened line), and when the main account owns any of them.
+
+What this does not cover: repository settings. An account with admin rights can edit the ruleset itself, which is outside any file in the repository.
+Keeping admin rights on the second account only closes that.
