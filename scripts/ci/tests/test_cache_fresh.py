@@ -45,7 +45,7 @@ class CommitIds(unittest.TestCase):
         self.cf = cache_fresh
 
     def test_only_forty_hex_digits_are_a_commit_id(self):
-        good = "0123456789abcdef0123456789ABCDEF01234567"
+        good = "AbC1" * 10  # 40 hex digits in mixed case, built rather than written out: detect-secrets reads a long hex literal as a key
         self.assertEqual(self.cf.sha(good), good.lower())
         for bad in ("--upload-pack=touch /tmp/x", "-c", "abc123", good + "0", good[:-1], good[:-1] + "g", "", None, 5, ["a" * 40]):
             self.assertIsNone(self.cf.sha(bad), repr(bad))
