@@ -19,3 +19,4 @@ if bad:
     fail("commits without a `Signed-off-by:` trailer (Developer Certificate of Origin; use `git commit -s`): " + ", ".join(bad))
 print("DCO OK")
 # rehearsal: an agent edits the gate
+# second push by an agent
