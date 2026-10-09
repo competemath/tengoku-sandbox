@@ -40,6 +40,7 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from _git import plain
 from warden import ownership, safegit, scope, secretscan
 
 CI = Path(__file__).resolve().parent
@@ -576,7 +577,7 @@ def run_publish(a: argparse.Namespace) -> int:
         check=False,
     )
     if done.returncode != 0:
-        print(f"agent_guard: the check run was not created: {done.stderr.strip()[:300]}", file=sys.stderr)
+        print(plain(f"agent_guard: the check run was not created: {done.stderr.strip()[:300]}"), file=sys.stderr)
         return 1
     print(f"posted `{CHECK_NAME}`: {doc['conclusion']}")
     return 0
@@ -586,7 +587,7 @@ def run_ownership(a: argparse.Namespace) -> int:
     texts = [Path(p).read_text(encoding="utf-8") if Path(p).is_file() else None for p in (a.codeowners, a.policy, a.scope_policy)]
     found = ownership_findings(*texts)
     for f in found:
-        print(f"{f.code}\t{f.path}\t{f.detail}")
+        print(plain(f"{f.code}\t{f.path}\t{f.detail}"))
     print("ownership: " + ("in step" if not found else f"DIVERGED ({len(found)})"))
     return 1 if found else 0
 
@@ -615,7 +616,7 @@ def main(argv: list) -> int:
     try:
         return args.fn(args)
     except (ValueError, OSError, scope.GitError, safegit.UnsafePush, subprocess.SubprocessError) as exc:
-        print(f"agent_guard: {type(exc).__name__}: {exc}", file=sys.stderr)
+        print(plain(f"agent_guard: {type(exc).__name__}: {exc}"), file=sys.stderr)
         return 2
 
 

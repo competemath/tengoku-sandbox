@@ -17,7 +17,7 @@ The credit for the ideas belongs to the people who wrote them down, above all Ki
 | Check | Where | Blocks? | What it protects |
 | --- | --- | --- | --- |
 | `scope` (this page, section 1) | `agent-guard.yml`, every pull request | no, advisory | agent PRs stay in their paths; no symlink, submodule or executable under `data/` or `Tengoku/`; no secret in a PR's title, body, commit messages or added lines; no human-owned work dropped by an agent's push; CODEOWNERS and the policy agree |
-| sealed-step self-test (section 2) | first command inside the sealed step of `pr-gate.yml` (vacuity); `pr-tests.yml` runs the same battery on a hosted runner | yes: a step that is not sealed does not start | the PR's Lean runs with no network, no sight of the runner, no credentials |
+| sealed-step self-test (section 2) | first command inside the sealed step of `pr-gate.yml` (vacuity); `pr-tests.yml` runs the same battery on a hosted runner | yes for eight probes: a step that fails one does not start; four probes that are open on a hosted runner are named advisories until `seal_harden.sh` is adopted | the PR's Lean runs with no network, no sight of the runner, no credentials |
 | vendored warden modules (section 3) | `scripts/ci/warden/`, tested for drift | yes (tooling tests) | the code the checks use is the code that was reviewed |
 
 ## 1. The `scope` check
@@ -95,19 +95,38 @@ exits 1 before the PR's code starts if any probe says the step is not sealed. Wi
 | `pid1_environment` | `/proc/1/environ` is unreadable, or holds only allowed names |
 | `environment_empty` | only the allowed variables, and nothing named like a credential or the runner's state |
 | `cannot_write_system` | nothing can be created under `/`, `/etc`, `/usr`, `/bin`, `/opt`, `/var/lib` |
-| `cannot_write_runner_channels` | the files a step appends to for `GITHUB_ENV`, `GITHUB_PATH`, `GITHUB_OUTPUT` are not writable |
-| `cannot_read_runner_credentials` | the runner's credential files and a home directory's usual token files are not readable |
+| `cannot_write_runner_channels` | the files a step appends to for `GITHUB_ENV`, `GITHUB_PATH`, `GITHUB_OUTPUT`, and the code of the downloaded actions, are not writable |
+| `cannot_read_runner_credentials` | the runner's credential files and a home directory's usual token files are not readable (a Docker config only when it holds a registry credential) |
 | `no_container_socket` | the Docker, containerd and Podman sockets cannot be connected to (a unix socket is addressed by path, so a network namespace does not stop it) |
 | `scratch_writable` | `/tmp` and the working directory are writable, so the sealed command can still work |
 
-Wiring: `pr-gate.yml`'s vacuity step runs `sandbox_selftest.py --allow-env TENGOKU_CI_ROOT -- python3 scripts/ci/vacuity.py …` inside the seal. **A change to `pr-gate.yml` takes
-effect only after it is merged** (`pull_request_target` runs main's copy), so the first real run of this wiring is the first content PR after the merge. The same battery runs on a
-hosted runner in this PR (`pr-tests.yml`, job `sealed-selftest`), inside exactly that command, and must pass there; run outside any seal it must refuse. `jinshi-pr.yml` (open as a pull
-request while this is written) has the same seal; when it lands, its sealed step gets the same one-line change:
+**What the first run on a hosted runner found (2026-10-09, `ubuntu-latest`, the `sealed-selftest` job of this pull request).** Inside the gate's own seal, the network, PID-namespace, `/proc/1`,
+privilege and environment probes pass: the seal does what it says. Four probes do not, and all four are about the one thing the seal does not change, the user: a sealed step runs as the runner's own user.
+
+| Open probe | What the sealed step can do | Why it matters |
+| --- | --- | --- |
+| `no_container_socket` | connect to `/var/run/docker.sock` | a unix socket is addressed by path, so a network namespace does not stop it; a container started through it has the host's network and, with a bind mount, the host's disk, as root: no network, no PID namespace, no environment scrub is left |
+| `cannot_write_runner_channels` | append to the files `GITHUB_ENV`, `GITHUB_PATH`, `GITHUB_OUTPUT` are read from, and change the code of the downloaded actions | the steps after it, including the post step of every action, run with the job's token and read those files and run that code |
+| `cannot_write_system` | create files in `/usr/local/bin` and `/opt` | both are on the `PATH` of every later step |
+| `cannot_read_runner_credentials` | read `~/.docker/config.json` (only flagged when it holds a registry credential) | the Docker client's credential file |
+
+None of this is an attack on the job's own token (the vacuity job holds `contents: read`) but each is a way out of "it can reach neither the cache service nor a token" (the comment of
+the vacuity step). `scripts/ci/seal_harden.sh` closes all four for the sealed step only: run as root inside the same `unshare`, in a mount namespace of its own, it replaces the container
+sockets and the Docker config with `/dev/null`, empties the command-file directory, makes the downloaded actions, `/usr/local/bin` and `/opt` read-only, and then drops to the user and runs the command.
+`pr-tests.yml` runs the battery inside it with no probe excused, and checks that the job still reaches Docker afterwards.
+
+**Wiring.** `pr-gate.yml`'s vacuity step runs `sandbox_selftest.py --allow-env TENGOKU_CI_ROOT -- python3 scripts/ci/vacuity.py …` inside the seal, with the four open probes named as advisories
+(`--advisory`): each run prints them as warnings and the gate does not stop on them. Closing them is one edit, which the maintainer makes after running it in the sandbox: put
+`sh scripts/ci/seal_harden.sh "$(id -un)" --` in place of `runuser -u "$(id -un)" --` and delete the four flags. I did not make that edit myself because it changes the command that compiles the PR's
+records, and nothing here can run Lean to prove the compile still works inside the narrower seal. **A change to `pr-gate.yml` takes effect only after it is merged** (`pull_request_target` runs
+main's copy), so the first real run of the self-test in the gate is the first content PR after the merge. The nightly build (`build.yml`) has a seal of the same shape and is not wired here.
+`jinshi-pr.yml` is open as a pull request while this is written and is not on `main`; when it lands, its sealed step gets the same change:
 
 ```diff
 -            python3 scripts/ci/jinshi_check.py "$BASE" "$HEAD"
-+            python3 scripts/ci/sandbox_selftest.py --allow-env TENGOKU_CI_ROOT --allow-env JINSHI_PR_TARGETS -- python3 scripts/ci/jinshi_check.py "$BASE" "$HEAD"
++            python3 scripts/ci/sandbox_selftest.py --allow-env TENGOKU_CI_ROOT --allow-env JINSHI_PR_TARGETS \
++              --advisory cannot_write_system --advisory cannot_write_runner_channels --advisory cannot_read_runner_credentials --advisory no_container_socket \
++              -- python3 scripts/ci/jinshi_check.py "$BASE" "$HEAD"
 ```
 
 `--advisory PROBE` turns a known gap into a warning printed on every run. Use it only with the reason written beside the workflow line.

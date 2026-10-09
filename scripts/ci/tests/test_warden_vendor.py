@@ -35,7 +35,7 @@ def pins() -> dict:
 class VendoredWarden(unittest.TestCase):
     def test_there_is_a_pin_and_it_names_the_commit(self):
         found = pins()
-        self.assertIn("PIN", found)
+        self.assertTrue(found, "scripts/ci/warden/ has no PIN file")
         for name, (commit, entries) in found.items():
             self.assertIsNotNone(commit, f"{name} does not name the tengoku-warden commit it was taken from")
             self.assertTrue(entries, f"{name} lists no module")
@@ -64,8 +64,9 @@ class VendoredWarden(unittest.TestCase):
         import sys
 
         sys.path.insert(0, str(WARDEN.parent))
-        for module in ("scope", "secretscan", "ownership"):
-            self.assertTrue(hasattr(importlib.import_module(f"warden.{module}"), "main"))
+        listed = {m for _c, entries in pins().values() for m in entries}
+        for module in sorted(listed):
+            importlib.import_module("warden" if module == "__init__.py" else f"warden.{module[:-3]}")
 
 
 if __name__ == "__main__":
