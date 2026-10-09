@@ -26,6 +26,7 @@ import argparse
 import hashlib
 import json
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -283,7 +284,12 @@ def origin_of(module: str) -> str:
 
 
 def module_file(module: str, root: Path = ROOT) -> Path:
-    return root / (module.replace(".", "/") + ".lean")
+    """The file of a module under root. A module name arrives on the command line, so one that could leave root is refused: an empty component (`.etc.passwd`
+    would become the absolute path /etc/passwd.lean), a slash or a backslash, a NUL."""
+    parts = module.split(".")
+    if not all(parts) or any(c in module for c in "/\\\0"):
+        raise ValueError(f"not a module name: {module!r}")
+    return root.joinpath(*parts[:-1], parts[-1] + ".lean")
 
 
 def _tagger():
@@ -401,7 +407,7 @@ def tagtest(exe: str | None = None) -> int:
     with tempfile.TemporaryDirectory() as tmp:
         d = Path(tmp)
         path = d / f"{FIXTURE_MODULE}.lean"
-        path.write_bytes(original.encode("utf-8"))
+        shutil.copyfile(TAGGER_DIR / "Fixture.lean", path)  # the fixture's own bytes (`original` is the same text, read as bytes above)
         compile_fixture(d)
         recs, ranges = fixture_facts(d, exe)
         fresh = {name: [list(r), list(s)] for name, _, r, s in map(parse_range_line, ranges)}
@@ -451,7 +457,7 @@ def tagtest(exe: str | None = None) -> int:
 def cmd_tag(a: argparse.Namespace) -> int:
     mods = [x for m in a.module for x in ("--module", m)] + [x for n in a.name for x in ("--name", n)]
     plan, skipped = plan_tags(run_exe(mods, a.exe), run_exe_lines(["--ranges", *mods], a.exe), a.origin, a.src)
-    counts, more = tag_files(plan, Path(a.root), a.write)
+    counts, more = tag_files(plan, ROOT, a.write)
     for name, why in skipped + more:
         print(f"skipped {name}: {why}")
     print(
@@ -499,7 +505,7 @@ def check_tags(recs: list[Record], ranges: list[str], modules: list[str], root: 
 
 def cmd_check_tags(a: argparse.Namespace) -> int:
     mods = [x for m in a.module for x in ("--module", m)]
-    problems, summary = check_tags(run_exe(mods, a.exe), run_exe_lines(["--ranges", *mods], a.exe), a.module, Path(a.root))
+    problems, summary = check_tags(run_exe(mods, a.exe), run_exe_lines(["--ranges", *mods], a.exe), a.module, ROOT)
     if problems:
         print("isnad check-tags: " + "; ".join(problems[:10]) + (f"; and {len(problems) - 10} more" if len(problems) > 10 else ""))
         return 1
@@ -548,12 +554,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--origin", choices=FROM, help="default: by where the module lives (Tengoku.Seed -> seed, Tengoku.Native -> novel, else translated)"
     )
     s.add_argument("--src", help="default: 0 for seed and novel, - for translated")
-    s.add_argument("--root", default=str(ROOT))
     s.add_argument("--write", action="store_true")
     s.add_argument("--exe")
     s = sub.add_parser("check-tags")
     s.add_argument("--module", action="append", required=True)
-    s.add_argument("--root", default=str(ROOT))
     s.add_argument("--exe")
     s = sub.add_parser("strip")
     s.add_argument("paths", nargs="+")
