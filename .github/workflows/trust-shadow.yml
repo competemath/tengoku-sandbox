@@ -1,0 +1,108 @@
+# The trust program in SHADOW mode (docs/trust-shadow.md): after pr-gate finishes on a PR, the three trust repositories judge
+# the same PR from the evidence the gates already produced, and write the verdict and a plain-language trust card to the run
+# summary. ADVISORY and silent: it is not a required check, posts no comment, changes no label and blocks nothing; its only
+# lasting effect is one verdict line in the append-only ledger on the `trust-ledger` branch, so verdicts can be compared with
+# what people decide and labelled later.
+#
+# Safe against the PR's code on purpose. It runs on main's copy of this file after pr-gate; the PR's commits are fetched as git
+# objects and read by main's own scripts (lint_banked.py, sorry_scan.py, classify.py), never checked out or run. The
+# three tools are public repositories pinned to reviewed commits. Reading the PR (job `judge`, read-only token) and writing the
+# ledger (job `ledger`, the only write permission) are different jobs; the second takes one validated JSON file.
+name: trust-shadow
+on:
+  workflow_run:
+    workflows: [pr-gate]
+    types: [completed]
+permissions: {}
+concurrency:
+  group: trust-shadow-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: true
+defaults:
+  run:
+    shell: bash
+env:
+  JURIDICATOR_SHA: 3595a991cac214794fc5751152c9b4ac34dbd6c8   # pragma: allowlist secret (a commit id of the pinned tool)
+  WOUNDER_SHA: 15372b78950c6978d9576b660d19106e1d494e27   # pragma: allowlist secret (a commit id of the pinned tool)
+  PRAISER_SHA: 3cff7589277d06b77daf6d720255b6024fa71c69   # pragma: allowlist secret (a commit id of the pinned tool)
+jobs:
+  judge:
+    # only the PR run of pr-gate (not the merge queue's)
+    if: github.event.workflow_run.event == 'pull_request_target'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions: { contents: read, pull-requests: read, checks: read }
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
+        with: { egress-policy: audit }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { fetch-depth: 0, filter: "blob:none", persist-credentials: false }
+      - name: Which PR, its base and its author (from the API, validated)
+        env: { GH_TOKEN: "${{ github.token }}", HEAD_SHA: "${{ github.event.workflow_run.head_sha }}" }
+        run: |
+          pr=$(gh api "repos/$GITHUB_REPOSITORY/commits/$HEAD_SHA/pulls" --jq '.[0].number')
+          base=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$pr" --jq .base.sha)
+          author=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$pr" --jq .user.login)
+          [[ "$pr" =~ ^[0-9]+$ && "$base" =~ ^[0-9a-f]{40}$ && "$HEAD_SHA" =~ ^[0-9a-f]{40}$ && "$author" =~ ^[A-Za-z0-9][A-Za-z0-9/\[\]-]{0,59}$ ]] || { echo "::error::not a PR run"; exit 1; }
+          { echo "PR=$pr"; echo "BASE=$base"; echo "HEAD=$HEAD_SHA"; echo "AUTHOR=$author"; } >> "$GITHUB_ENV"
+          gh api --paginate "repos/$GITHUB_REPOSITORY/commits/$HEAD_SHA/check-runs" --jq '.check_runs[]' | jq -s . > "$RUNNER_TEMP/checks.json"
+      - name: The PR's commits, as data
+        run: git fetch -q --no-tags --filter=blob:none origin "+refs/pull/$PR/head:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { repository: competemath/tengoku-juridicator, ref: "${{ env.JURIDICATOR_SHA }}", path: tools/tengoku-juridicator, persist-credentials: false }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { repository: competemath/tengoku-wounder, ref: "${{ env.WOUNDER_SHA }}", path: tools/tengoku-wounder, persist-credentials: false }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { repository: competemath/tengoku-praiser, ref: "${{ env.PRAISER_SHA }}", path: tools/tengoku-praiser, persist-credentials: false }
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with: { python-version: "3.12" }
+      - name: Gate health (the wounder's planted-defect canaries against our content lint)
+        run: |
+          (cd tools/tengoku-wounder && python3 -m wounder run-canaries --corpus corpus --gate-cmd "python3 $GITHUB_WORKSPACE/scripts/ci/canary_gate.py" \
+            --layer static --repo "$GITHUB_REPOSITORY" --head "$HEAD" --class gate --out "$RUNNER_TEMP/gate-evidence")
+          printf '{"repo":"%s","head_sha":"%s","class":"gate"}' "$GITHUB_REPOSITORY" "$HEAD" > "$RUNNER_TEMP/gate-case.json"
+          cd tools/tengoku-juridicator
+          python3 -m juridicator standing --case "$RUNNER_TEMP/gate-case.json" --evidence "$RUNNER_TEMP/gate-evidence" \
+            --policy "$GITHUB_WORKSPACE/scripts/ci/trust-shadow-policy.json" --out "$RUNNER_TEMP/standing.json" || [ $? -ge 10 ]
+      - name: The PR's evidence, from main's own gates
+        run: |
+          python3 scripts/ci/trust_shadow.py gather --repo "$GITHUB_REPOSITORY" --pr "$PR" --base "$BASE" --head "$HEAD" --author "$AUTHOR" \
+            --out "$RUNNER_TEMP/trust" --checks "$RUNNER_TEMP/checks.json"
+      - name: Judge
+        run: |
+          cd tools/tengoku-juridicator
+          code=0
+          python3 -m juridicator judge --case "$RUNNER_TEMP/trust/case.json" --evidence "$RUNNER_TEMP/trust/evidence" \
+            --policy "$GITHUB_WORKSPACE/scripts/ci/trust-shadow-policy.json" --standing "$RUNNER_TEMP/standing.json" > "$RUNNER_TEMP/trust/verdict.json" || code=$?
+          [ "$code" -eq 0 ] || [ "$code" -ge 10 ] || { echo "::error::the judge could not read its input"; exit 1; }
+          cp "$RUNNER_TEMP/standing.json" "$RUNNER_TEMP/trust/standing.json"
+      - name: Trust card (run summary)
+        run: |
+          {
+            echo "> **Shadow mode.** Advisory only: this verdict blocks nothing and changes nothing. It is recorded so it can be compared with what people decide."
+            echo "> The PR was judged only against what \`scripts/ci/trust-shadow-policy.json\` requires for its class, from the evidence the gates already produce. There is no proof-checker, rebuild or provenance evidence yet, so \"accepted\" here means that nothing required failed."
+            echo
+            (cd tools/tengoku-praiser && python3 -m praiser card --verdict "$RUNNER_TEMP/trust/verdict.json" --evidence "$RUNNER_TEMP/trust/evidence")
+            echo
+            echo "Gate health (static layer only: the compile, axiom, vacuity and tree layers are not exercised here): $(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['gate_health'])" "$RUNNER_TEMP/trust/standing.json")"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with: { name: trust-shadow, path: "${{ runner.temp }}/trust", retention-days: 30 }
+  ledger:
+    needs: judge
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # the only write permission of these workflows; one writer at a time
+    concurrency: { group: trust-ledger, cancel-in-progress: false }
+    permissions: { contents: write }
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
+        with: { egress-policy: audit }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { repository: competemath/tengoku-juridicator, ref: "${{ env.JURIDICATOR_SHA }}", path: tools/tengoku-juridicator, persist-credentials: false }
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with: { name: trust-shadow, path: trust }
+      - name: Append the verdict
+        env: { GH_TOKEN: "${{ github.token }}", TRUST_TOOLS: "${{ github.workspace }}/tools" }
+        run: python3 scripts/ci/trust_ledger.py verdict --dir trust

@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "$comment": "The judge's policy for the SHADOW run (docs/trust-shadow.md): what each class of PR needs, using only what exists today. It never lowers scrutiny (no merit reduction) and the verdict changes nothing. Edited like any policy: a reviewed diff.",
+  "classes": {
+    "content": {"base_tier": 1, "required": ["mechanical.content_lint", "mechanical.no_sorry", "mechanical.ci"], "independent": {}},
+    "native": {"base_tier": 1, "required": ["mechanical.content_lint", "mechanical.no_sorry", "mechanical.ci"], "independent": {}},
+    "tooling": {"base_tier": 2, "required": ["mechanical.ci"], "independent": {}},
+    "docs": {"base_tier": 0, "required": ["mechanical.ci"], "independent": {}},
+    "gate": {"base_tier": 2, "required": ["mechanical.canary"], "independent": {}}
+  },
+  "default_class": {"base_tier": 2, "required": ["mechanical.ci"], "independent": {}},
+  "merit_reduction": {"min_independent_checkers": 99}
+}
