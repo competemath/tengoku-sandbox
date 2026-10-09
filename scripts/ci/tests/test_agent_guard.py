@@ -315,6 +315,9 @@ class DroppedHumanWork(unittest.TestCase):
         doc = r.guard(actor="a-human", sender="a-human", before=before, head_ref="intake/lib-1")
         self.assertEqual(doc["scope_class"], "factory")
         self.assertEqual(r.codes(doc, "dropped"), ["human_work_modified"])
+        # where the factory's account is a person's (the sandbox), the account is not exempt either
+        doc = r.guard(actor="a-human", sender="a-human", before=before, head_ref="intake/lib-1", tengoku_bot="a-human")
+        self.assertEqual(r.codes(doc, "dropped"), ["human_work_modified"])
 
     def test_a_bot_updating_its_own_pr_is_not_judged(self):
         r = Repo()
