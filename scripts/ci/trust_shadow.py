@@ -23,7 +23,7 @@ from trust_vendor.juridicator_evidence import make_evidence
 
 CI = Path(__file__).resolve().parent
 SHA = re.compile(r"^[0-9a-f]{40}$")
-LOGIN = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$")
+LOGIN = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9/\[\]-]{0,59})$")  # a user, or a bot such as dependabot[bot]
 STATIC = {"role": "tooling", "name": "trust-shadow", "identity": "trust-shadow"}
 # the checks whose failure is a mechanical fact about the PR; every other check is third-party or advisory and is only noted
 BLOCKING_CHECKS = ("pr-gate",)
@@ -77,8 +77,11 @@ def _record(case: dict, producer: dict, kind: str, claim: str, outcome: str, ver
     )
 
 
+CONTENT_CLASSES = ("content", "native")
+
+
 def manifest(case: dict, created: str) -> dict:
-    kinds = ["mechanical.content_lint", "mechanical.no_sorry"]
+    kinds = ["mechanical.content_lint"] + (["mechanical.no_sorry"] if case["class"] in CONTENT_CLASSES else [])
     return _record(
         case,
         STATIC,
@@ -92,15 +95,23 @@ def manifest(case: dict, created: str) -> dict:
 
 
 def lint_record(case: dict, base: str, head: str, returncode: int, output: str, created: str) -> dict:
+    """pass: exit 0. fail: the lint ran and refused something (it says so). Anything else (a crashed script, a missing
+    object) is inconclusive: a tool error is never a verdict about the PR."""
+    refused = "banked content lint:" in output
     ok = returncode == 0
     tail = " ".join(output.split())[-160:]
-    claim = "The banked-content lint passes on what this PR adds." if ok else f"The banked-content lint fails: {tail}"
+    if ok:
+        outcome, claim = "pass", "The banked-content lint passes on what this PR adds."
+    elif refused:
+        outcome, claim = "fail", f"The banked-content lint fails: {tail}"
+    else:
+        outcome, claim = "inconclusive", f"The banked-content lint could not run (exit {returncode}): {tail}"
     return _record(
         case,
         STATIC,
         "mechanical.content_lint",
         claim,
-        "pass" if ok else "fail",
+        outcome,
         "mechanical",
         created,
         subject={"scope": "pr"},
@@ -109,9 +120,42 @@ def lint_record(case: dict, base: str, head: str, returncode: int, output: str, 
     )
 
 
-def sorry_record(case: dict, base: str, head: str, output: str, created: str) -> dict:
+def sorry_record(case: dict, base: str, head: str, returncode: int, output: str, created: str) -> dict:
+    """For a content or native PR a sorry is a mechanical failure (the queue's Leak IV would refuse it). For any other PR,
+    sorry_scan.py only lists words in tool files, which is normal, so it is noted and weighs nothing."""
     clean = "no sorry/admit in added content" in output
     n = len(re.findall(r"^- ", output, re.M))
+    reproduce = {"command": f"python3 scripts/ci/sorry_scan.py {base} {head}"}
+    if case["class"] not in CONTENT_CLASSES:
+        claim = (
+            "No sorry or admit in what this PR adds."
+            if clean
+            else f"{n} mention(s) of sorry or admit in this non-content PR (noted, not weighed)."
+        )
+        return _record(
+            case,
+            STATIC,
+            "attested.sorry_noted",
+            claim,
+            "pass" if clean else "fail",
+            "attested",
+            created,
+            subject={"scope": "pr"},
+            details={"occurrences": n},
+        )
+    if returncode != 0 or not (clean or n):
+        return _record(
+            case,
+            STATIC,
+            "mechanical.no_sorry",
+            f"The sorry scan could not run (exit {returncode}).",
+            "inconclusive",
+            "mechanical",
+            created,
+            subject={"scope": "pr"},
+            reproduce=reproduce,
+            details={"returncode": returncode},
+        )
     claim = "No sorry or admit in what this PR adds." if clean else f"{n} sorry or admit found in what this PR adds."
     return _record(
         case,
@@ -122,7 +166,7 @@ def sorry_record(case: dict, base: str, head: str, output: str, created: str) ->
         "mechanical",
         created,
         subject={"scope": "pr"},
-        reproduce={"command": f"python3 scripts/ci/sorry_scan.py {base} {head}"},
+        reproduce=reproduce,
         details={"occurrences": n},
     )
 
@@ -131,15 +175,19 @@ def check_records(case: dict, check_runs: list, created: str) -> list:
     """One record per finished check run on the commit. A required check is a mechanical fact (its job link reproduces it);
     every other check is noted as an attested record, which the judge shows and weighs at zero. Skipped and still-running
     checks are left out (they say nothing yet); a cancelled one is inconclusive."""
-    out, seen = [], set()
+    # a re-run leaves the earlier run on the commit: the latest finished run of a name is the one that counts
+    latest: dict = {}
     for cr in check_runs:
-        name, status, conclusion = cr.get("name"), cr.get("status"), cr.get("conclusion")
-        if not isinstance(name, str) or name in OUR_CHECKS or status != "completed" or conclusion in (None, "skipped", "neutral", "stale"):
+        if isinstance(cr, dict) and isinstance(cr.get("name"), str) and cr.get("status") == "completed":
+            key = (str(cr.get("completed_at") or ""), cr.get("id") if isinstance(cr.get("id"), int) else 0)
+            if cr["name"] not in latest or key >= latest[cr["name"]][0]:
+                latest[cr["name"]] = (key, cr)
+    out = []
+    for name in sorted(latest):
+        cr = latest[name][1]
+        conclusion = cr.get("conclusion")
+        if name in OUR_CHECKS or conclusion in (None, "skipped", "neutral", "stale"):
             continue
-        key = (name, conclusion)
-        if key in seen:
-            continue
-        seen.add(key)
         producer = {"role": "tooling", "name": "github-actions", "identity": f"ci:{name}"[:120]}
         outcome = {"success": "pass", "cancelled": "inconclusive"}.get(conclusion, "fail")
         link = cr.get("html_url") if isinstance(cr.get("html_url"), str) else ""
@@ -195,11 +243,11 @@ def gather(a: argparse.Namespace) -> int:
     cls = statute_class(out) if code == 0 else "other"
     case = case_dict(a.repo, a.head, cls, a.author)
     lint_code, lint_out = run([sys.executable, str(CI / "lint_banked.py"), a.base, a.head], root)
-    _, sorry_out = run([sys.executable, str(CI / "sorry_scan.py"), a.base, a.head], root)
+    sorry_code, sorry_out = run([sys.executable, str(CI / "sorry_scan.py"), a.base, a.head], root)
     records = [
         manifest(case, created),
         lint_record(case, a.base, a.head, lint_code, lint_out, created),
-        sorry_record(case, a.base, a.head, sorry_out, created),
+        sorry_record(case, a.base, a.head, sorry_code, sorry_out, created),
     ]
     if a.checks:
         records += check_records(case, json.loads(Path(a.checks).read_text(encoding="utf-8")), created)

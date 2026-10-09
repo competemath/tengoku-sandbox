@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import subprocess
 import sys
@@ -21,6 +22,7 @@ from trust_vendor.juridicator_evidence import validate  # noqa: E402
 HEAD = "a" * 40
 BASE = "b" * 40
 CASE = ts.case_dict("competemath/tengoku-sandbox", HEAD, "tooling", "someone")
+CONTENT = ts.case_dict("competemath/tengoku-sandbox", HEAD, "content", "someone")
 
 
 def run_of(name, conclusion="success", status="completed", id_=7):
@@ -42,8 +44,8 @@ class Records(unittest.TestCase):
             ts.lint_record(
                 CASE, BASE, HEAD, 1, "::error::banked content lint:\n  data/x.jsonl:3 (Foo): `axiom` is not allowed", "2026-10-09T00:00:00Z"
             ),
-            ts.sorry_record(CASE, BASE, HEAD, "no sorry/admit in added content", "2026-10-09T00:00:00Z"),
-            ts.sorry_record(CASE, BASE, HEAD, "### sorry / admit in this PR\n\n- a.lean:3\n- b.lean:4", "2026-10-09T00:00:00Z"),
+            ts.sorry_record(CONTENT, BASE, HEAD, 0, "no sorry/admit in added content", "2026-10-09T00:00:00Z"),
+            ts.sorry_record(CONTENT, BASE, HEAD, 0, "### sorry / admit in this PR\n\n- a.lean:3\n- b.lean:4", "2026-10-09T00:00:00Z"),
         ]
         recs += ts.check_records(CASE, [run_of("pr-gate"), run_of("sonar", "failure")], "2026-10-09T00:00:00Z")
         for r in recs:
@@ -51,15 +53,31 @@ class Records(unittest.TestCase):
         self.assertEqual([r["outcome"] for r in recs[1:5]], ["pass", "fail", "pass", "fail"])
         self.assertEqual(recs[4]["details"]["occurrences"], 2)
 
+    def test_a_tool_error_is_inconclusive_never_a_failure_of_the_pr(self):
+        crashed = ts.lint_record(CASE, BASE, HEAD, 128, "fatal: bad object", "2026-10-09T00:00:00Z")
+        self.assertEqual(crashed["outcome"], "inconclusive")
+        refused = ts.lint_record(CASE, BASE, HEAD, 1, "::error::banked content lint:\n  x", "2026-10-09T00:00:00Z")
+        self.assertEqual(refused["outcome"], "fail")
+        self.assertEqual(ts.sorry_record(CONTENT, BASE, HEAD, 1, "Traceback", "2026-10-09T00:00:00Z")["outcome"], "inconclusive")
+        self.assertEqual(ts.sorry_record(CONTENT, BASE, HEAD, 0, "garbage", "2026-10-09T00:00:00Z")["outcome"], "inconclusive")
+
+    def test_sorry_blocks_only_content_prs_and_is_noted_for_the_rest(self):
+        out = "### sorry / admit in this PR\n\n- tools/x.lean:3\n- tools/y.lean:9"
+        tooling = ts.sorry_record(CASE, BASE, HEAD, 0, out, "2026-10-09T00:00:00Z")
+        self.assertEqual((tooling["kind"], tooling["verifiability"]), ("attested.sorry_noted", "attested"))
+        self.assertEqual(ts.sorry_record(CONTENT, BASE, HEAD, 0, out, "2026-10-09T00:00:00Z")["kind"], "mechanical.no_sorry")
+        self.assertEqual({e["kind"] for e in ts.manifest(CASE, "2026-10-09T00:00:00Z")["details"]["expected"]}, {"mechanical.content_lint"})
+        self.assertIn("mechanical.no_sorry", {e["kind"] for e in ts.manifest(CONTENT, "2026-10-09T00:00:00Z")["details"]["expected"]})
+
     def test_manifest_lists_what_will_be_reported_by_subject(self):
-        m = ts.manifest(CASE, "2026-10-09T00:00:00Z")
+        m = ts.manifest(CONTENT, "2026-10-09T00:00:00Z")
         self.assertEqual({e["kind"] for e in m["details"]["expected"]}, {"mechanical.content_lint", "mechanical.no_sorry"})
         self.assertEqual(m["producer"]["identity"], ts.STATIC["identity"])
 
     def test_required_checks_are_mechanical_and_the_rest_are_noted_not_weighed(self):
-        recs = ts.check_records(CASE, [run_of("pr-gate"), run_of("fossa"), run_of("pr-gate", "failure")], "2026-10-09T00:00:00Z")
+        recs = ts.check_records(CASE, [run_of("pr-gate"), run_of("fossa"), run_of("sonar", "failure")], "2026-10-09T00:00:00Z")
         kinds = sorted((r["kind"], r["outcome"]) for r in recs)
-        self.assertEqual(kinds, [("attested.ci_advisory", "pass"), ("mechanical.ci", "fail"), ("mechanical.ci", "pass")])
+        self.assertEqual(kinds, [("attested.ci_advisory", "fail"), ("attested.ci_advisory", "pass"), ("mechanical.ci", "pass")])
         self.assertTrue(all(r["reproduce"]["command"].startswith("gh run view") for r in recs if r["kind"] == "mechanical.ci"))
 
     def test_skipped_running_cancelled_and_our_own_checks(self):
@@ -77,9 +95,18 @@ class Records(unittest.TestCase):
             sorted((r["kind"], r["outcome"]) for r in recs), [("attested.ci_advisory", "fail"), ("mechanical.ci", "inconclusive")]
         )
 
-    def test_identical_check_runs_are_recorded_once(self):
-        recs = ts.check_records(CASE, [run_of("pr-gate"), run_of("pr-gate", id_=8)], "2026-10-09T00:00:00Z")
-        self.assertEqual(len(recs), 1)
+    def test_a_rerun_replaces_the_earlier_run_of_the_same_check(self):
+        failed_then_passed = [
+            dict(run_of("pr-gate", "failure", id_=1), completed_at="2026-10-01T00:00:00Z"),
+            dict(run_of("pr-gate", "success", id_=2), completed_at="2026-10-02T00:00:00Z"),
+        ]
+        (rec,) = ts.check_records(CASE, failed_then_passed, "2026-10-09T00:00:00Z")
+        self.assertEqual(rec["outcome"], "pass")
+        passed_then_failed = [dict(failed_then_passed[1]), dict(failed_then_passed[0], completed_at="2026-10-03T00:00:00Z")]
+        (rec,) = ts.check_records(CASE, passed_then_failed, "2026-10-09T00:00:00Z")
+        self.assertEqual(rec["outcome"], "fail")
+        skipped_later = failed_then_passed + [dict(run_of("pr-gate", "skipped", id_=3), completed_at="2026-10-04T00:00:00Z")]
+        self.assertEqual(ts.check_records(CASE, skipped_later, "2026-10-09T00:00:00Z"), [])
 
     def test_class_mapping_and_bad_input(self):
         self.assertEqual(ts.statute_class("class=content (3 files)"), "content")
@@ -91,6 +118,58 @@ class Records(unittest.TestCase):
             ts.case_dict("r", "nothex", "tooling", "me")
         with self.assertRaises(ValueError):
             ts.case_dict("r", HEAD, "tooling", "me; rm -rf /")
+        self.assertEqual(ts.case_dict("r", HEAD, "tooling", "dependabot[bot]")["author"]["identity"], "dependabot[bot]")
+        self.assertEqual(ts.case_dict("r", HEAD, "tooling", "app/dependabot")["author"]["identity"], "app/dependabot")
+
+
+class Gather(unittest.TestCase):
+    def test_gather_writes_a_case_and_valid_evidence_manifest_first(self):
+        from unittest import mock
+
+        def fake_run(args, cwd, env=None):
+            name = Path(args[1]).name
+            return {
+                "classify.py": (0, "class=content (2 files)\n"),
+                "lint_banked.py": (0, "content lint OK\n"),
+                "sorry_scan.py": (0, "no sorry/admit in added content\n"),
+            }[name]
+
+        with tempfile.TemporaryDirectory() as d:
+            checks = Path(d) / "checks.json"
+            checks.write_text(json.dumps([run_of("pr-gate"), run_of("fossa")]), encoding="utf-8")
+            with mock.patch.object(ts, "run", fake_run):
+                code = ts.main(
+                    [
+                        "gather",
+                        "--repo",
+                        "o/r",
+                        "--base",
+                        BASE,
+                        "--head",
+                        HEAD,
+                        "--author",
+                        "me",
+                        "--out",
+                        str(Path(d) / "o"),
+                        "--checks",
+                        str(checks),
+                    ]
+                )
+            self.assertEqual(code, 0)
+            case = json.loads((Path(d) / "o" / "case.json").read_text(encoding="utf-8"))
+            self.assertEqual((case["class"], case["author"]["identity"]), ("content", "me"))
+            files = sorted((Path(d) / "o" / "evidence").iterdir())
+            recs = [json.loads(f.read_text(encoding="utf-8")) for f in files]
+            self.assertEqual(recs[0]["kind"], "manifest.declared")
+            self.assertEqual(
+                [r["kind"] for r in recs[1:]], ["mechanical.content_lint", "mechanical.no_sorry", "attested.ci_advisory", "mechanical.ci"]
+            )
+            self.assertTrue(all(validate(r) == [] for r in recs))
+
+    def test_bad_commits_are_refused_with_exit_2(self):
+        self.assertEqual(
+            ts.main(["gather", "--repo", "o/r", "--base", "x", "--head", HEAD, "--author", "me", "--out", "/nonexistent-dir-x"]), 2
+        )
 
 
 class Ledger(unittest.TestCase):

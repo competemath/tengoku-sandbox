@@ -42,7 +42,7 @@ jobs:
           pr=$(gh api "repos/$GITHUB_REPOSITORY/commits/$HEAD_SHA/pulls" --jq '.[0].number')
           base=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$pr" --jq .base.sha)
           author=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$pr" --jq .user.login)
-          [[ "$pr" =~ ^[0-9]+$ && "$base" =~ ^[0-9a-f]{40}$ && "$HEAD_SHA" =~ ^[0-9a-f]{40}$ && "$author" =~ ^[A-Za-z0-9-]{1,39}$ ]] || { echo "::error::not a PR run"; exit 1; }
+          [[ "$pr" =~ ^[0-9]+$ && "$base" =~ ^[0-9a-f]{40}$ && "$HEAD_SHA" =~ ^[0-9a-f]{40}$ && "$author" =~ ^[A-Za-z0-9][A-Za-z0-9/\[\]-]{0,59}$ ]] || { echo "::error::not a PR run"; exit 1; }
           { echo "PR=$pr"; echo "BASE=$base"; echo "HEAD=$HEAD_SHA"; echo "AUTHOR=$author"; } >> "$GITHUB_ENV"
           gh api --paginate "repos/$GITHUB_REPOSITORY/commits/$HEAD_SHA/check-runs" --jq '.check_runs[]' | jq -s . > "$RUNNER_TEMP/checks.json"
       - name: The PR's commits, as data

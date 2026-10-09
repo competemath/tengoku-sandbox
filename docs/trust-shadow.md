@@ -22,6 +22,13 @@ checked out or run).
 4. **Ledger.** One verdict line is appended to `ledger.jsonl` on the `trust-ledger` branch (hash-chained, compare-and-swap
    writes through the contents API; the only job with write permission takes one validated JSON file).
 
+## Backfill (run on the 38 most recent sandbox PRs, 2026-10-09)
+
+Merged PRs: 19 accepted, 4 held (their head commit has no passing `pr-gate` run: cancelled, or merged without one), none rejected.
+PRs whose `pr-gate` failed (#397, #399, #410): rejected. Running it over history found three bugs before they could reach a
+live PR: a crashed script was recorded as a failure, `sorry` in tool files blocked tooling PRs, and a re-run check was
+counted twice. For tooling PRs the verdict today mostly mirrors `pr-gate`; it gets sharper as the evidence below is added.
+
 ## Labelling
 
 Run **trust-label** (Actions, by hand) with a commit and `accept` or `reject` when you know what a case deserved. Track records
