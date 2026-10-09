@@ -1,0 +1,1 @@
+The trust ledger: append-only, hash-chained entries written by the trust-shadow and trust-label workflows (docs/trust-shadow.md on main). Do not edit by hand.
