@@ -110,7 +110,7 @@ class Inputs:
 
 def safe(text: object, limit: int = 120) -> str:
     """Text from a PR as it may appear in a check run or a job summary: a small alphabet, no markup, no control character, cut short."""
-    s = re.sub(r"[^A-Za-z0-9 ._/+@#:=(),\-]", "?", str(text))
+    s = re.sub(r"[^A-Za-z0-9 ._/+@#:=(),'\-]", "?", str(text))
     return s[:limit]
 
 
@@ -392,7 +392,10 @@ def check(inp: Inputs, cls: str | None = None) -> dict:
         if has_commit(repo, inp.before):
             agent_commits_n = agent_commits([m for _sha, m in commit_messages(repo, inp.before, inp.head)])
             agent_push = bot_account(inp.sender) or agent_commits_n > 0
-            own_bot_pr = klass is not None and inp.sender == inp.actor  # a bot updating its own PR has no human work to drop
+            # a bot account updating its own PR has no human work to drop (a person's PR in a factory's shape is not the factory's own)
+            own_bot_pr = inp.sender == inp.actor and (
+                bot_account(inp.actor, inp.actor_type) or (inp.tengoku_bot != "" and inp.actor == inp.tengoku_bot)
+            )
             if agent_push and not own_bot_pr:
                 try:
                     trusted = blob_at(repo, inp.base, ".github/agent-paths.json")  # the ownership policy of the base, never the PR's

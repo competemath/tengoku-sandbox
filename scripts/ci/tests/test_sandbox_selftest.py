@@ -142,13 +142,13 @@ class Files(unittest.TestCase):
     def test_credential_files(self):
         d = Path(tempfile.mkdtemp())
         (d / ".credentials").write_text("x")
-        probe = st.probe_credentials((str(d / ".cred*"),))
+        probe = st.probe_credentials((str(d / ".cred*"),), str(d / "no-docker-config.json"))
         self.assertFalse(probe.ok)
         self.assertIn(".credentials", probe.detail)
-        self.assertTrue(st.probe_credentials((str(d / "nothing*"),)).ok)
+        self.assertTrue(st.probe_credentials((str(d / "nothing*"),), str(d / "no-docker-config.json")).ok)
         if os.geteuid() != 0:
             (d / ".credentials").chmod(0)
-            self.assertTrue(st.probe_credentials((str(d / ".cred*"),)).ok)
+            self.assertTrue(st.probe_credentials((str(d / ".cred*"),), str(d / "no-docker-config.json")).ok)
 
     def test_a_container_socket_that_accepts_a_connection(self):
         d = tempfile.mkdtemp(dir="/tmp")
