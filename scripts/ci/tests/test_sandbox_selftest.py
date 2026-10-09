@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import errno
 import os
+import re
 import socket
 import subprocess
 import sys
@@ -122,6 +123,22 @@ class Files(unittest.TestCase):
         self.assertFalse(st.probe_runner_channels((str(d),)).ok)
         self.assertTrue(st.probe_runner_channels((str(d) + "-absent",)).ok)
 
+    def test_a_docker_config_is_a_leak_only_when_it_holds_a_registry_credential(self):
+        d = Path(tempfile.mkdtemp())
+        cfg = d / "config.json"
+        for text, leaks in (
+            ('{"auths": {"ghcr.io": {"auth": "dXNlcjpwYXNz"}}}', True),
+            ('{"auths": {"ghcr.io": {"identitytoken": "x"}}}', True),
+            ('{"auths": {}}', False),
+            ('{"auths": {"ghcr.io": {}}, "credsStore": "desktop"}', False),
+            ("not json", False),
+            ("[]", False),
+        ):
+            cfg.write_text(text)
+            self.assertEqual(st.docker_credentials(str(cfg)), leaks, text)
+            self.assertEqual(st.probe_credentials((), str(cfg)).ok, not leaks, text)
+        self.assertFalse(st.docker_credentials(str(d / "absent.json")))
+
     def test_credential_files(self):
         d = Path(tempfile.mkdtemp())
         (d / ".credentials").write_text("x")
@@ -143,6 +160,42 @@ class Files(unittest.TestCase):
         srv.close()
         self.assertTrue(st.probe_container_sockets((path,)).ok)  # a stale socket file refuses
         self.assertTrue(st.probe_container_sockets((os.path.join(d, "absent.sock"),)).ok)
+
+
+class TheSealOfTheGate(unittest.TestCase):
+    """pr-tests.yml proves the self-test inside the command pr-gate.yml runs; the two must be the same command."""
+
+    WORKFLOWS = CI.parents[1] / ".github" / "workflows"
+
+    def sealed_line(self, name):
+        text = (self.WORKFLOWS / name).read_text(encoding="utf-8")
+        m = re.search(
+            r"(sudo unshare --net --pid --fork --mount-proc runuser -u \"\$\(id -un\)\" -- \\\n\s+env -i [^\n]*\\\n\s+TENGOKU_CI_ROOT=[^\n]*\\\n\s+python3 scripts/ci/sandbox_selftest\.py[^\n]*\\\n(?:\s+--advisory[^\n]*\\\n)?)",
+            text,
+        )
+        self.assertIsNotNone(m, f"{name} has no sealed self-test command")
+        return re.sub(r"\s+", " ", m.group(1))
+
+    def test_pr_tests_runs_the_command_of_the_gate(self):
+        self.assertEqual(self.sealed_line("pr-gate.yml"), self.sealed_line("pr-tests.yml"))
+
+    def test_the_gates_advisories_are_the_four_the_hardening_closes(self):
+        text = (self.WORKFLOWS / "pr-gate.yml").read_text(encoding="utf-8")
+        named = sorted(re.findall(r"--advisory (\w+)", text))
+        self.assertEqual(
+            named, ["cannot_read_runner_credentials", "cannot_write_runner_channels", "cannot_write_system", "no_container_socket"]
+        )
+        harden = (CI / "seal_harden.sh").read_text(encoding="utf-8")
+        for needle in ("docker.sock", "_runner_file_commands", "_actions", "/usr/local/bin", "/opt", ".docker/config.json"):
+            self.assertIn(needle, harden)
+
+    def test_the_hardening_script_is_executable_shell_that_refuses_to_run_unprivileged(self):
+        self.assertTrue(os.access(CI / "seal_harden.sh", os.X_OK))
+        done = subprocess.run(["sh", str(CI / "seal_harden.sh"), "u", "--", "true"], capture_output=True, text=True)
+        self.assertEqual(done.returncode, 2 if os.geteuid() != 0 else done.returncode)
+        if os.geteuid() != 0:
+            self.assertIn("as root", done.stderr)
+        self.assertEqual(subprocess.run(["sh", "-n", str(CI / "seal_harden.sh")]).returncode, 0)
 
 
 class Battery(unittest.TestCase):

@@ -16,8 +16,10 @@ Probes (each prints `ok` or `FAIL` and what it saw; never a value of an environm
   pid1_environment              /proc/1/environ is unreadable or carries no variable that is not on the allow-list
   environment_empty             this process's environment holds only the allowed names and nothing that looks like a credential
   cannot_write_system           nothing can be created under /, /etc, /usr, /bin, /opt, /var/lib
-  cannot_write_runner_channels  the files a step appends to for GITHUB_ENV, GITHUB_PATH and GITHUB_OUTPUT are not writable
-  cannot_read_runner_credentials  the runner's credential files, and the usual token files of a home directory, are not readable
+  cannot_write_runner_channels  the files a step appends to for GITHUB_ENV, GITHUB_PATH and GITHUB_OUTPUT, and the code of the downloaded actions (whose
+                                post steps run after this one, with the job's token), are not writable
+  cannot_read_runner_credentials  the runner's credential files, and the usual token files of a home directory (a Docker config only if it holds a
+                                  registry credential), are not readable
   no_container_socket           the Docker, containerd and Podman sockets cannot be connected to (a unix socket is addressed by path,
                                 so a network namespace does not stop it, and a container started through it is outside the seal)
   scratch_writable              /tmp and the working directory are writable (the command can still do its work)
@@ -36,6 +38,7 @@ from __future__ import annotations
 
 import errno
 import glob
+import json
 import os
 import re
 import socket
@@ -77,18 +80,23 @@ CREDENTIAL_FILES = (
     "~/.config/gh/hosts.yml",
     "~/.netrc",
     "~/.git-credentials",
-    "~/.docker/config.json",
     "~/.aws/credentials",
     "~/.npmrc",
     "~/.ssh/id_*",
     "/run/secrets/*",
 )
+# the files a step appends to for GITHUB_ENV, GITHUB_PATH and GITHUB_OUTPUT, and the code of the actions whose post steps run after this one
 CHANNEL_DIRS = (
     "/home/*/work/_temp/_runner_file_commands",
+    "/home/*/work/_actions",
     "/home/*/actions-runner/_work/_temp/_runner_file_commands",
+    "/home/*/actions-runner/_work/_actions",
     "/opt/actions-runner/_work/_temp/_runner_file_commands",
+    "/opt/actions-runner/_work/_actions",
     "/runner/_work/_temp/_runner_file_commands",
+    "/runner/_work/_actions",
 )
+DOCKER_CONFIG = "~/.docker/config.json"
 SOCKETS = (
     "/var/run/docker.sock",
     "/run/docker.sock",
@@ -228,8 +236,21 @@ def probe_runner_channels(patterns=CHANNEL_DIRS) -> Probe:
     return Probe("cannot_write_runner_channels", not open_, "writable: " + ", ".join(open_) if open_ else "")
 
 
-def probe_credentials(patterns=CREDENTIAL_FILES) -> Probe:
+def docker_credentials(path: str) -> bool:
+    """Does the Docker client's config hold a registry credential (an `auths` entry with `auth` or `identitytoken`)? A config without one is not a leak."""
+    try:
+        with open(path, encoding="utf-8") as fh:
+            auths = json.load(fh).get("auths", {})
+    except (OSError, ValueError, AttributeError):
+        return False
+    return isinstance(auths, dict) and any(isinstance(v, dict) and (v.get("auth") or v.get("identitytoken")) for v in auths.values())
+
+
+def probe_credentials(patterns=CREDENTIAL_FILES, docker_config=DOCKER_CONFIG) -> Probe:
     readable = [p for pat in patterns for p in glob.glob(os.path.expanduser(pat)) if os.path.isfile(p) and os.access(p, os.R_OK)]
+    cfg = os.path.expanduser(docker_config)
+    if os.path.isfile(cfg) and os.access(cfg, os.R_OK) and docker_credentials(cfg):
+        readable.append(cfg)
     return Probe("cannot_read_runner_credentials", not readable, "readable: " + ", ".join(sorted(set(readable))) if readable else "")
 
 

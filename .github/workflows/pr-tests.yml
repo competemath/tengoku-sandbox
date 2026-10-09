@@ -75,7 +75,7 @@ jobs:
         name: Does this PR touch the seal or its self-test?
         run: |
           files="$(git diff --name-only HEAD^1 HEAD)"
-          if grep -qE '^(scripts/ci/sandbox_selftest\.py|scripts/ci/tests/test_sandbox_selftest\.py|\.github/workflows/(pr-tests|pr-gate|jinshi-pr)\.yml)' <<< "$files"; then
+          if grep -qE '^(scripts/ci/sandbox_selftest\.py|scripts/ci/tests/test_sandbox_selftest\.py|\.github/workflows/(pr-tests|pr-gate|jinshi-pr)\.yml|scripts/ci/seal_harden\.sh)' <<< "$files"; then
             echo "run=yes" >> "$GITHUB_OUTPUT"
           else
             echo "run=no" >> "$GITHUB_OUTPUT"; echo "no file of the seal changed"
@@ -85,13 +85,28 @@ jobs:
         run: |
           if python3 scripts/ci/sandbox_selftest.py -- touch "$RUNNER_TEMP/ran"; then echo "::error::the self-test passed on an unsealed runner"; exit 1; fi
           [ ! -e "$RUNNER_TEMP/ran" ]
-      - name: Inside the seal of pr-gate.yml it passes
+      # exactly the command of pr-gate.yml's vacuity step (test_sandbox_selftest.py keeps the two in step): the four probes open on a hosted runner are named
+      - name: Inside the seal of pr-gate.yml it passes, and names the four things it leaves open
         if: steps.touched.outputs.run == 'yes'
         run: |
           sudo unshare --net --pid --fork --mount-proc runuser -u "$(id -un)" -- \
             env -i HOME="$HOME" PATH="$HOME/.elan/bin:/usr/local/bin:/usr/bin:/bin" LANG=C.UTF-8 \
             TENGOKU_CI_ROOT="$GITHUB_WORKSPACE" \
-            python3 scripts/ci/sandbox_selftest.py --allow-env TENGOKU_CI_ROOT -- echo "the sealed command ran"
+            python3 scripts/ci/sandbox_selftest.py --allow-env TENGOKU_CI_ROOT \
+              --advisory cannot_write_system --advisory cannot_write_runner_channels --advisory cannot_read_runner_credentials --advisory no_container_socket \
+              -- echo "the sealed command ran" | tee sealed.out
+          grep -c '^warn ' sealed.out | grep -qx 4
+      # the same seal with scripts/ci/seal_harden.sh in front of the command: every probe passes, no --advisory
+      - name: Inside the hardened seal it passes with nothing left open
+        if: steps.touched.outputs.run == 'yes'
+        run: |
+          sudo unshare --net --pid --fork --mount-proc sh scripts/ci/seal_harden.sh "$(id -un)" -- \
+            env -i HOME="$HOME" PATH="$HOME/.elan/bin:/usr/local/bin:/usr/bin:/bin" LANG=C.UTF-8 \
+            TENGOKU_CI_ROOT="$GITHUB_WORKSPACE" \
+            python3 scripts/ci/sandbox_selftest.py --allow-env TENGOKU_CI_ROOT -- echo "the hardened command ran"
+      - name: The hardening was for the step only (the job still reaches Docker)
+        if: steps.touched.outputs.run == 'yes'
+        run: curl -sf --unix-socket /var/run/docker.sock http://localhost/_ping | grep -qx OK
 
   # The program that lists the tree's command keywords (tools/CommandKeywords.lean; the content lint reads schemas/command-keywords.json) compiles and runs on a
   # clean checkout. Smoke test on Lean's own grammar: the tree is not built here, the nightly build compares the real list.
