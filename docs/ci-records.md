@@ -24,6 +24,8 @@ run on the real platform.
 - The window is `[watermark, now - 15 minutes)`. The first collection starts two days back. If the platform counts more than 900 runs in the window (it lists at most 1000), the window is cut in
   half until it fits, and the next hour goes on from there.
 - `plan_collection` decides which completed, not yet recorded runs get their jobs fetched, oldest first, within a budget of 60 runs (so the recorded set stays contiguous); the rest are deferred.
+  The token's hourly allowance is shared with every other workflow of the repository, so a collection first asks (`GET /rate_limit`, which is free) how many calls are left: below 200 it collects nothing
+  and says so, above that the budgets shrink to what the allowance can pay for. A normal hour is a handful of runs and a dozen calls; the first catch-up (98 runs and 30 logs) was 130.
 - A failed job's log is fetched (at most 25 per collection), cut to the lines of the failing step, scrubbed (ANSI, control characters, `warden.secretscan`), and classified by an **anchored**
   rule: every rule matches one whole line, the rule's id is stored beside the class, and the classifier is versioned. A bare word in a line is never a rule: the module name
   `KilledByRank` is not a kill (Tau Ceti's classifier took it for one, which overstated its timeout share; there is a test for exactly that).

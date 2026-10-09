@@ -29,6 +29,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+from _git import plain as defuse
 from warden import audit, caps, scope
 
 CHAIN_GLOB = re.compile(r"^chain/ci-\d{4}-\d{2}-\d{2}\.ndjson$")
@@ -133,7 +134,7 @@ def run_check(a: argparse.Namespace) -> int:
         if problems
         else [f"- no existing record changed between `{a.base[:12]}` and `{a.head[:12]}`; the chain verifies"]
     )
-    print("\n".join(lines))
+    print(defuse("\n".join(lines)))
     return 1 if problems else 0
 
 
@@ -178,7 +179,7 @@ def main(argv: list) -> int:
     try:
         return args.fn(args)
     except (ValueError, OSError, scope.GitError, caps.LedgerError, subprocess.SubprocessError) as exc:
-        print(f"ledger_guard: {type(exc).__name__}: {exc}", file=sys.stderr)
+        print(defuse(f"ledger_guard: {type(exc).__name__}: {exc}"), file=sys.stderr)
         return 2
 
 

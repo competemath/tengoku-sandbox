@@ -37,6 +37,7 @@ import urllib.parse
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from _git import plain
 from warden import audit, caps, ciclean, secretscan
 
 CI = Path(__file__).resolve().parent
@@ -329,6 +330,19 @@ def load_actors(path: Path = ACTORS_FILE) -> dict:
 # -------------------------------------------------------------------------------------------------------------------------- collect
 
 
+RATE_FLOOR = 200  # the token's hourly allowance is shared with every other workflow of the repository: below this, a collection waits for the next hour
+
+
+def calls_left(api) -> int | None:
+    """The calls the token may still make this hour (`GET /rate_limit` is free), or None when the platform does not say."""
+    try:
+        body, _ = json_get(api, "rate_limit")
+        left = body["resources"]["core"]["remaining"]
+    except (ApiError, KeyError, TypeError):
+        return None
+    return left if isinstance(left, int) and not isinstance(left, bool) else None
+
+
 def collect(
     api, repo: str, state: State, now: dt.datetime, *, bootstrap_days: int = 2, job_budget: int = 60, log_budget: int = 25, lag_s: int = 900
 ) -> dict:
@@ -339,6 +353,19 @@ def collect(
     notes: list = []
     if utc(end) <= utc(start):
         return empty_batch(repo, now_s, start, end, prev, "the window is empty: the previous collection was less than the lag ago")
+    left = calls_left(api)
+    if left is not None and left < RATE_FLOOR:
+        return empty_batch(
+            repo,
+            now_s,
+            start,
+            end,
+            prev,
+            f"only {left} API calls are left this hour (the floor is {RATE_FLOOR}): nothing was collected, the next hour goes on",
+        )
+    if left is not None:  # a budget the allowance can pay for: about three calls a run (its jobs, and a log for a failed one) and the lists
+        job_budget = min(job_budget, max(0, (left - RATE_FLOOR) // 3))
+        log_budget = min(log_budget, max(0, (left - RATE_FLOOR) // 6))
     total, end = narrow(api, repo, start, end)
     if end != ciclean.window_for(prev, now_s, lag_s)[1]:
         notes.append(f"the window was cut to {end}: more than {MAX_WINDOW_RUNS} runs in it")
@@ -408,7 +435,7 @@ def empty_batch(repo: str, now_s: str, start: str, end: str, prev: str, note: st
 # ------------------------------------------------------------------------------------------------------------------------ validate
 
 
-def plain(value: object, depth: int = 0) -> bool:
+def is_plain(value: object, depth: int = 0) -> bool:
     """JSON made of short plain strings, numbers, booleans, nulls, lists and objects: no control character anywhere, bounded depth."""
     if depth > 8:
         return False
@@ -419,9 +446,9 @@ def plain(value: object, depth: int = 0) -> bool:
     if isinstance(value, float):
         return value == value and abs(value) != float("inf")
     if isinstance(value, list):
-        return len(value) <= 500 and all(plain(v, depth + 1) for v in value)
+        return len(value) <= 500 and all(is_plain(v, depth + 1) for v in value)
     if isinstance(value, dict):
-        return len(value) <= 64 and all(isinstance(k, str) and len(k) <= 60 and plain(v, depth + 1) for k, v in value.items())
+        return len(value) <= 64 and all(isinstance(k, str) and len(k) <= 60 and is_plain(v, depth + 1) for k, v in value.items())
     return False
 
 
@@ -437,7 +464,7 @@ def validate_record(rec: object, repo: str) -> dict:
         raise ValueError("bad head_sha")
     if not isinstance(rec.get("api_response_sha256"), str) or not re.fullmatch(r"sha256:[0-9a-f]{64}", rec["api_response_sha256"]):
         raise ValueError("bad api_response_sha256")
-    if not isinstance(rec.get("jobs"), list) or len(rec["jobs"]) > 256 or not plain(rec):
+    if not isinstance(rec.get("jobs"), list) or len(rec["jobs"]) > 256 or not is_plain(rec):
         raise ValueError("bad jobs")
     if len(ciclean.canonical_json(rec)) > MAX_RECORD_BYTES:
         raise ValueError("record too large")
@@ -459,7 +486,7 @@ def validate_batch(doc: object) -> dict:
         raise ValueError("bad watermark")
     if not isinstance(wm["advanced"], bool) or not all(isinstance(wm[k], str) and TS.match(wm[k]) for k in ("from", "to")):
         raise ValueError("bad watermark times")
-    if not (plain(wm) and all(isinstance(wm[k], int) and not isinstance(wm[k], bool) for k in ("counted", "api_total_count"))):
+    if not (is_plain(wm) and all(isinstance(wm[k], int) and not isinstance(wm[k], bool) for k in ("counted", "api_total_count"))):
         raise ValueError("bad watermark numbers")
     if not isinstance(doc["records"], list) or len(doc["records"]) > MAX_RECORDS:
         raise ValueError("too many records")
@@ -470,7 +497,7 @@ def validate_batch(doc: object) -> dict:
         if key in seen:
             raise ValueError("a run twice")
         seen.add(key)
-    if not (plain(doc["window"]) and plain(doc["plan"]) and plain(doc["notes"])) or not isinstance(doc["api_calls"], int):
+    if not (is_plain(doc["window"]) and is_plain(doc["plan"]) and is_plain(doc["notes"])) or not isinstance(doc["api_calls"], int):
         raise ValueError("bad window, plan or notes")
     return doc
 
@@ -667,7 +694,7 @@ def run_collect(a: argparse.Namespace) -> int:
     history = load_history(records, now, 30)
     summary = render_summary(doc, history, load_actors())
     (out / "summary.md").write_text(summary, encoding="utf-8")
-    print(summary)
+    print(plain(summary))
     return 0
 
 
@@ -713,7 +740,7 @@ def main(argv: list) -> int:
     try:
         return args.fn(args)
     except (ValueError, OSError, ApiError, audit.ChainError, caps.LedgerError, subprocess.SubprocessError) as exc:
-        print(f"ci_records: {type(exc).__name__}: {exc}", file=sys.stderr)
+        print(plain(f"ci_records: {type(exc).__name__}: {exc}"), file=sys.stderr)
         return 2
 
 

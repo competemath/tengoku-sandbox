@@ -84,7 +84,8 @@ def job_of(jid, conclusion="success", name="classify"):
 class FakeApi:
     """The slice of the platform the collector reads. `lie` is added to every total_count; `window_total(start, end)` can say there are far more runs."""
 
-    def __init__(self, runs, jobs=None, logs=None, lie=0, window_total=None, fail_jobs_of=()):
+    def __init__(self, runs, jobs=None, logs=None, lie=0, window_total=None, fail_jobs_of=(), left=5000):
+        self.left = left
         self.runs, self.jobs, self.logs, self.lie, self.window_total, self.fail_jobs_of = (
             runs,
             jobs or {},
@@ -101,6 +102,8 @@ class FakeApi:
         self.paths.append(path)
         url = urllib.parse.urlparse(path)
         q = urllib.parse.parse_qs(url.query)
+        if url.path == "rate_limit":
+            return json.dumps({"resources": {"core": {"remaining": self.left}}}).encode()
         if url.path.endswith("/actions/runs"):
             lo, hi = q["created"][0].split("..")
             inside = [r for r in self.runs if lo <= r["created_at"] <= hi]
@@ -201,6 +204,31 @@ class Collect(unittest.TestCase):
         api = FakeApi([], window_total=lambda lo, hi: 5000)
         with self.assertRaises(cr.ApiError):
             collect(api)
+
+    def test_a_token_that_is_nearly_spent_waits_for_the_next_hour(self):
+        api = FakeApi(standard_runs(), standard_jobs(), left=cr.RATE_FLOOR - 1)
+        doc = collect(api)
+        self.assertEqual((doc["records"], doc["watermark"]["advanced"]), ([], False))
+        self.assertIn("API calls are left", doc["notes"][0])
+        self.assertEqual(api.calls, 1)  # it asked how many calls were left and nothing else
+
+    def test_the_budgets_shrink_to_what_the_allowance_can_pay_for(self):
+        runs = [run_of(100 + i, f"2026-10-09T0{i}:00:00Z") for i in range(1, 6)]
+        jobs = {r["id"]: [job_of(r["id"])] for r in runs}
+        doc = collect(FakeApi(runs, jobs, left=cr.RATE_FLOOR + 6), job_budget=60)  # 6 // 3 = 2 runs
+        self.assertEqual([r["run_id"] for r in doc["records"]], [101, 102])
+
+    def test_a_platform_that_does_not_say_how_many_calls_are_left_is_not_a_stop(self):
+        api = FakeApi([r for r in standard_runs() if r["status"] == "completed"], standard_jobs())
+        original = api.get
+
+        def get(path):
+            if path == "rate_limit":
+                raise cr.ApiError("HTTP 404")
+            return original(path)
+
+        api.get = get
+        self.assertEqual(len(collect(api)["records"]), 2)
 
     def test_a_second_collection_right_after_the_first_has_an_empty_window(self):
         doc = collect(FakeApi([]), cr.State(watermark="2026-10-09T11:50:00Z"))

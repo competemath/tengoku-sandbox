@@ -29,6 +29,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from _git import plain
+
 REPO = re.compile(r"^[A-Za-z0-9_.-]{1,100}/[A-Za-z0-9_.-]{1,100}$")
 VOLATILE = {"id", "node_id", "_links", "created_at", "updated_at", "source", "source_type", "current_user_can_bypass", "ruleset_id"}
 DEFAULT_DIR = ".github/rulesets"
@@ -171,7 +173,7 @@ def run_check(a: argparse.Namespace) -> int:
     lines += [f"- warning: {w}" for w in warnings] + [f"- notice: {n}" for n in notices]
     if not (drift or failures):
         lines.append(f"- the {len(live)} live ruleset(s) are the committed ones, and the invariants hold on `{default}`")
-    print("\n".join(lines))
+    print(plain("\n".join(lines)))
     return 1 if drift or failures else 0
 
 
@@ -192,7 +194,7 @@ def main(argv: list) -> int:
     try:
         return args.fn(args)
     except (ApiError, ValueError, KeyError, OSError, subprocess.SubprocessError) as exc:
-        print(f"ruleset_drift: {type(exc).__name__}: {exc}", file=sys.stderr)
+        print(plain(f"ruleset_drift: {type(exc).__name__}: {exc}"), file=sys.stderr)
         return 2
 
 
