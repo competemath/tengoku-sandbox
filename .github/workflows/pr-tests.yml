@@ -59,6 +59,40 @@ jobs:
       - uses: rhysd/actionlint@914e7df21a07ef503a81201c76d2b11c789d3fca # v1.7.12
         with: { args: -color }
 
+  # The seal the gate runs a PR's Lean in (pr-gate.yml's vacuity job: `unshare --net --pid --fork --mount-proc runuser … env -i …`) is a seal on a hosted
+  # runner: its self-test (scripts/ci/sandbox_selftest.py, docs/agent-security.md) runs inside exactly that command and must pass, and run outside any
+  # seal it must refuse. A runner image that changes under the seal fails here, in a PR, rather than in the gate.
+  sealed-selftest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions: { contents: read }
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
+        with: { egress-policy: audit }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { fetch-depth: 2, filter: "blob:none", persist-credentials: false }   # 2: the merge commit and the base
+      - id: touched
+        name: Does this PR touch the seal or its self-test?
+        run: |
+          files="$(git diff --name-only HEAD^1 HEAD)"
+          if grep -qE '^(scripts/ci/sandbox_selftest\.py|scripts/ci/tests/test_sandbox_selftest\.py|\.github/workflows/(pr-tests|pr-gate|jinshi-pr)\.yml)' <<< "$files"; then
+            echo "run=yes" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=no" >> "$GITHUB_OUTPUT"; echo "no file of the seal changed"
+          fi
+      - name: Outside any seal the self-test refuses (and runs nothing)
+        if: steps.touched.outputs.run == 'yes'
+        run: |
+          if python3 scripts/ci/sandbox_selftest.py -- touch "$RUNNER_TEMP/ran"; then echo "::error::the self-test passed on an unsealed runner"; exit 1; fi
+          [ ! -e "$RUNNER_TEMP/ran" ]
+      - name: Inside the seal of pr-gate.yml it passes
+        if: steps.touched.outputs.run == 'yes'
+        run: |
+          sudo unshare --net --pid --fork --mount-proc runuser -u "$(id -un)" -- \
+            env -i HOME="$HOME" PATH="$HOME/.elan/bin:/usr/local/bin:/usr/bin:/bin" LANG=C.UTF-8 \
+            TENGOKU_CI_ROOT="$GITHUB_WORKSPACE" \
+            python3 scripts/ci/sandbox_selftest.py --allow-env TENGOKU_CI_ROOT -- echo "the sealed command ran"
+
   # The program that lists the tree's command keywords (tools/CommandKeywords.lean; the content lint reads schemas/command-keywords.json) compiles and runs on a
   # clean checkout. Smoke test on Lean's own grammar: the tree is not built here, the nightly build compares the real list.
   command-keywords:

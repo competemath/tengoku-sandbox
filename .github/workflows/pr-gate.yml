@@ -388,13 +388,18 @@ jobs:
       # Compiling the candidates runs the PR's Lean. It happens with no network (a new network namespace), no
       # sight of the runner's processes (a new PID namespace with its own /proc) and an empty environment, so
       # it can reach neither GitHub's cache service nor a token; the job ends right after, so nothing persists.
+      # The first command inside the seal is its self-test (scripts/ci/sandbox_selftest.py, docs/agent-security.md): from inside, it checks that
+      # there is no route out, that this is a PID namespace of its own with nothing in the environment, that the runner's credentials and
+      # command files and the Docker socket are out of reach; a step that is not sealed stops there, before the PR's Lean starts, and
+      # otherwise the self-test runs the vacuity check in its place.
       - name: vacuity (sealed)
         env: { BODY: "${{ github.event.pull_request.body }}" }
         run: |
           printf '%s' "$BODY" > body.txt
           sudo unshare --net --pid --fork --mount-proc runuser -u "$(id -un)" -- \
             env -i HOME="$HOME" PATH="$HOME/.elan/bin:/usr/local/bin:/usr/bin:/bin" LANG=C.UTF-8 \
-            TENGOKU_CI_ROOT="$GITHUB_WORKSPACE" python3 scripts/ci/vacuity.py "$BASE" "$HEAD" body.txt
+            TENGOKU_CI_ROOT="$GITHUB_WORKSPACE" \
+            python3 scripts/ci/sandbox_selftest.py --allow-env TENGOKU_CI_ROOT -- python3 scripts/ci/vacuity.py "$BASE" "$HEAD" body.txt
 
   # The workflow rules (scripts/ci/workflow_rules.py): main's checker reads the workflow and action files
   # the PR adds or changes from the PR's commit, and verifies their pins against GitHub (impostor commits).
