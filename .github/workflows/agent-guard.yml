@@ -12,8 +12,8 @@
 # publishing the check (job `publish`, `checks: write`) are different jobs; the second takes one validated JSON file.
 name: agent-guard
 on:
-  pull_request_target:
-    branches: [main, rehearse-ag-base]   # REHEARSAL ONLY: this branch is never merged
+  pull_request:   # REHEARSAL ONLY (this branch is never merged): pull_request_target answers only from the default branch
+    branches: [rehearse-ag-base]
     types: [opened, synchronize, reopened, edited]   # edited: a title or description changed after the first scan
 permissions: {}
 concurrency:
