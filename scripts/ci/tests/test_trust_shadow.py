@@ -201,6 +201,156 @@ class Ledger(unittest.TestCase):
             trust_ledger.append_entry(broken, "verdict", self.verdict())
 
 
+MERGE_BASE = "c" * 40
+DIGEST = "sha256:" + "1" * 64
+POLICY = "sha256:" + "2" * 64
+SHIM = """#!{python}
+import json, os, sys
+a = sys.argv[1:]
+d = os.environ["SHIM_DIR"]
+if "POST" in a:
+    body = json.load(sys.stdin)
+    json.dump(body, open(os.path.join(d, "posted.json"), "w"))
+    sys.exit(int(os.environ.get("SHIM_POST_RC", "0")))
+posted = json.load(open(os.path.join(d, "posted.json")))
+posted.update(id=5, app={{"id": int(os.environ["SHIM_APP_ID"])}})
+posted["head_sha"] = os.environ.get("SHIM_HEAD", posted["head_sha"])
+print(json.dumps({{"total_count": 1, "check_runs": [posted]}}))
+print(json.dumps({{"total_count": 1, "check_runs": []}}))
+"""
+
+
+class Eligibility(unittest.TestCase):
+    """The third job of trust-shadow.yml: the `merge eligibility` check run, built from the validated verdict and read back through verify_check."""
+
+    def verdict(self, decision="ACCEPT", **kw):
+        return {
+            "schema": "tengoku-verdict/1",
+            "decision": decision,
+            "case": {"head_sha": HEAD},
+            "evidence_digest": DIGEST,
+            "policy_sha256": POLICY,
+            **kw,
+        }
+
+    def artifact(self, **kw):
+        d = Path(tempfile.mkdtemp())
+        (d / "verdict.json").write_text(json.dumps(kw.get("verdict", self.verdict())))
+        (d / "case.json").write_text(json.dumps(kw.get("case", {"repo": "o/r", "head_sha": HEAD, "class": "tooling"})))
+        (d / "meta.json").write_text(json.dumps(kw.get("meta", {"pr": 7, "base": BASE, "merge_base": MERGE_BASE})))
+        return d
+
+    def run_main(self, d, app_id="15368", shim_app="15368", post_rc="0", head=None):
+        shim_dir = Path(tempfile.mkdtemp())
+        shim = shim_dir / "gh"
+        shim.write_text(SHIM.format(python=sys.executable))
+        shim.chmod(0o755)
+        env = {
+            **os.environ,
+            "PATH": f"{shim_dir}{os.pathsep}{os.environ['PATH']}",
+            "SHIM_DIR": str(shim_dir),
+            "SHIM_APP_ID": shim_app,
+            "SHIM_POST_RC": post_rc,
+        }
+        if head:
+            env["SHIM_HEAD"] = head
+        done = subprocess.run(
+            [sys.executable, str(CI / "trust_shadow.py"), "eligibility", "--dir", str(d), "--repo", "o/r", "--app-id", app_id],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        posted = shim_dir / "posted.json"
+        return done, json.loads(posted.read_text()) if posted.exists() else None
+
+    def test_the_conclusion_follows_the_verdict_and_the_check_binds_what_it_was_reached_on(self):
+        for decision, conclusion in (("ACCEPT", "success"), ("HOLD", "neutral"), ("ESCALATE", "neutral"), ("REJECT", "failure")):
+            done, posted = self.run_main(self.artifact(verdict=self.verdict(decision)))
+            self.assertEqual(done.returncode, 0, done.stderr)
+            self.assertEqual((posted["name"], posted["head_sha"], posted["conclusion"]), ("merge eligibility", HEAD, conclusion))
+            bound = json.loads(posted["external_id"])
+            self.assertEqual(
+                (bound["pr"], bound["head_sha"], bound["merge_base"], bound["evidence_digest"], bound["policy_sha256"]),
+                (7, HEAD, MERGE_BASE, DIGEST, POLICY),
+            )
+        self.assertIn('"decision": "admit"', self.run_main(self.artifact())[0].stdout)
+        self.assertIn('"decision": "cancel"', self.run_main(self.artifact(verdict=self.verdict("REJECT")))[0].stdout)
+
+    def test_nothing_from_the_verdicts_free_text_reaches_the_check(self):
+        done, posted = self.run_main(
+            self.artifact(verdict=self.verdict(summary="@everyone <script>alert(1)</script> [x](http://evil)", reasons=["see @someone"]))
+        )
+        self.assertEqual(done.returncode, 0)
+        self.assertNotIn("everyone", json.dumps(posted))
+        self.assertNotIn("evil", json.dumps(posted))
+
+    def test_a_check_that_is_not_read_back_as_the_expected_app_fails_the_job(self):
+        done, _ = self.run_main(self.artifact(), app_id="424242")  # the Actions identity made it; the pin says another App should have
+        self.assertEqual(done.returncode, 1)
+        self.assertIn("not read back as app 424242", done.stderr)
+
+    def test_a_check_for_another_head_is_not_an_eligibility(self):
+        done, _ = self.run_main(self.artifact(), head="d" * 40)
+        self.assertEqual(done.returncode, 1)
+
+    def test_a_check_run_that_could_not_be_created_fails_the_job(self):
+        done, _ = self.run_main(self.artifact(), post_rc="1")
+        self.assertEqual(done.returncode, 1)
+        self.assertIn("was not created", done.stderr)
+
+    def test_the_artifact_is_validated_again_here(self):
+        bad = [
+            dict(verdict=self.verdict("APPROVED")),
+            dict(verdict=self.verdict(evidence_digest="sha256:abc")),
+            dict(verdict={**self.verdict(), "case": {"head_sha": "e" * 40}}),
+            dict(case={"repo": "other/repo", "head_sha": HEAD}),
+            dict(case={"repo": "o/r", "head_sha": "main"}),
+            dict(meta={"pr": 0, "base": BASE, "merge_base": MERGE_BASE}),
+            dict(meta={"pr": True, "base": BASE, "merge_base": MERGE_BASE}),
+            dict(meta={"pr": 7, "base": BASE, "merge_base": "main"}),
+            dict(meta={"pr": 7, "base": BASE}),
+        ]
+        for kw in bad:
+            done, posted = self.run_main(self.artifact(**kw))
+            self.assertEqual(done.returncode, 2, kw)
+            self.assertIsNone(posted, kw)
+
+    def test_a_missing_meta_file_publishes_nothing(self):
+        d = self.artifact()
+        (d / "meta.json").unlink()
+        done, posted = self.run_main(d)
+        self.assertEqual(done.returncode, 2)
+        self.assertIsNone(posted)
+
+    def test_check_runs_are_read_from_every_page(self):
+        text = json.dumps({"check_runs": [{"id": 1}]}) + "\n" + json.dumps({"check_runs": [{"id": 2}, {"id": 3}]})
+        self.assertEqual([c["id"] for c in ts.parse_pages(text)], [1, 2, 3])
+        self.assertEqual(ts.parse_pages(""), [])
+
+    def test_gather_binds_the_merge_base_when_it_is_given_the_pr(self):
+        from unittest import mock
+
+        def fake_run(args, cwd, env=None):
+            name = Path(args[1]).name
+            return {
+                "classify.py": (0, "class=docs (1 files)\n"),
+                "lint_banked.py": (0, "ok\n"),
+                "sorry_scan.py": (0, "no sorry/admit in added content\n"),
+                "merge-base": (0, MERGE_BASE + "\n"),
+            }[name]
+
+        with tempfile.TemporaryDirectory() as d:
+            with mock.patch.object(ts, "run", fake_run):
+                self.assertEqual(
+                    ts.main(["gather", "--repo", "o/r", "--pr", "9", "--base", BASE, "--head", HEAD, "--author", "me", "--out", d]), 0
+                )
+            self.assertEqual(json.loads((Path(d) / "meta.json").read_text()), {"pr": 9, "base": BASE, "merge_base": MERGE_BASE})
+            with mock.patch.object(ts, "run", fake_run):
+                with tempfile.TemporaryDirectory() as d2:
+                    ts.main(["gather", "--repo", "o/r", "--base", BASE, "--head", HEAD, "--author", "me", "--out", d2])
+                    self.assertFalse((Path(d2) / "meta.json").exists())  # no PR number: no check can be built
+
+
 class CanaryGate(unittest.TestCase):
     def check(self, source):
         with tempfile.TemporaryDirectory() as d:
