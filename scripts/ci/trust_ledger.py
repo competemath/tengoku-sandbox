@@ -23,7 +23,7 @@ from pathlib import Path
 SHA = re.compile(r"^[0-9a-f]{40}$")
 LOGIN = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$")
 DECISIONS = {"ACCEPT", "HOLD", "ESCALATE", "REJECT"}
-BRANCH = "trust-ledger"
+BRANCH = os.environ.get("TRUST_LEDGER_BRANCH", "trust-ledger")  # the override is for rehearsals on a scratch branch
 PATH = "ledger.jsonl"
 MAX_BYTES = 900_000
 ATTEMPTS = 6
