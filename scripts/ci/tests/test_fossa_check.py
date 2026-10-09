@@ -194,7 +194,7 @@ class Wiring(unittest.TestCase):
         runs = [s["run"] for s in job["steps"] if "run" in s]
         self.assertEqual(runs[-1], 'python3 scripts/ci/fossa_check.py "$GITHUB_REPOSITORY" "$HEAD"')
         self.assertFalse([s for s in job["steps"] if "actions/checkout" in s.get("uses", "")])  # the base comes by plain git (Sonar S7631)
-        self.assertIn('git checkout -q --detach "$BASE"', runs[0])
+        self.assertIn("git checkout -q --detach origin/scripts", runs[0])  # main's tip, not the recorded base (test_gate_scripts_from_main)
 
     def aggregate(self, fossa: str) -> int:
         step = next(s for s in self.jobs["pr-gate"]["steps"] if s.get("name") == "Every job of this PR's class passed")
