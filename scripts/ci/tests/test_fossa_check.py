@@ -16,7 +16,17 @@ WORKFLOW = CI.parents[1] / ".github" / "workflows" / "pr-gate.yml"
 sys.path.insert(0, str(CI))
 import fossa_check as fc  # noqa: E402
 
-OK = [{"context": c, "state": "success", "description": "All checks passed."} for c in fc.CONTEXTS]
+BOT = {"login": "fossa-integration[bot]"}
+OK = [
+    {
+        "context": c,
+        "state": "success",
+        "description": "All checks passed.",
+        "creator": BOT,
+        "target_url": "https://app.fossa.com/projects/x",
+    }
+    for c in fc.CONTEXTS
+]
 
 
 def with_state(context: str, state: str, **extra) -> list[dict]:
@@ -40,7 +50,19 @@ class Judge(unittest.TestCase):
         self.assertEqual(fc.judge([])[0], "wait")
 
     def test_a_failure_wins_over_a_missing_context(self):
-        self.assertEqual(fc.judge([{"context": "Security Analysis", "state": "error"}])[0], "bad")
+        self.assertEqual(fc.judge([{"context": "Security Analysis", "state": "error", "creator": BOT}])[0], "bad")
+
+    def test_a_status_not_posted_by_fossa_is_ignored_whatever_it_says(self):
+        """A collaborator with commit-status write access could post `success` under FOSSA's context names (CodeRabbit, #328)."""
+        forged = [{**s, "creator": {"login": "someone"}} for s in OK]
+        self.assertEqual(fc.judge(forged)[0], "wait")
+        self.assertEqual(fc.judge([{**s, "creator": None} for s in OK])[0], "wait")
+        self.assertEqual(fc.judge([{**s, "target_url": "https://evil.example/"} for s in OK])[0], "wait")
+        # FOSSA's own pending status carries no link yet; its final one does
+        self.assertEqual(fc.judge([{**s, "target_url": None, "state": "pending"} for s in OK])[0], "wait")
+        self.assertEqual(fc.judge([{**s, "target_url": None} for s in OK])[0], "ok")
+        # a forged failure is not a verdict either
+        self.assertEqual(fc.judge(OK + [{"context": "Security Analysis", "state": "error", "creator": {"login": "someone"}}])[0], "ok")
 
     def test_other_statuses_do_not_count(self):
         other = [{"context": "codecov/patch", "state": "success"}, {"context": "CodeRabbit", "state": "success"}]
@@ -57,6 +79,28 @@ class Judge(unittest.TestCase):
 
 
 FOSSA = fc.FOSSA_URL
+
+
+class NewestPerContext(unittest.TestCase):
+    """The statuses come newest first; a context's first entry is its current state, an older `pending` behind a `success` does not count."""
+
+    def test_an_older_pending_behind_a_success_does_not_hide_it(self):
+        older = [{**s, "state": "pending", "target_url": None} for s in OK]
+        self.assertEqual(fc.judge(OK + older)[0], "ok")
+        self.assertEqual(fc.judge(older + OK)[0], "wait")  # the pending ones are newest: still waiting
+
+    def test_the_fetch_reads_every_page_of_the_per_status_endpoint_which_carries_the_creator(self):
+        """The combined endpoint leaves `creator` out: every status looked forged and the gate waited for verdicts that were there (2026-10-07).
+        Every page is read (CodeRabbit, #340): a verdict on the second page of a busy commit is a verdict."""
+        page1 = [{"context": "CodeRabbit", "state": "success"}] * 2
+        page2 = [{"context": "Security Analysis", "state": "success", "creator": BOT, "target_url": FOSSA + "x"}]
+        with mock.patch.object(fc.subprocess, "run") as run:
+            run.return_value = mock.Mock(returncode=0, stdout=json.dumps([page1, page2]), stderr="")
+            got = fc.fetch("o/r", "a" * 40)
+            args = run.call_args[0][0]
+        self.assertIn("repos/o/r/commits/" + "a" * 40 + "/statuses?per_page=100", args)
+        self.assertIn("--paginate", args)
+        self.assertEqual(got, page1 + page2)  # flattened, in order
 
 
 class Waiting(unittest.TestCase):
@@ -148,7 +192,9 @@ class Wiring(unittest.TestCase):
         self.assertEqual(job["if"], "github.event_name == 'pull_request_target'")  # a queue entry never gets FOSSA's statuses
         self.assertEqual(job["permissions"], {"contents": "read", "statuses": "read"})
         runs = [s["run"] for s in job["steps"] if "run" in s]
-        self.assertEqual(runs, ['python3 scripts/ci/fossa_check.py "$GITHUB_REPOSITORY" "$HEAD"'])
+        self.assertEqual(runs[-1], 'python3 scripts/ci/fossa_check.py "$GITHUB_REPOSITORY" "$HEAD"')
+        self.assertFalse([s for s in job["steps"] if "actions/checkout" in s.get("uses", "")])  # the base comes by plain git (Sonar S7631)
+        self.assertIn('git checkout -q --detach "$BASE"', runs[0])
 
     def aggregate(self, fossa: str) -> int:
         step = next(s for s in self.jobs["pr-gate"]["steps"] if s.get("name") == "Every job of this PR's class passed")
