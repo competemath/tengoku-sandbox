@@ -24,39 +24,56 @@ from _git import fail
 
 CONTEXTS = ("License Compliance", "Dependency Quality", "Security Analysis")
 BAD = ("error", "failure")
+# Only FOSSA's own statuses count: the GitHub App posts as this login (FOSSA_LOGIN overrides it), with a link into app.fossa.com. Anyone with
+# commit-status write access could post `success` under the same context names; such a status is ignored, never a verdict.
+FOSSA_LOGIN = os.environ.get("FOSSA_LOGIN", "fossa-integration[bot]")
 REPO = re.compile(r"[A-Za-z0-9-]+/(?!\.{1,2}$)[\w.-]+")  # owner/name; a name of only dots would climb out of repos/<owner>/ in the API path
 SHA = re.compile(r"[0-9a-f]{40}")
 FOSSA_URL = "https://app.fossa.com/"
 
 
+def from_fossa(s: dict) -> bool:
+    """A status FOSSA's GitHub App posted: its login, and a link into FOSSA (a pending status may carry none yet)."""
+    url = str(s.get("target_url") or "")
+    return (s.get("creator") or {}).get("login") == FOSSA_LOGIN and (not url or url.startswith(FOSSA_URL))
+
+
+def describe(ctx: str, s: dict | None) -> tuple[str, str]:
+    """(state, bounded line) for one context: the state, FOSSA's description, and its link when the verdict is bad."""
+    state = str(s.get("state")) if s else "not reported yet"
+    line = f"{ctx}: {state}"
+    if s and s.get("description"):
+        line += f" ({str(s['description'])[:80]})"
+    url = str(s.get("target_url") or "") if s else ""
+    if state in BAD and url.startswith(FOSSA_URL):
+        line += f" {url[:300]}"
+    return state, line
+
+
 def judge(statuses: list[dict]) -> tuple[str, list[str]]:
-    """The verdict on a list of commit statuses (the latest per context): "bad" when a context failed, "ok" when all three
-    succeeded, "wait" otherwise; and one bounded line per context."""
-    seen = {s.get("context"): s for s in statuses}  # only the three contexts below are looked up: other apps' statuses never count
-    lines, states = [], []
-    for ctx in CONTEXTS:
-        s = seen.get(ctx)
-        state = str(s.get("state")) if s else "not reported yet"
-        states.append(state)
-        line = f"{ctx}: {state}"
-        if s and s.get("description"):
-            line += f" ({str(s['description'])[:80]})"
-        url = str(s.get("target_url") or "") if s else ""
-        if state in BAD and url.startswith(FOSSA_URL):
-            line += f" {url[:300]}"
-        lines.append(line)
+    """The verdict on a list of commit statuses, newest first: "bad" when a context failed, "ok" when all three succeeded, "wait" otherwise;
+    and one bounded line per context. A status not posted by FOSSA is ignored; a context's first status is its current one."""
+    seen: dict = {}
+    for s in statuses:
+        if from_fossa(s) and s.get("context") not in seen:
+            seen[s.get("context")] = s
+    states, lines = zip(*(describe(ctx, seen.get(ctx)) for ctx in CONTEXTS))
     if any(st in BAD for st in states):
-        return "bad", lines
-    return ("ok" if all(st == "success" for st in states) else "wait"), lines
+        return "bad", list(lines)
+    return ("ok" if all(st == "success" for st in states) else "wait"), list(lines)
 
 
 def fetch(repo: str, sha: str) -> list[dict]:
+    """The commit's statuses, newest first, each with its creator, every page (a commit with more than 100 statuses would otherwise hide a
+    verdict on a later page). The combined endpoint (`…/commits/{sha}/status`) leaves `creator` out, which made every status look forged
+    and the gate wait for verdicts that were there (2026-10-07)."""
     r = subprocess.run(
-        ["gh", "api", f"repos/{repo}/commits/{sha}/status?per_page=100", "--jq", ".statuses"], capture_output=True, text=True
+        ["gh", "api", "--paginate", "--slurp", f"repos/{repo}/commits/{sha}/statuses?per_page=100"], capture_output=True, text=True
     )
     if r.returncode != 0:
         raise RuntimeError(r.stderr.strip()[:200] or "gh api failed")
-    return json.loads(r.stdout or "[]")
+    pages = json.loads(r.stdout or "[]")
+    return [s for page in pages for s in page]  # --slurp: a list of pages, each a list of statuses, in order
 
 
 def wait_for_verdict(repo, sha, minutes, *, fetch=fetch, sleep=time.sleep, clock=time.monotonic, interval=20):
