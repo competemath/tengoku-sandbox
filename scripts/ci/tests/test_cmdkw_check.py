@@ -18,9 +18,9 @@ import cmdkw_check as ck  # noqa: E402
 REAL = json.loads((HERE.parent.parent.parent / "schemas" / "command-keywords.json").read_text(encoding="utf-8"))["commands"]
 
 
-def run(stdin: str, *argv: str):
+def run(stdin: str, *argv: str, listfile: Path | None = None):
     out = io.StringIO()
-    with mock.patch.object(sys, "stdin", io.StringIO(stdin)), redirect_stdout(out):
+    with mock.patch.object(sys, "stdin", io.StringIO(stdin)), mock.patch.object(ck, "LIST", listfile or ck.LIST), redirect_stdout(out):
         rc = ck.main(list(argv))
     return rc, out.getvalue()
 
@@ -41,32 +41,40 @@ class Main(unittest.TestCase):
     def test_the_real_list_is_what_it_says_and_equals_itself(self):
         self.assertEqual(sorted(REAL), REAL)
         self.assertEqual(len(set(REAL)), len(REAL))
-        rc, out = run("\n".join(REAL), str(self.listfile(REAL)))
+        rc, out = run("\n".join(REAL), listfile=self.listfile(REAL))
         self.assertEqual(rc, 0, out)
 
     def test_a_keyword_the_list_lacks_fails_and_says_how_to_regenerate(self):
-        rc, out = run("\n".join([*REAL, "frobnicate_cmd"]), str(self.listfile(REAL)))
+        rc, out = run("\n".join([*REAL, "frobnicate_cmd"]), listfile=self.listfile(REAL))
         self.assertEqual(rc, 1)
         self.assertIn("frobnicate_cmd", out)
         self.assertIn("--write", out)
 
     def test_a_keyword_that_went_fails_too(self):
-        rc, out = run("\n".join(REAL[1:]), str(self.listfile(REAL)))
+        rc, out = run("\n".join(REAL[1:]), listfile=self.listfile(REAL))
         self.assertEqual(rc, 1)
         self.assertIn(REAL[0], out)
 
     def test_almost_nothing_from_lean_is_a_failure_of_the_program_not_a_list(self):
-        rc, out = run("theorem\ndef\n", str(self.listfile(REAL)))
+        rc, out = run("theorem\ndef\n", listfile=self.listfile(REAL))
         self.assertEqual(rc, 2)
         self.assertIn("not the tree's command grammar", out)
 
     def test_write_regenerates_the_list_sorted(self):
         p = self.listfile(["old"])
-        rc, out = run("\n".join(reversed([*REAL, "zzz_new"])), "--write", str(p))
+        rc, out = run("\n".join(reversed([*REAL, "zzz_new"])), "--write", listfile=p)
         self.assertEqual(rc, 0, out)
         doc = json.loads(p.read_text(encoding="utf-8"))
         self.assertEqual(doc["commands"], sorted([*REAL, "zzz_new"]))
         self.assertEqual(doc["about"], "x")  # the rest of the file is kept
+
+    def test_no_path_is_taken_from_the_command_line(self):
+        """2026-10-08 (Sonar S2083/S8707): `cmdkw_check.py --write ../../x` wrote the list wherever the argument said. The list is the repository's, and a path is refused."""
+        target = self.listfile(["old"])
+        rc, out = run("\n".join(REAL), "--write", str(target))
+        self.assertEqual(rc, 2)
+        self.assertIn("takes no path", out)
+        self.assertEqual(json.loads(target.read_text(encoding="utf-8"))["commands"], ["old"])  # untouched
 
 
 class CiJob(unittest.TestCase):
