@@ -312,7 +312,7 @@ jobs:
       - name: detect-secrets on the changed files (every class)
         shell: bash
         run: |  # pragma: allowlist secret
-          pip install -q --require-hashes -r scripts/ci/requirements/secrets.txt   # main's pins (this job's checkout is main)
+          pip install -q --require-hashes --only-binary ':all:' -r scripts/ci/requirements/secrets.txt   # main's pins (this job's checkout is main); wheels only: no setup script runs
           git diff --name-only --diff-filter=AM "$BASE...$HEAD" -- . ':!data/' ':!Tengoku/' ':!.lake/' ':!scripts/ci/campaign/' > changed.txt   # the campaign's fixtures hold fake credentials
           mapfile -t files < changed.txt
           # the PR's versions of those files, scanned against main's baseline (a PR cannot allowlist its own secret)
@@ -372,7 +372,7 @@ jobs:
         run: git fetch -q --no-tags --filter=blob:none origin "+$PR_REF:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
       - name: Lean
         run: |
-          curl -sSfL https://github.com/leanprover/elan/releases/latest/download/elan-x86_64-unknown-linux-gnu.tar.gz | tar xz
+          curl --proto '=https' --tlsv1.2 -sSfL https://github.com/leanprover/elan/releases/latest/download/elan-x86_64-unknown-linux-gnu.tar.gz | tar xz
           ./elan-init -y --default-toolchain none && echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
           sudo apt-get install -y -q zstd >/dev/null
           "$HOME/.elan/bin/lake" --version   # installs the tree's toolchain now, while there is network
@@ -419,7 +419,7 @@ jobs:
             git cat-file -e "$HEAD:scripts/ci/workflow_rules.py" 2>/dev/null && { echo "main has no workflow_rules.py yet: this PR adds it"; exit 0; }
             echo "::error::neither main nor this PR has scripts/ci/workflow_rules.py"; exit 1
           fi
-          pip install -q --require-hashes -r scripts/ci/requirements/yaml.txt
+          pip install -q --require-hashes --only-binary ':all:' -r scripts/ci/requirements/yaml.txt
           python3 scripts/ci/workflow_rules.py --online --changed "$BASE" "$HEAD"
 
   depends:
