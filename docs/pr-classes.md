@@ -99,6 +99,8 @@ tentative or staging file whose records all come from a source no longer on the 
 - `TENGOKU_BOT` is `mikael-bashir`, the maintainer's own account. Any PR from that account touching only
   derived, content or tombstone paths, with at least one derived or tombstone path, is therefore a
   promotion.
+- `TENGOKU_INTAKE_BOT` (default `tengoku-intake[bot]`) is the intake App, which the factory's `intake-open.yml` opens pull requests as. Its account may send an **intake** or an **extend**
+  PR (the factory's bundles, judged by `intake_check.py`, which rebuilds the archive and checks its attestation) and no other class: promotion, tag, scope-fix, restructure and native stay `TENGOKU_BOT`'s.
 - `.github/CODEOWNERS` assigns `@mikael-bashir` to the tooling paths of rule 4 and to `data/trusted/`, with one
   exception. CODEOWNERS patterns follow gitignore rules, where `*` does not cross `/`, so `/Tengoku/*.lean`
   covers only files directly under `Tengoku/`. The seeded modules in its subfolders have no code owner.

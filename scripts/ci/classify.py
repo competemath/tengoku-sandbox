@@ -86,6 +86,9 @@ bot = os.environ.get("TENGOKU_BOT", "tengoku-bot")
 actor = os.environ.get("PR_ACTOR", "")
 # On a merge group there is no pull-request actor; the queue only holds PRs whose own gate already checked it.
 actor_ok = actor == bot or os.environ.get("TENGOKU_ACTOR_CHECKED") == "1"
+# The intake App (tengoku-intake: the factory's scripts/bump/intake_open.py opens the PRs as it) may send an intake or an extend PR and no other class: tags, scope fixes,
+# restructures and promotions stay the bot's. It is no weaker than the bot there: scripts/ci/intake_check.py rebuilds the bundle's archive from the PR's files and verifies its attestation.
+intake_actor_ok = actor_ok or actor == os.environ.get("TENGOKU_INTAKE_BOT", "tengoku-intake[bot]")
 # The promote bot's PRs move staging records to trusted and regenerate modules: derived + content + tombstone paths, nothing else.
 if set(by) <= {"derived", "content", "tombstone"} and (derived or by.get("tombstone")) and actor_ok:
     print(f"class=promotion ({len(files)} files, by {actor or 'the merge group'})")
@@ -96,8 +99,8 @@ if "intake" in by:
     others = [c for c in by if c not in ("intake", "docs")]
     if others or len(intake_libs) != 1:
         fail(f"an intake PR is one library's bundle and nothing else (libraries: {sorted(intake_libs)}; also touches: {others})")
-    if not actor_ok:
-        fail(f"an intake PR comes from the factory's account ({bot}), not from {actor or 'nobody'}")
+    if not intake_actor_ok:
+        fail(f"an intake PR comes from the factory's account ({bot}) or the intake App, not from {actor or 'nobody'}")
     # the next part of a library that arrived in parts (scripts/bump/bundle_layers.py in the factory): the part's report is a new file data/intake/<library>/parts/NNN.json
     lib = sorted(intake_libs)[0]
     cls = "extend" if any(re.fullmatch(rf"data/intake/{re.escape(lib)}/parts/\d{{3}}\.json", p) for _, p in files) else "intake"
