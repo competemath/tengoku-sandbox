@@ -97,6 +97,7 @@ CHANNEL_DIRS = (
     "/runner/_work/_actions",
 )
 DOCKER_CONFIG = "~/.docker/config.json"
+CREDENTIAL_FIELDS = ("auth", "identitytoken", "password", "registrytoken")  # the secrets an `auths` entry of the Docker client can hold
 SOCKETS = (
     "/var/run/docker.sock",
     "/run/docker.sock",
@@ -237,13 +238,13 @@ def probe_runner_channels(patterns=CHANNEL_DIRS) -> Probe:
 
 
 def docker_credentials(path: str) -> bool:
-    """Does the Docker client's config hold a registry credential (an `auths` entry with `auth` or `identitytoken`)? A config without one is not a leak."""
+    """Does the Docker client's config hold a registry credential (an `auths` entry with `auth`, `identitytoken`, `password` or `registrytoken`)? A config without one is not a leak."""
     try:
         with open(path, encoding="utf-8") as fh:
             auths = json.load(fh).get("auths", {})
     except (OSError, ValueError, AttributeError):
         return False
-    return isinstance(auths, dict) and any(isinstance(v, dict) and (v.get("auth") or v.get("identitytoken")) for v in auths.values())
+    return isinstance(auths, dict) and any(isinstance(v, dict) and any(v.get(k) for k in CREDENTIAL_FIELDS) for v in auths.values())
 
 
 def probe_credentials(patterns=CREDENTIAL_FILES, docker_config=DOCKER_CONFIG) -> Probe:

@@ -129,6 +129,9 @@ class Files(unittest.TestCase):
         for text, leaks in (
             ('{"auths": {"ghcr.io": {"auth": "dXNlcjpwYXNz"}}}', True),
             ('{"auths": {"ghcr.io": {"identitytoken": "x"}}}', True),
+            ('{"auths": {"ghcr.io": {"username": "u", "password": "p"}}}', True),
+            ('{"auths": {"ghcr.io": {"registrytoken": "t"}}}', True),
+            ('{"auths": {"ghcr.io": {"username": "u"}}}', False),
             ('{"auths": {}}', False),
             ('{"auths": {"ghcr.io": {}}, "credsStore": "desktop"}', False),
             ("not json", False),
@@ -163,28 +166,27 @@ class Files(unittest.TestCase):
 
 
 class TheSealOfTheGate(unittest.TestCase):
-    """pr-tests.yml proves the self-test inside the command pr-gate.yml runs; the two must be the same command."""
+    """pr-tests.yml proves the self-test inside the command pr-gate.yml runs, a hardened seal; the two must be the same command."""
 
     WORKFLOWS = CI.parents[1] / ".github" / "workflows"
 
     def sealed_line(self, name):
+        """The seal and the self-test's own arguments, up to the `--` that precedes what is run inside it."""
         text = (self.WORKFLOWS / name).read_text(encoding="utf-8")
         m = re.search(
-            r"(sudo unshare --net --pid --fork --mount-proc runuser -u \"\$\(id -un\)\" -- \\\n\s+env -i [^\n]*\\\n\s+TENGOKU_CI_ROOT=[^\n]*\\\n\s+python3 scripts/ci/sandbox_selftest\.py[^\n]*\\\n(?:\s+--advisory[^\n]*\\\n)?)",
+            r"(sudo unshare --net --pid --fork --mount-proc sh scripts/ci/seal_harden\.sh \"\$\(id -un\)\" -- \\\n\s+env -i [^\n]*\\\n\s+TENGOKU_CI_ROOT=[^\n]*\\\n\s+python3 scripts/ci/sandbox_selftest\.py --allow-env TENGOKU_CI_ROOT --)",
             text,
         )
-        self.assertIsNotNone(m, f"{name} has no sealed self-test command")
+        self.assertIsNotNone(m, f"{name} has no hardened sealed self-test command")
         return re.sub(r"\s+", " ", m.group(1))
 
     def test_pr_tests_runs_the_command_of_the_gate(self):
         self.assertEqual(self.sealed_line("pr-gate.yml"), self.sealed_line("pr-tests.yml"))
 
-    def test_the_gates_advisories_are_the_four_the_hardening_closes(self):
-        text = (self.WORKFLOWS / "pr-gate.yml").read_text(encoding="utf-8")
-        named = sorted(re.findall(r"--advisory (\w+)", text))
-        self.assertEqual(
-            named, ["cannot_read_runner_credentials", "cannot_write_runner_channels", "cannot_write_system", "no_container_socket"]
-        )
+    def test_the_gate_excuses_no_probe(self):
+        self.assertNotIn("--advisory", (self.WORKFLOWS / "pr-gate.yml").read_text(encoding="utf-8"))
+
+    def test_the_hardening_covers_what_the_self_test_found_open(self):
         harden = (CI / "seal_harden.sh").read_text(encoding="utf-8")
         for needle in ("docker.sock", "_runner_file_commands", "_actions", "/usr/local/bin", "/opt", ".docker/config.json"):
             self.assertIn(needle, harden)

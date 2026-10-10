@@ -17,7 +17,7 @@ The credit for the ideas belongs to the people who wrote them down, above all Ki
 | Check | Where | Blocks? | What it protects |
 | --- | --- | --- | --- |
 | `scope` (this page, section 1) | `agent-guard.yml`, every pull request | no, advisory | agent PRs stay in their paths; no symlink, submodule or executable under `data/` or `Tengoku/`; no secret in a PR's title, body, commit messages or added lines; no human-owned work dropped by an agent's push; CODEOWNERS and the policy agree |
-| sealed-step self-test (section 2) | first command inside the sealed step of `pr-gate.yml` (vacuity); `pr-tests.yml` runs the same battery on a hosted runner | yes for eight probes: a step that fails one does not start; four probes that are open on a hosted runner are named advisories until `seal_harden.sh` is adopted | the PR's Lean runs with no network, no sight of the runner, no credentials |
+| sealed-step self-test (section 2) | first command inside the hardened, sealed step of `pr-gate.yml` (vacuity); `pr-tests.yml` runs the same battery in the same command on a hosted runner | yes: a step that fails a probe does not start | the PR's Lean runs with no network, no sight of the runner, no credentials, no Docker, no way to alter what runs after it |
 | vendored warden modules (section 3) | `scripts/ci/warden/`, tested for drift | yes (tooling tests) | the code the checks use is the code that was reviewed |
 
 ## 1. The `scope` check
@@ -113,23 +113,25 @@ privilege and environment probes pass: the seal does what it says. Four probes d
 None of this is an attack on the job's own token (the vacuity job holds `contents: read`) but each is a way out of "it can reach neither the cache service nor a token" (the comment of
 the vacuity step). `scripts/ci/seal_harden.sh` closes all four for the sealed step only: run as root inside the same `unshare`, in a mount namespace of its own, it replaces the container
 sockets and the Docker config with `/dev/null`, empties the command-file directory, makes the downloaded actions, `/usr/local/bin` and `/opt` read-only, and then drops to the user and runs the command.
-`pr-tests.yml` runs the battery inside it with no probe excused, and checks that the job still reaches Docker afterwards.
+`pr-tests.yml` runs the battery inside it with no probe excused: **12 of 12 pass on `ubuntu-latest`**, and the job can still reach Docker afterwards. The same job also runs the plain seal, every
+time, and prints which of the four it still leaves open (it never fails the job: if the runner image ever closes them, the warnings go away).
 
-**Wiring.** `pr-gate.yml`'s vacuity step runs `sandbox_selftest.py --allow-env TENGOKU_CI_ROOT -- python3 scripts/ci/vacuity.py …` inside the seal, with the four open probes named as advisories
-(`--advisory`): each run prints them as warnings and the gate does not stop on them. Closing them is one edit, which the maintainer makes after running it in the sandbox: put
-`sh scripts/ci/seal_harden.sh "$(id -un)" --` in place of `runuser -u "$(id -un)" --` and delete the four flags. I did not make that edit myself because it changes the command that compiles the PR's
-records, and nothing here can run Lean to prove the compile still works inside the narrower seal. **A change to `pr-gate.yml` takes effect only after it is merged** (`pull_request_target` runs
-main's copy), so the first real run of the self-test in the gate is the first content PR after the merge. The nightly build (`build.yml`) has a seal of the same shape and is not wired here.
-`jinshi-pr.yml` is open as a pull request while this is written and is not on `main`; when it lands, its sealed step gets the same change:
+**Wiring.** `pr-gate.yml`'s vacuity step runs `sh scripts/ci/seal_harden.sh "$(id -un)" -- env -i … python3 scripts/ci/sandbox_selftest.py --allow-env TENGOKU_CI_ROOT -- python3 scripts/ci/vacuity.py …`
+inside `unshare --net --pid --fork --mount-proc`, with no probe excused: a step that is not sealed stops before the PR's Lean starts. **This changes the command that compiles a PR's records,
+and a change to `pr-gate.yml` takes effect only after it is merged** (`pull_request_target` runs main's copy): the first real run is the first content PR after the merge, and it is the maintainer's
+proof that a Lean compile survives the narrower seal (nothing in this change builds Lean; the hardening touches no path the vacuity check writes: the workspace, the home directory and `/tmp`).
+If that run fails for a reason of the seal, the step can name the probe or the mount in question as `--advisory PROBE` (a warning printed on every run) while it is fixed, never silently.
+The nightly build (`build.yml`) has a seal of the same shape and is not wired here. `jinshi-pr.yml` is open as a pull request while this is written and is not on `main`; when it lands, its sealed
+step gets the same change:
 
 ```diff
+-          sudo unshare --net --pid --fork --mount-proc runuser -u "$(id -un)" -- \
++          sudo unshare --net --pid --fork --mount-proc sh scripts/ci/seal_harden.sh "$(id -un)" -- \
+             env -i HOME="$HOME" PATH="$HOME/.elan/bin:/usr/local/bin:/usr/bin:/bin" LANG=C.UTF-8 \
+             TENGOKU_CI_ROOT="$GITHUB_WORKSPACE" JINSHI_PR_TARGETS="$JINSHI_PR_TARGETS" \
 -            python3 scripts/ci/jinshi_check.py "$BASE" "$HEAD"
-+            python3 scripts/ci/sandbox_selftest.py --allow-env TENGOKU_CI_ROOT --allow-env JINSHI_PR_TARGETS \
-+              --advisory cannot_write_system --advisory cannot_write_runner_channels --advisory cannot_read_runner_credentials --advisory no_container_socket \
-+              -- python3 scripts/ci/jinshi_check.py "$BASE" "$HEAD"
++            python3 scripts/ci/sandbox_selftest.py --allow-env TENGOKU_CI_ROOT --allow-env JINSHI_PR_TARGETS -- python3 scripts/ci/jinshi_check.py "$BASE" "$HEAD"
 ```
-
-`--advisory PROBE` turns a known gap into a warning printed on every run. Use it only with the reason written beside the workflow line.
 
 Credit: the idea of a self-test that aborts the job when the sandbox is not enforcing is Tau Ceti's: the nine-probe bubblewrap self-test of `pr-build.yml` (their PR 5800, 2026-09-06; no write to `/` or
 `/etc`, no read of a host canary, no network, no nested user namespace, a different user namespace, an empty PID-1 environment), and the `/proc/1/environ` leak that taught them `env -i`.
