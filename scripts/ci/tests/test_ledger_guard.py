@@ -215,6 +215,48 @@ class Activity(unittest.TestCase):
         self.assertNotIn("(", v[0])
 
 
+class ActivityFetch(unittest.TestCase):
+    """Asked per type: every contents-API write is a push, so one unfiltered page of the newest events would stop reaching back to a force-push within a day."""
+
+    def fake_run(self, answers):
+        calls = []
+
+        def run(cmd, **kw):
+            calls.append(cmd)
+            kind = next(p.split("activity_type=")[1].split("&")[0] for p in cmd if "activity_type=" in p)
+            out = answers.get(kind, "[]")
+            return subprocess.CompletedProcess(cmd, 0, out, "")
+
+        return run, calls
+
+    def test_pages_of_arrays_are_one_list(self):
+        self.assertEqual(lg.pages('[{"a": 1}]\n[{"a": 2}, {"a": 3}]\n'), [{"a": 1}, {"a": 2}, {"a": 3}])
+        self.assertEqual(lg.pages(""), [])
+        self.assertEqual(lg.pages("{}"), [])
+
+    def test_each_violation_type_is_asked_for_by_name_over_every_page_and_the_period_bounds_it(self):
+        run, calls = self.fake_run({"force_push": '[{"activity_type": "force_push"}]\n[{"activity_type": "force_push"}]'})
+        got = lg.activity_events("o/r", "ci-records", "force_push", 3, True, run)
+        self.assertEqual(len(got), 2)
+        (cmd,) = calls
+        self.assertIn("--paginate", cmd)
+        self.assertTrue(any("activity_type=force_push" in p and "time_period=week" in p and "ref=refs/heads/ci-records" in p for p in cmd))
+
+    def test_a_failed_call_is_an_error_not_an_empty_feed(self):
+        def run(cmd, **kw):
+            return subprocess.CompletedProcess(cmd, 1, "", "HTTP 403")
+
+        with self.assertRaises(OSError):
+            lg.activity_events("o/r", "ci-records", "force_push", 3, True, run)
+
+    def test_the_periods(self):
+        run, calls = self.fake_run({})
+        for days, period in ((1, "day"), (3, "week"), (7, "week"), (30, "month")):
+            lg.activity_events("o/r", "ci-records", "push", days, False, run)
+            self.assertIn(f"time_period={period}", calls[-1][-1])
+            self.assertNotIn("--paginate", calls[-1])
+
+
 class Cli(unittest.TestCase):
     def test_check_exits_1_on_a_change_and_0_on_an_append(self):
         b = Branch()

@@ -34,7 +34,6 @@ from _git import plain
 REPO = re.compile(r"^[A-Za-z0-9_.-]{1,100}/[A-Za-z0-9_.-]{1,100}$")
 VOLATILE = {"id", "node_id", "_links", "created_at", "updated_at", "source", "source_type", "current_user_can_bypass", "ruleset_id"}
 DEFAULT_DIR = ".github/rulesets"
-API = "https://api.github.com/"
 
 
 class ApiError(Exception):
@@ -76,14 +75,10 @@ def render(doc: dict) -> str:
 
 
 def fetch_live(repo: str, get=None) -> list:
-    """Every ruleset that applies to the repository, in full (the list has summaries only)."""
+    """Every ruleset that applies to the repository, in full (the list has summaries only). Each by its id through the repository's own endpoint,
+    which also answers for a ruleset inherited from the organisation (the organisation's endpoint wants administration rights the workflow lacks)."""
     get = get or gh_json
-    out = []
-    for summary in get(f"repos/{repo}/rulesets"):
-        href = ((summary.get("_links") or {}).get("self") or {}).get("href", "")
-        path = href[len(API) :] if href.startswith(API) else f"repos/{repo}/rulesets/{summary['id']}"
-        out.append(get(path))
-    return out
+    return [get(f"repos/{repo}/rulesets/{summary['id']}") for summary in get(f"repos/{repo}/rulesets")]
 
 
 def load_snapshots(directory: Path) -> dict:

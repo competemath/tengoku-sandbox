@@ -138,19 +138,35 @@ def run_check(a: argparse.Namespace) -> int:
     return 1 if problems else 0
 
 
+def pages(text: str) -> list:
+    """The events of `gh api --paginate`, which prints one JSON array per page."""
+    events, dec, i = [], json.JSONDecoder(), 0
+    while i < len(text):
+        while i < len(text) and text[i].isspace():
+            i += 1
+        if i >= len(text):
+            break
+        page, i = dec.raw_decode(text, i)
+        events += page if isinstance(page, list) else []
+    return events
+
+
+def activity_events(github: str, branch: str, kind: str, days: int, paginate: bool, run=subprocess.run) -> list:
+    """The events of one type on one branch, from the platform. Asked per type: a force-push is rare and every contents-API write is a push, so a single
+    unfiltered page of the newest events would stop reaching back to a force-push within a day."""
+    period = "day" if days <= 1 else "week" if days <= 7 else "month"
+    path = f"repos/{github}/activity?ref=refs/heads/{branch}&activity_type={kind}&time_period={period}&per_page=100"
+    done = run(["gh", "api", *(["--paginate"] if paginate else []), path], capture_output=True, text=True, check=False, timeout=180)
+    if done.returncode != 0:
+        raise OSError(f"cannot read the {kind} activity of {branch}: {done.stderr.strip()[:200]}")
+    return pages(done.stdout)
+
+
 def run_activity(a: argparse.Namespace) -> int:
     since = dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=a.days)
-    done = subprocess.run(
-        ["gh", "api", f"repos/{a.github}/activity?ref=refs/heads/{a.branch}&per_page=100"],
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=120,
-    )
-    if done.returncode != 0:
-        print(f"ledger_guard: cannot read the activity of {a.branch}: {done.stderr.strip()[:200]}", file=sys.stderr)
-        return 2
-    violations, notices = judge_activity(json.loads(done.stdout or "[]"), since)
+    events = [e for kind in ("force_push", "branch_deletion") for e in activity_events(a.github, a.branch, kind, a.days, paginate=True)]
+    events += activity_events(a.github, a.branch, "push", a.days, paginate=False)  # the newest page: enough to name who else pushed
+    violations, notices = judge_activity(events, since)
     print(f"### activity of {a.branch}, last {a.days} day(s)")
     for v in violations:
         print(f"- **{v}**")

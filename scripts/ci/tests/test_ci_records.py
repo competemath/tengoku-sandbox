@@ -280,6 +280,73 @@ class Failures(unittest.TestCase):
         self.assertEqual(rec["failure_class"], "unknown")
 
 
+class Unrecordable(unittest.TestCase):
+    """A run the writer would refuse must not stop every collection after it: it is made to fit, or it is held back and named, never fatal."""
+
+    def failing(self, log_lines, jobs=None, extra_jobs=0):
+        runs = [run_of(102, "2026-10-09T10:30:00Z", conclusion="failure")]
+        job_list = jobs or [job_of(3, "failure", name="build")]
+        job_list = job_list + [job_of(1000 + i, name=f"j{i}") for i in range(extra_jobs)]
+        return collect(
+            FakeApi(
+                runs,
+                {102: job_list},
+                {3: "\n".join(f"2026-10-09T10:00:{20 + i:02d}.0000000Z {line}" for i, line in enumerate(log_lines)) + "\n"},
+            )
+        )
+
+    def test_a_tab_in_a_log_line_is_a_space_and_the_batch_is_valid(self):
+        doc = self.failing(["##[error]FAILED\ttest_x\t(0.01s)", "##[error]Process completed with exit code 1."])
+        cr.validate_batch(doc)
+        rec = doc["records"][0]
+        self.assertTrue(any("FAILED test_x" in line for line in rec["jobs"][0]["failure"]["excerpt"]))
+        self.assertNotRegex(json.dumps(rec).replace("\\t", "TAB"), "TAB")
+
+    def test_a_run_with_more_jobs_than_the_cap_is_recorded_with_its_failed_jobs_and_says_so(self):
+        doc = self.failing(["##[error]Process completed with exit code 1."], extra_jobs=cr.MAX_JOBS + 40)
+        cr.validate_batch(doc)
+        (rec,) = doc["records"]
+        self.assertEqual(len(rec["jobs"]), cr.MAX_JOBS)
+        self.assertFalse(rec["jobs_complete"])
+        self.assertIn(3, [j["id"] for j in rec["jobs"]])  # the failed job is kept
+        self.assertTrue(doc["watermark"]["advanced"])
+
+    def test_a_record_over_the_size_cap_loses_steps_and_then_jobs(self):
+        big = job_of(3, "failure", name="build")
+        big["steps"] = [
+            {
+                "number": i,
+                "name": "s" * 190,
+                "conclusion": "success",
+                "started_at": "2026-10-09T10:00:10Z",
+                "completed_at": "2026-10-09T10:00:11Z",
+            }
+            for i in range(400)
+        ]
+        with mock.patch.object(cr, "MAX_RECORD_BYTES", 6000):
+            doc = self.failing(["##[error]Process completed with exit code 1."], jobs=[big], extra_jobs=30)
+        (rec,) = doc["records"]
+        self.assertEqual([j["steps"] for j in rec["jobs"]], [[]] * len(rec["jobs"]))
+        self.assertLess(len(rec["jobs"]), 31)
+        self.assertFalse(rec["jobs_complete"])
+
+    def test_a_record_that_still_cannot_be_written_is_held_back_and_named_not_fatal(self):
+        runs = [run_of(101, "2026-10-09T10:00:00Z"), run_of(102, "2026-10-09T10:30:00Z")]
+        jobs = {101: [job_of(1)], 102: [job_of(2)]}
+        real = cr.validate_record
+
+        def picky(rec, repo):
+            if rec["run_id"] == 101:
+                raise ValueError("bad jobs")
+            return real(rec, repo)
+
+        with mock.patch.object(cr, "validate_record", picky):
+            doc = collect(FakeApi(runs, jobs))
+        self.assertEqual([r["run_id"] for r in doc["records"]], [102])  # the other run is still recorded
+        self.assertTrue(any("run 101" in n for n in doc["notes"]))
+        self.assertEqual(doc["watermark"]["to"], "2026-10-09T10:00:00Z")  # and the cursor does not skip the one held back
+
+
 class Validation(unittest.TestCase):
     def doc(self):
         return collect(FakeApi(standard_runs(), standard_jobs()))

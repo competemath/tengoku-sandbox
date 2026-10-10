@@ -172,6 +172,40 @@ def compact(rec: dict) -> dict:
     return rec
 
 
+MAX_JOBS = 256
+
+
+def scrub(value):
+    """Every string of a record with its control characters (a tab in a log line, a stray escape) turned into spaces."""
+    if isinstance(value, str):
+        return CTRL.sub(" ", value)
+    if isinstance(value, list):
+        return [scrub(v) for v in value]
+    if isinstance(value, dict):
+        return {k: scrub(v) for k, v in value.items()}
+    return value
+
+
+def fit(rec: dict) -> dict:
+    """A record the writer accepts, whatever the run was: control characters become spaces, and a record over the size cap (or with more jobs than the
+    cap) first loses the steps of its jobs and then jobs, failed ones last, with `jobs_complete: false` saying so. A run that could not be recorded
+    would hold the watermark for ever."""
+    rec = scrub(rec)
+    if len(ciclean.canonical_json(rec)) > MAX_RECORD_BYTES or len(rec["jobs"]) > MAX_JOBS:
+        for job in rec["jobs"]:
+            job["steps"] = []
+        ranked = sorted(rec["jobs"], key=lambda j: (j.get("conclusion") not in FAILED_JOB, j.get("id", 0)))
+        keep = min(len(ranked), MAX_JOBS)
+        while keep > 1:
+            rec["jobs"] = sorted(ranked[:keep], key=lambda j: j.get("id", 0))
+            if len(ciclean.canonical_json(rec)) <= MAX_RECORD_BYTES:
+                break
+            keep //= 2
+        rec["jobs"] = sorted(ranked[:keep], key=lambda j: j.get("id", 0))
+        rec["jobs_complete"] = False
+    return rec
+
+
 def failure_of(api, repo: str, job: dict, budget: list) -> dict | None:
     """The class an anchored rule gives a failed job, from a scrubbed excerpt of its log. `budget` is [log fetches left]."""
     if job.get("conclusion") not in FAILED_JOB:
@@ -379,11 +413,13 @@ def collect(
         try:
             jobs, digest, jobs_total = fetch_jobs(api, repo, run)
             rec = ciclean.run_record(run, jobs, digest, jobs_total_count=jobs_total)
+            rec = fit(compact(add_failures(api, repo, rec, logs_left)))
+            validate_record(rec, repo)  # a record the writer would refuse must not stop every collection after it
         except (ApiError, ValueError) as exc:
             unrecorded.append(run)
             notes.append(f"run {rid}: not recorded ({str(exc)[:100]}); the watermark holds")
             continue
-        records.append(compact(add_failures(api, repo, rec, logs_left)))
+        records.append(rec)
     recorded_runs = [by_key[k] for k in plan.already_recorded if k in by_key] + [by_key[(r["run_id"], r["attempt"])] for r in records]
     pending = [r for r in runs if r.get("id") in set(plan.pending)]
     result = ciclean.advance_watermark(

@@ -168,19 +168,21 @@ class Invariants(unittest.TestCase):
 
 
 class Fetch(unittest.TestCase):
-    def test_every_ruleset_is_fetched_in_full_by_its_own_link(self):
+    def test_every_ruleset_is_fetched_in_full_by_its_id_from_the_repositorys_own_endpoint(self):
         seen = []
 
         def get(path):
             seen.append(path)
             if path == "repos/o/r/rulesets":
+                # one of them inherited from the organisation: its own link points at an endpoint the workflow's token may not read
                 return [
                     {"id": 7, "name": "a", "_links": {"self": {"href": "https://api.github.com/orgs/o/rulesets/7"}}},
                     {"id": 8, "name": "b"},
                 ]
             return {"path": path}
 
-        self.assertEqual(rd.fetch_live("o/r", get), [{"path": "orgs/o/rulesets/7"}, {"path": "repos/o/r/rulesets/8"}])
+        self.assertEqual(rd.fetch_live("o/r", get), [{"path": "repos/o/r/rulesets/7"}, {"path": "repos/o/r/rulesets/8"}])
+        self.assertFalse([p for p in seen if p.startswith("orgs/")])
 
 
 class Cli(unittest.TestCase):

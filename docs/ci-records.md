@@ -32,6 +32,7 @@ run on the real platform.
 - `advance_watermark` moves the cursor only when the runs recorded, those still running and those deliberately held back **add up to the platform's own count** for the window.
   Otherwise it stays where it was and says `count_mismatch`; the records are still written (they are idempotent: a run already recorded is skipped), only the cursor must not skip.
   A run still going holds the cursor at its creation time; one running for more than 6 hours is reported as stuck and stops holding it.
+- A record the writer would refuse must not stop every collection after it: control characters (a tab in a log line) become spaces, and a run with more than 256 jobs, or a record over 200 KB, loses the steps of its jobs and then jobs (failed ones last), with `jobs_complete: false` saying so. A record that still cannot be written is named in the notes and holds the watermark, and the other runs are recorded.
 - Steps of jobs that succeeded are dropped from the stored record (their count is kept): they are most of its size and say nothing a successful job does not. A failed job keeps all its steps.
 
 **What the branch holds**, and only ever grows:
@@ -62,7 +63,7 @@ branch's own history, and fails if:
 - a hash chain no longer verifies (`warden.audit.verify_dir`, which checks every record against a closed schema; `parse_chain` for the trust ledger, whose entries use the same hash);
 - the head does not descend from the base (a rewritten history is an error, not a pass);
 - the platform's activity feed shows a **force-push or a deletion** of the branch in the last three days. A fixed range cannot see a rewrite that also moved its own base, so the guard asks the platform
-  what happened. Pushes by anybody but the Actions identity are named in the report as notices.
+  what happened, for each of the two types by name (every contents-API write is a push, so the newest page of all events would stop reaching back within a day). Pushes by anybody but the Actions identity are named in the report as notices.
 
 **Why it does not run `on: push` to those branches.** A push runs the workflow files of the pushed commit, and these branches hold none, so that trigger would never fire. The guard runs from main's
 copy instead: after each workflow that writes to a branch (`workflow_run`), every night, and on demand.
