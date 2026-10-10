@@ -445,8 +445,14 @@ jobs:
     steps:
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
         with: { egress-policy: audit }
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { ref: "${{ env.BASE }}", filter: "blob:none", persist-credentials: false }
+      # The base commit with plain git, not actions/checkout (as the scope-fix and queue-recheck jobs): the repository is public, nothing needs a token,
+      # and none is written into the checkout. Only main's script runs here; the PR is read as commit statuses.
+      - name: The base commit (the checks are main's)
+        run: |
+          git init -q .
+          git remote add origin "https://github.com/$GITHUB_REPOSITORY"
+          git fetch -q --no-tags --filter=blob:none origin "$BASE"
+          git checkout -q --detach "$BASE"
       - name: fossa
         env: { GH_TOKEN: "${{ github.token }}", FOSSA_WAIT_MINUTES: "15" }
         run: python3 scripts/ci/fossa_check.py "$GITHUB_REPOSITORY" "$HEAD"
