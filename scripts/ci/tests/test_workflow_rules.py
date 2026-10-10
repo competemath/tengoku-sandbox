@@ -394,6 +394,187 @@ class PrCode(unittest.TestCase):
         self.assertEqual(self.run_step('gh pr checkout "$PR"', CLEAN), [])
 
 
+ELAN_COMMIT = "https://raw.githubusercontent.com/leanprover/elan/0e36a07b9bbcc5381fa6250df109f9a4f94d7bac/elan-init.sh"
+ELAN_MASTER = "https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh"
+DIGEST_LINE = 'echo "a620ff1641616222c8d37c54845492004bb84d6877cdbc944dd65c1aa685bf53  elan-init.sh" | sha256sum -c -'
+
+
+def with_run(*cmds: str) -> str:
+    """CLEAN with the given shell lines added to its `run:` block."""
+    anchor = "          printf '%s' \"$TITLE\" > t.txt\n"
+    return swap(anchor, anchor + "".join("          " + line + "\n" for c in cmds for line in c.split("\n")))
+
+
+class Installer(unittest.TestCase):
+    """Tau Ceti, 2026-08-18 (issue 3725): `elan-init` was fetched unpinned in five workflows, one of them the job that held the cache key."""
+
+    def test_a_download_piped_into_a_shell_fails(self):
+        for cmd in (
+            "curl -sSfL https://example.com/install.sh | sh",
+            f"curl -sSfL {ELAN_MASTER} | sh -s -- -y",
+            "wget -qO- https://get.example.com | sudo bash",
+            "wget -qO- https://get.example.com | sudo -E bash -",
+            "curl -fsSL https://get.example.com | env FOO=1 bash",
+            "curl -sSf https://x.io/i.py | python3 -",
+            "curl -s https://x.io/a | tee /tmp/a | sh",
+        ):
+            with self.subTest(cmd):
+                self.assertEqual(rules(with_run(cmd)), ["installer"])
+
+    def test_a_stream_is_refused_even_at_a_pinned_commit(self):
+        found = wr.Checker(".github/workflows/t.yml", with_run(f"curl -sSfL {ELAN_COMMIT} | sh -s -- -y")).run().findings
+        self.assertEqual([f[2] for f in found], ["installer"])
+        self.assertIn("cannot be checked against a digest before it runs", found[0][3])
+
+    def test_a_download_handed_to_a_shell_by_substitution_fails(self):
+        for cmd in (
+            'sh -c "$(curl -fsSL https://example.com/i.sh)"',
+            'bash -c "$(wget -qO- https://example.com/i.sh)"',
+            "bash -ec '$(curl -s https://example.com/i.sh)'",
+            "bash <(curl -s https://example.com/i.sh)",
+            "source <(curl -s https://example.com/env.sh)",
+            'eval "$(curl -s https://example.com/env)"',
+            "sh <(wget -qO- https://example.com/i.sh)",
+        ):
+            with self.subTest(cmd):
+                self.assertEqual(rules(with_run(cmd)), ["installer"])
+
+    def test_a_continued_line_is_one_command(self):
+        self.assertEqual(rules(with_run("curl -sSfL \\\n  https://example.com/i.sh \\\n  | sh")), ["installer"])
+
+    def test_a_downloaded_script_must_come_from_a_commit_and_be_checked_first(self):
+        passing = f"curl --proto '=https' -sSfL -o elan-init.sh {ELAN_COMMIT}\n{DIGEST_LINE}\nsh elan-init.sh -y"
+        self.assertEqual(rules(with_run(passing)), [])
+        for name, cmd, fragment in (
+            ("a branch", f"curl -sSfL -o elan-init.sh {ELAN_MASTER}\n{DIGEST_LINE}\nsh elan-init.sh -y", "no full 40-hex commit"),
+            (
+                "a tag",
+                "curl -sSfL -o i.sh https://github.com/o/r/raw/v1.2.3/i.sh\nsha256sum -c sums.txt\nbash i.sh",
+                "no full 40-hex commit",
+            ),
+            ("no digest", f"curl -sSfL -o elan-init.sh {ELAN_COMMIT}\nsh elan-init.sh -y", "without a `sha256sum -c`"),
+            (
+                "a digest after the run",
+                f"curl -sSfL -o elan-init.sh {ELAN_COMMIT}\nsh elan-init.sh -y\n{DIGEST_LINE}",
+                "without a `sha256sum -c`",
+            ),
+            (
+                "a digest of another file",
+                f'curl -sSfL -o elan-init.sh {ELAN_COMMIT}\necho "{"a" * 64}  other.sh" | sha256sum -c -\nsh elan-init.sh',
+                "without a `sha256sum -c`",
+            ),
+            (
+                "a digest that is printed, not checked",
+                f"curl -sSfL -o elan-init.sh {ELAN_COMMIT}\nsha256sum elan-init.sh\nsh elan-init.sh",
+                "without a `sha256sum -c`",
+            ),
+            ("an output redirect", f"curl -sSfL {ELAN_COMMIT} > elan-init.sh\nbash elan-init.sh", "without a `sha256sum -c`"),
+            ("wget", f"wget -q -O elan-init.sh {ELAN_COMMIT}\n./elan-init.sh", "without a `sha256sum -c`"),
+            ("source", f"curl -sSfL -o env.sh {ELAN_COMMIT}\nsource env.sh", "without a `sha256sum -c`"),
+        ):
+            with self.subTest(name):
+                found = wr.Checker(".github/workflows/t.yml", with_run(cmd)).run().findings
+                self.assertEqual([f[2] for f in found], ["installer"], found)
+                self.assertIn(fragment, found[0][3])
+
+    def test_the_digest_may_be_checked_with_shasum_or_a_checksum_file_that_names_the_download(self):
+        for check in (
+            'echo "a620ff1641616222c8d37c54845492004bb84d6877cdbc944dd65c1aa685bf53  elan-init.sh" | shasum -a 256 -c -',
+            "sha256sum --check elan-init.sh.sha256 # lists elan-init.sh",
+            "shasum -c SHA256SUMS --ignore-missing elan-init.sh",
+        ):
+            with self.subTest(check):
+                self.assertEqual(rules(with_run(f"curl -sSfL -o elan-init.sh {ELAN_COMMIT}\n{check}\nsh elan-init.sh")), [])
+
+    def test_what_is_not_run_is_not_an_installer(self):
+        for cmd in (
+            "curl -sSfL -o data.json https://example.com/x.json\njq . data.json",
+            "curl -fsS https://example.com/x | sha256sum",
+            "curl -fsS https://example.com/x | jq .name",
+            "curl -sS -m 30 -X POST https://example.com/refresh 2>&1 | head -c 300",
+            'curl -sSfL -o elan.tar.gz https://example.com/elan.tar.gz\necho "abc  elan.tar.gz" | sha256sum -c -\ntar xzf elan.tar.gz',
+            "echo 'never run: curl https://example.com/i.sh | sh'",
+            "# curl https://example.com/i.sh | sh",
+            "curl -sSfL -o i.sh https://example.com/i.sh\ncat i.sh",
+        ):
+            with self.subTest(cmd):
+                self.assertEqual(rules(with_run(cmd)), [])
+
+    def test_a_script_that_runs_in_two_places_is_judged_per_run(self):
+        both = f"curl -sSfL -o a.sh {ELAN_COMMIT}\n{DIGEST_LINE.replace('elan-init.sh', 'a.sh')}\nsh a.sh\ncurl -sSfL -o b.sh {ELAN_COMMIT}\nsh b.sh"
+        found = wr.Checker(".github/workflows/t.yml", with_run(both)).run().findings
+        self.assertEqual([f[2] for f in found], ["installer"])
+        self.assertIn("`b.sh`", found[0][3])
+
+    def test_the_finding_points_at_the_line(self):
+        text = with_run("curl -sSfL https://example.com/install.sh | sh")
+        (found,) = wr.Checker(".github/workflows/t.yml", text).run().findings
+        self.assertTrue(text.splitlines()[found[1] - 1].strip().startswith("curl"))
+
+    def test_elan_is_installed_from_a_digest_in_every_workflow_of_the_repository(self):
+        for p in sorted((TREE / ".github/workflows").glob("*.yml")):
+            text = p.read_text()
+            if "leanprover/elan" in text:
+                with self.subTest(p.name):
+                    self.assertNotIn("/latest/", text)
+                    self.assertNotIn("elan-init.sh", text)  # the script of that repository downloads whatever release is latest
+                    self.assertIn("sha256sum -c", text)
+
+
+TOKEN_SHA = "5f3d7a0e6f1b2c4d8e9a0b1c2d3e4f5a6b7c8d9e"  # pragma: allowlist secret (a commit id)
+
+
+def with_token(uses: str, perms: str = "          permission-contents: write\n") -> str:
+    step = f"      - uses: {uses}\n        with:\n          app-id: ${{{{ vars.APP_ID }}}}\n          private-key: ${{{{ secrets.APP_KEY }}}}\n{perms}"
+    return swap("      - name: work\n", step + "      - name: work\n")
+
+
+class AppToken(unittest.TestCase):
+    """Tau Ceti, 2026-09-17 (PR 7206): create-github-app-token v1 silently ignored `permission-*` and minted the App's full installation permissions."""
+
+    def test_v2_or_later_with_a_permission_passes(self):
+        for tag in ("v2", "v2.2.1", "v3.0.0", "v10"):
+            with self.subTest(tag):
+                self.assertEqual(rules(with_token(f"actions/create-github-app-token@{TOKEN_SHA} # {tag}")), [])
+
+    def test_v1_fails_however_it_is_pinned(self):
+        for tag in ("v1", "v1.12.0"):
+            with self.subTest(tag):
+                found = (
+                    wr.Checker(".github/workflows/t.yml", with_token(f"actions/create-github-app-token@{TOKEN_SHA} # {tag}")).run().findings
+                )
+                self.assertEqual([f[2] for f in found], ["app-token"])
+                self.assertIn("silently ignored", found[0][3])
+        self.assertEqual(
+            sorted(rules(with_token("actions/create-github-app-token@v1"))), ["app-token", "pinned"]
+        )  # a moving tag: two findings
+
+    def test_a_token_with_no_permission_input_fails(self):
+        found = (
+            wr.Checker(".github/workflows/t.yml", with_token(f"actions/create-github-app-token@{TOKEN_SHA} # v2.2.1", perms=""))
+            .run()
+            .findings
+        )
+        self.assertEqual([f[2] for f in found], ["app-token"])
+        self.assertIn("every permission", found[0][3])
+
+    def test_a_permission_input_of_any_kind_counts_and_other_inputs_do_not(self):
+        self.assertEqual(
+            rules(with_token(f"actions/create-github-app-token@{TOKEN_SHA} # v2", perms="          permission-pull-requests: read\n")), []
+        )
+        self.assertEqual(
+            rules(with_token(f"actions/create-github-app-token@{TOKEN_SHA} # v2", perms="          owner: o\n          repositories: r\n")),
+            ["app-token"],
+        )
+
+    def test_a_commit_with_no_version_comment_cannot_be_judged(self):
+        self.assertIn("app-token", rules(with_token(f"actions/create-github-app-token@{TOKEN_SHA}")))
+
+    def test_the_action_name_is_matched_without_regard_to_case_and_other_actions_are_left_alone(self):
+        self.assertEqual(rules(with_token(f"Actions/Create-GitHub-App-Token@{TOKEN_SHA} # v1")), ["app-token"])
+        self.assertEqual(rules(with_token(f"actions/create-something-else@{TOKEN_SHA} # v1", perms="")), [])
+
+
 class Online(unittest.TestCase):
     def test_compare_status_decides(self):
         with tempfile.TemporaryDirectory() as d:

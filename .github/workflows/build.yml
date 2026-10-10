@@ -76,8 +76,11 @@ jobs:
 
       - name: Install elan (toolchain pinned by lean-toolchain)
         run: |
-          curl -sSfL https://github.com/leanprover/elan/releases/latest/download/elan-x86_64-unknown-linux-gnu.tar.gz | tar xz
-          ./elan-init -y --default-toolchain none
+          elan="$RUNNER_TEMP/elan"; mkdir -p "$elan"   # elan v4.2.4, by digest: the installer script of the same repository downloads whatever release is latest
+          curl --proto '=https' --tlsv1.2 -sSfL -o "$elan/elan.tar.gz" https://github.com/leanprover/elan/releases/download/v4.2.4/elan-x86_64-unknown-linux-gnu.tar.gz
+          echo "42b94d4244e8353142c456ec0e4ca6528fd898a6c604d4059f494e706e431f63  $elan/elan.tar.gz" | sha256sum -c -
+          tar xzf "$elan/elan.tar.gz" -C "$elan"
+          "$elan/elan-init" -y --default-toolchain none
           echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
 
       - name: Free disk space (the tree's build is several GB)
