@@ -5,6 +5,9 @@
 name: pr-tests
 on:
   pull_request:
+    # A content PR (a library's modules, the data records: an intake or extend part, staging, tags) changes no code this suite tests and the lane opens hundreds a day: it skips the
+    # suite (about 15 runner-minutes). A PR that touches anything else runs all of it. Neither pr-gate nor queue-gate, the required checks, is produced here.
+    paths-ignore: ["Tengoku/**", "data/**"]
 permissions: {}
 defaults:
   run:
