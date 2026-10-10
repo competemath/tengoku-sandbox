@@ -1,0 +1,10 @@
+{
+  "$comment": "Which agent a login stands for in the failure-rate report of the CI records (docs/ci-records.md). A human-owned file: edited like any policy, by a reviewed diff. Logins that are not listed are reported as `unattributed`, never dropped. An agent that works through a person's account cannot be told apart from the person, and is reported under that account.",
+  "actors": {
+    "tengoku-bot": "factory",
+    "dependabot[bot]": "dependabot",
+    "coderabbitai[bot]": "coderabbit",
+    "github-actions[bot]": "github-actions",
+    "mikael-bashir": "maintainer-account"
+  }
+}
