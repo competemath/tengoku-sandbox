@@ -1,0 +1,8 @@
+{
+ "bundle_sha256": "25af657d02176252a7f9e03a98df8672fbf93c69576f3a62eb02ac2f44e9107f",
+ "library": "prismriver",
+ "lint_mode": "proposed",
+ "modules": 5,
+ "part": 1,
+ "theorems": 11
+}
