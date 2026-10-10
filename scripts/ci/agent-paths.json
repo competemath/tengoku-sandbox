@@ -1,0 +1,41 @@
+{
+  "classes": {
+    "factory": {
+      "allow": [
+        "/data/tentative/",
+        "/data/staging/",
+        "/data/trusted/",
+        "/data/intake/",
+        "/data/stats.json",
+        "/data/cache-latest.json",
+        "/Tengoku/"
+      ],
+      "touch_protected": false
+    },
+    "dependabot": {
+      "allow": ["/.github/workflows/*.yml", "/.github/workflows/*.yaml", "/scripts/ci/requirements/*.txt"],
+      "touch_protected": true
+    },
+    "bot": {"allow": [], "touch_protected": false}
+  },
+  "protected": [
+    "/scripts/",
+    "/.github/",
+    "/schemas/",
+    "/lakefile.toml",
+    "/lake-manifest.json",
+    "/lean-toolchain",
+    "/pyproject.toml",
+    "/.pre-commit-config.yaml",
+    "/Tengoku.lean",
+    "/TengokuExtract.lean",
+    "/TengokuAxioms.lean"
+  ],
+  "max_files": 2000,
+  "max_added": 400000,
+  "max_deleted": 200000,
+  "max_new_file_lines": 20000,
+  "new_file_lines_globs": ["/Tengoku/"],
+  "allowed_modes": ["100644"],
+  "forbid_binary": true
+}
