@@ -32,7 +32,8 @@ def pattern_regex(pattern: str) -> re.Pattern[str]:
     """A CODEOWNERS pattern as a regex: anchored when it starts with / or has a / inside, otherwise it matches at any depth; `*` stays inside one path
     component, `**` crosses; a pattern that names a directory owns everything under it."""
     anchored = pattern.startswith("/") or "/" in pattern.rstrip("/")
-    dir_only = pattern.endswith("/")  # a trailing slash limits the pattern to directories: a file directly under the matched level is not it
+    # a trailing slash limits the pattern to directories: a file directly under the matched level is not it
+    dir_only = pattern.endswith("/")
     body, i, out = pattern.strip("/"), 0, ""
     while i < len(body):
         if body.startswith("**", i):
