@@ -1,0 +1,39 @@
+# A maintainer's after-the-fact verdict on a case the trust program judged (docs/trust-shadow.md): accept or reject, for a
+# commit. It is appended to the trust ledger; track records and precedents are built only from these labels. Run by hand.
+name: trust-label
+on:
+  workflow_dispatch:
+    inputs:
+      head:
+        description: "The 40-character commit the verdict was about"
+        required: true
+      label:
+        description: "What the case turned out to deserve"
+        required: true
+        type: choice
+        options: [accept, reject]
+permissions: {}
+concurrency: { group: trust-ledger, cancel-in-progress: false }
+defaults:
+  run:
+    shell: bash
+env:
+  JURIDICATOR_SHA: 3595a991cac214794fc5751152c9b4ac34dbd6c8   # pragma: allowlist secret (a commit id of the pinned tool)
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: { contents: write }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { repository: competemath/tengoku-juridicator, ref: "${{ env.JURIDICATOR_SHA }}", path: tools/tengoku-juridicator, persist-credentials: false }
+      - name: Append the label
+        env:
+          GH_TOKEN: "${{ github.token }}"
+          TRUST_TOOLS: "${{ github.workspace }}/tools"
+          HEAD_SHA: "${{ inputs.head }}"
+          LABEL: "${{ inputs.label }}"
+          WHO: "${{ github.actor }}"
+        run: python3 scripts/ci/trust_ledger.py label --head "$HEAD_SHA" --label "$LABEL" --by "$WHO"
