@@ -2,16 +2,30 @@
 # Either owner's approval counts: the maintainer's second account reviews what the maintainer's main account opens
 # (GitHub never lets an author approve their own pull request).
 # Tiers 1–2 (data/tentative, data/staging) have no owner on purpose: bot PRs must not need a human.
+# THE DEFAULT (2026-10-10, after a review found tool and gate files that matched no rule): everything is owned by both accounts unless a line below says otherwise, so a new
+# tool, script, config or root file needs a person without anyone remembering to list it. The exceptions are the content lane and the bot's data, further down.
+*                        @mikael-bashir @mikaelbashir14096545
 /Tengoku.lean            @mikael-bashir @mikaelbashir14096545
 /Tengoku/                @mikael-bashir @mikaelbashir14096545   # the seed and the tree's own files; the content lane below takes the libraries out
 # THE CONTENT LANE (user's decision 2026-10-10): the library folders and their umbrella files carry translations and proofs, and need no human owner; a library's
 # FIRST part also adds its line to Tengoku/All.lean, which stays owned, so the first shard of every translation job is read by a person. Later parts (they
 # change only the library's own folder, umbrella and data/intake) and the bot's staging records flow on the gates alone once the ruleset counts no plain approval.
-# Registering a source, the seed, every tool, workflow, schema and script stay owned. Later lines win, so the two lines that give ownership back come last.
+# Registering a source, the seed, every tool, workflow, schema and script stay owned. Later lines win, so the lines that give ownership back come after these.
 /Tengoku/*/
 /Tengoku/*.lean
+# Native is the tree's own novel content (class `native`, its own gate native_check.py): the user counts novel proofs as content, so it is in the lane on purpose.
+/Tengoku/Native/
+/Tengoku/Native.lean
 /Tengoku/Seed/           @mikael-bashir @mikaelbashir14096545
 /Tengoku/All.lean        @mikael-bashir @mikaelbashir14096545   # a library's first part adds its line here: a person reads it
+# What the bots and the lane write, and the documents: no owner (the tests below say which paths).
+/data/intake/
+/data/staging/
+/data/tentative/
+/data/stats.json
+/data/cache-latest.json
+/docs/
+/README.md
 /lean-toolchain          @mikael-bashir @mikaelbashir14096545
 /lakefile.toml           @mikael-bashir @mikaelbashir14096545
 /lake-manifest.json      @mikael-bashir @mikaelbashir14096545
