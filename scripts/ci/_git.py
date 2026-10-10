@@ -52,6 +52,17 @@ APPEND_ONLY = [
 RESERVED_KEYS = ("seed", "native")
 
 
+def module_name(stem: str) -> str:
+    """The module a file is, as Lean writes it: `Tengoku/Lib/A-B` is `Tengoku.Lib.«A-B»` and `Tengoku/Tao/1102.4662` is `Tengoku.Tao.«1102.4662»` (a component that is not a plain
+    identifier goes in guillemets; the factory spells manifests, umbrellas and imports the same way, scripts/bump/bundle_layers.py). `stem` is the path without `.lean`."""
+    return ".".join(c if re.fullmatch(r"[^\W\d][\w']*", c) else f"«{c}»" for c in stem.split("/"))
+
+
+def module_stem(mod: str) -> str:
+    """The inverse of module_name: the path of a module's file, without `.lean`. A dot inside guillemets is part of the component."""
+    return "/".join(m.group(0).strip("«»") for m in re.finditer(r"«[^»]*»|[^.]+", mod))
+
+
 def _pascal(s: str) -> str:
     return "".join(w[:1].upper() + w[1:] for w in re.split(r"[-_ ]+", s) if w)
 
