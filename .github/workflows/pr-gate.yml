@@ -312,7 +312,7 @@ jobs:
       - name: detect-secrets on the changed files (every class)
         shell: bash
         run: |  # pragma: allowlist secret
-          pip install -q --require-hashes -r scripts/ci/requirements/secrets.txt   # main's pins (this job's checkout is main)
+          pip install -q --require-hashes --only-binary ':all:' -r scripts/ci/requirements/secrets.txt   # main's pins (this job's checkout is main); wheels only: no setup script runs
           git diff --name-only --diff-filter=AM "$BASE...$HEAD" -- . ':!data/' ':!Tengoku/' ':!.lake/' ':!scripts/ci/campaign/' > changed.txt   # the campaign's fixtures hold fake credentials
           mapfile -t files < changed.txt
           # the PR's versions of those files, scanned against main's baseline (a PR cannot allowlist its own secret)
@@ -422,7 +422,7 @@ jobs:
             git cat-file -e "$HEAD:scripts/ci/workflow_rules.py" 2>/dev/null && { echo "main has no workflow_rules.py yet: this PR adds it"; exit 0; }
             echo "::error::neither main nor this PR has scripts/ci/workflow_rules.py"; exit 1
           fi
-          pip install -q --require-hashes -r scripts/ci/requirements/yaml.txt
+          pip install -q --require-hashes --only-binary ':all:' -r scripts/ci/requirements/yaml.txt
           python3 scripts/ci/workflow_rules.py --online --changed "$BASE" "$HEAD"
 
   depends:
@@ -448,8 +448,14 @@ jobs:
     steps:
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
         with: { egress-policy: audit }
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { ref: "${{ env.BASE }}", filter: "blob:none", persist-credentials: false }
+      # The base commit with plain git, not actions/checkout (as the scope-fix and queue-recheck jobs): the repository is public, nothing needs a token,
+      # and none is written into the checkout. Only main's script runs here; the PR is read as commit statuses.
+      - name: The base commit (the checks are main's)
+        run: |
+          git init -q .
+          git remote add origin "https://github.com/$GITHUB_REPOSITORY"
+          git fetch -q --no-tags --filter=blob:none origin "$BASE"
+          git checkout -q --detach "$BASE"
       - name: fossa
         env: { GH_TOKEN: "${{ github.token }}", FOSSA_WAIT_MINUTES: "15" }
         run: python3 scripts/ci/fossa_check.py "$GITHUB_REPOSITORY" "$HEAD"
