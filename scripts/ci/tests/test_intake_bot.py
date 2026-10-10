@@ -50,7 +50,9 @@ class IntakeApp(unittest.TestCase):
     def test_the_account_is_configurable(self):
         env = {"PR_ACTOR": "renamed-app[bot]", "TENGOKU_BOT": "tengoku-bot", "TENGOKU_INTAKE_BOT": "renamed-app[bot]"}
         self.assertEqual(self.first_part().gate("classify.py", env=env)[0], 0)
-        self.assertNotEqual(self.first_part().gate("classify.py", env=APP | {"TENGOKU_INTAKE_BOT": "renamed-app[bot]"})[0], 0)  # the default is replaced, not added to
+        self.assertNotEqual(
+            self.first_part().gate("classify.py", env=APP | {"TENGOKU_INTAKE_BOT": "renamed-app[bot]"})[0], 0
+        )  # the default is replaced, not added to
 
     def test_the_app_may_not_promote(self):
         # a promotion (derived files plus content, the promote bot's class) is granted by the bot's account only
