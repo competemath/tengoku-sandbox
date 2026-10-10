@@ -18,7 +18,7 @@ import re
 import subprocess
 import sys
 
-from _git import ROOT, changed_files, fail, run
+from _git import ROOT, changed_files, fail, module_name, run
 
 IMPORT = re.compile(r"(?:(?:public|private|meta)[ \t]+)*import[ \t]+(?:all[ \t]+)?(?P<mod>[^\s]+)")
 KEYWORD = re.compile(r"(?:module|prelude)\b")
@@ -30,7 +30,7 @@ def module_of(path: str) -> str | None:
     if path == "Tengoku.lean":
         return "Tengoku"
     if path.startswith("Tengoku/") and path.endswith(".lean"):
-        return path[: -len(".lean")].replace("/", ".")
+        return module_name(path[: -len(".lean")])
     return None
 
 

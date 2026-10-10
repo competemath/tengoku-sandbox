@@ -39,7 +39,7 @@ import json
 import re
 import sys
 
-from _git import ROOT, blob, changed_files, fail, pascal, run
+from _git import ROOT, blob, changed_files, fail, module_name, module_stem, pascal, run
 from allowlist import violations
 from bundle_tar import write_tar
 
@@ -165,7 +165,7 @@ if extending:
     except Exception as e:  # noqa: BLE001
         errors.append(f"{part_files[0]} is not a JSON report: {e}")
     new_mods = sorted(
-        p[: -len(".lean")].replace("/", ".") for p in (q for _, q in files) if p.startswith(f"Tengoku/{ns}/") and p.endswith(".lean")
+        module_name(p[: -len(".lean")]) for p in (q for _, q in files) if p.startswith(f"Tengoku/{ns}/") and p.endswith(".lean")
     )
     if len(new_mods) > MAX_PART_MODULES:
         errors.append(f"{len(new_mods)} modules in one part (cap {MAX_PART_MODULES}): cut the bundle into smaller parts")
@@ -201,7 +201,7 @@ for i, r in enumerate(manifest, 1):
     if r.get("toolchain") != toolchain:
         errors.append(f"{where}: toolchain {r.get('toolchain')!r}, the tree is on {toolchain!r}")
     mod = r.get("module")
-    if not isinstance(mod, str) or f"{mod.replace('.', '/')}.lean" not in modules:
+    if not isinstance(mod, str) or f"{module_stem(mod)}.lean" not in modules:
         errors.append(f"{where}: module {mod} is not a file of this PR")
     name = r.get("name") if isinstance(r.get("name"), str) else ""  # a non-string name was reported above; it is never hashed
     if name in seen:
