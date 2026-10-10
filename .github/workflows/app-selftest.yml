@@ -32,3 +32,16 @@ jobs:
           gh api /installation/repositories --jq '.repositories[].full_name'
           gh api "repos/$REPO/check-runs" -f name="app-selftest (judge)" -f head_sha="$SHA" -f status=completed -f conclusion=neutral \
             -f 'output[title]=judge App self-test' -f 'output[summary]=The judge App minted a token and wrote this check run.' --jq '"check run written: \(.id)"'
+  which-secrets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions: {}
+    steps:
+      - name: Which of the four secrets are set in this repository (true or false only)
+        env:
+          JUDGE_APP_ID_SET: "${{ secrets.JUDGE_APP_ID != '' }}"
+          JUDGE_APP_KEY_SET: "${{ secrets.JUDGE_APP_KEY != '' }}"
+          INTAKE_APP_ID_SET: "${{ secrets.INTAKE_APP_ID != '' }}"
+          INTAKE_APP_KEY_SET: "${{ secrets.INTAKE_APP_KEY != '' }}"
+        run: |
+          echo "JUDGE_APP_ID=$JUDGE_APP_ID_SET JUDGE_APP_KEY=$JUDGE_APP_KEY_SET INTAKE_APP_ID=$INTAKE_APP_ID_SET INTAKE_APP_KEY=$INTAKE_APP_KEY_SET"
