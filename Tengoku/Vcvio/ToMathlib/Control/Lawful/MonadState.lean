@@ -18,9 +18,10 @@ helper lemmas that are still locally useful under the `ToMathlib` import path.
 
 universe u v
 
-@[simp] theorem toMonadState_get_eq_monadStateOf_get {m : Type u → Type v} {σ : Type u}
+@[local simp] theorem toMonadState_get_eq_monadStateOf_get {m : Type u → Type v} {σ : Type u}
     [MonadStateOf σ m] : (MonadState.get : m σ) = MonadStateOf.get :=
   (monadStateOf_get_eq_get (σ := σ) (m := m)).symm
 
-@[simp] theorem toMonadState_set_eq_monadStateOf_set {m : Type u → Type v} {σ : Type u}
+@[local simp] theorem toMonadState_set_eq_monadStateOf_set {m : Type u → Type v} {σ : Type u}
     [MonadStateOf σ m] : (MonadState.set : σ → m PUnit) = MonadStateOf.set := rfl
+-- Tengoku: 2 registration(s) of this module made local so they do not change other libraries (generated)

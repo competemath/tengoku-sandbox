@@ -28,7 +28,7 @@ open scoped ENNReal
 namespace ProbabilityTheory
 
 /-- Every point in a finite nonempty space has mass `1 / |α|` under its uniform measure. -/
-@[simp] theorem uniformOn_univ_apply_singleton
+@[local simp] theorem uniformOn_univ_apply_singleton
     {α : Type*} [MeasurableSpace α] [MeasurableSingletonClass α] [Fintype α] [Nonempty α]
     (a : α) :
     uniformOn (Set.univ : Set α) {a} = (Fintype.card α : ℝ≥0∞)⁻¹ := by
@@ -82,3 +82,4 @@ theorem map_uniformOn_univ_of_bijective
   rw [Fintype.card_congr (Equiv.ofBijective f hbij)]
 
 end ProbabilityTheory
+-- Tengoku: 1 registration(s) of this module made local so they do not change other libraries (generated)

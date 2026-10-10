@@ -85,17 +85,18 @@ theorem ext_get_eq {p q : Poly Coeff n}
 
 /-- Reading a pointwise combination reads the corresponding entries. This is the
 `Fin`-indexed boundary lemma used by the concrete ring operations. -/
-@[simp] theorem get_zipWith (f : Coeff → Coeff → Coeff) (p q : Poly Coeff n)
+@[local simp] theorem get_zipWith (f : Coeff → Coeff → Coeff) (p q : Poly Coeff n)
     (i : Fin n) : (Vector.zipWith f p q).get i = f (p.get i) (q.get i) := by
   exact Vector.getElem_zipWith (f := f) (as := (show Vector Coeff n from p))
     (bs := (show Vector Coeff n from q)) i.isLt
 
 /-- Reading a mapped polynomial reads and maps the corresponding entry. -/
-@[simp] theorem get_map (f : Coeff → Coeff) (p : Poly Coeff n) (i : Fin n) :
+@[local simp] theorem get_map (f : Coeff → Coeff) (p : Poly Coeff n) (i : Fin n) :
     (Vector.map f p).get i = f (p.get i) := by
   exact Vector.getElem_map (xs := (show Vector Coeff n from p)) f i.isLt
 
 end Poly
+attribute [local simp] LatticeCrypto.Poly.get_map LatticeCrypto.Poly.get_zipWith
 
 /-! ### Forwarding instances for `Poly`
 
@@ -327,3 +328,4 @@ omit [CommRing Coeff] in
 end VectorRingSimp
 
 end LatticeCrypto
+-- Tengoku: 2 registration(s) of this module made local so they do not change other libraries (generated)
