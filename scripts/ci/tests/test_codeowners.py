@@ -32,6 +32,7 @@ def pattern_regex(pattern: str) -> re.Pattern[str]:
     """A CODEOWNERS pattern as a regex: anchored when it starts with / or has a / inside, otherwise it matches at any depth; `*` stays inside one path
     component, `**` crosses; a pattern that names a directory owns everything under it."""
     anchored = pattern.startswith("/") or "/" in pattern.rstrip("/")
+    dir_only = pattern.endswith("/")  # a trailing slash limits the pattern to directories: a file directly under the matched level is not it
     body, i, out = pattern.strip("/"), 0, ""
     while i < len(body):
         if body.startswith("**", i):
@@ -42,7 +43,7 @@ def pattern_regex(pattern: str) -> re.Pattern[str]:
             out, i = out + "[^/]", i + 1
         else:
             out, i = out + re.escape(body[i]), i + 1
-    return re.compile(("^" if anchored else "^(?:.*/)?") + out + "(?:/.*)?$")
+    return re.compile(("^" if anchored else "^(?:.*/)?") + out + ("/.+$" if dir_only else "(?:/.*)?$"))
 
 
 def parse(text: str) -> list[tuple[re.Pattern[str], list[str]]]:
@@ -106,6 +107,11 @@ class Matcher(unittest.TestCase):
         self.assertEqual(owners_of(".github/workflows/x.yml", rules), ["a"])
         self.assertEqual(owners_of(".githubx/y", rules), [])
 
+    def test_a_trailing_slash_limits_a_pattern_to_directories(self):
+        rules = parse("/Tengoku/ a\n/Tengoku/*/\n")
+        self.assertEqual(owners_of("Tengoku/Lib/X.lean", rules), [])
+        self.assertEqual(owners_of("Tengoku/notes.txt", rules), ["a"])  # a top-level file is not a directory: the earlier line keeps it
+
     def test_no_match_is_no_owner(self):
         self.assertEqual(owners_of("data/staging/x.jsonl", parse("/scripts/ a\n")), [])
 
@@ -142,17 +148,40 @@ class OwnerOnly(unittest.TestCase):
             self.assertEqual(owners_of(p, self.rules), [SECOND], p)
 
     def test_the_content_lane_has_no_owner_and_the_machinery_of_the_tree_keeps_both(self):
-        """The first part of a library edits Tengoku/All.lean (owned: a person reads it); everything a later part touches in the tree is the library's own folder and umbrella."""
+        """The first part of a library edits Tengoku/All.lean (owned: a person reads it); everything a later part touches in the tree is the library's own folder and umbrella.
+        Native is in the lane on purpose (the user counts novel proofs as content)."""
         both = [MAIN, SECOND]
         for p in (
             "Tengoku/Formalbook/FormalBook/Chapter_08.lean",
             "Tengoku/Formalbook.lean",
             "Tengoku/SomeNewLibrary/Deep/Module.lean",
             "Tengoku/SomeNewLibrary.lean",
+            "Tengoku/Native/Competemath/X.lean",
+            "Tengoku/Native.lean",
             "data/intake/formalbook/manifest.jsonl",
+            "data/stats.json",
         ):
             self.assertEqual(owners_of(p, self.rules), [], p)
         for p in ("Tengoku/All.lean", "Tengoku/Seed/Logic/Basic.lean", "Tengoku.lean", "lean-toolchain", "scripts/seed.py"):
+            self.assertEqual(owners_of(p, self.rules), both, p)
+
+    def test_every_file_that_is_not_content_or_bot_data_is_owned_even_when_nobody_listed_it(self):
+        """A review (2026-10-10) found machinery with no rule: the leak-scan, isnad and Jinshi roots, tools/*.py, .gitleaks.toml, the widget tree. The default line owns all of it, and anything new."""
+        both = [MAIN, SECOND]
+        for p in (
+            "TengokuLeak.lean",
+            "TengokuIsnad.lean",
+            "TengokuJinshi.lean",
+            "Jinshi/Base.lean",
+            "tools/harvest.py",
+            "tools/lean_extract.py",
+            ".gitleaks.toml",
+            "widget/js/x.js",
+            "some/brand/new/tool.py",
+            "Tengoku/notes.txt",  # a file directly under Tengoku/ is not a library folder
+            "CONTRIBUTING.md",
+            "LICENSE",
+        ):
             self.assertEqual(owners_of(p, self.rules), both, p)
 
     def test_what_is_not_ci_keeps_both_owners_and_bot_paths_none(self):
