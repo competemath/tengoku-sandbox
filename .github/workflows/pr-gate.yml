@@ -38,7 +38,7 @@ jobs:
     permissions: { contents: read }   # reads the PR's commits and runs main's scripts: no write token here (the label job below holds it)
     outputs: { class: "${{ steps.c.outputs.class }}" }
     steps:
-      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
+      - uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { ref: "${{ env.BASE }}", fetch-depth: 0, filter: "blob:none", persist-credentials: false }
@@ -61,7 +61,7 @@ jobs:
     timeout-minutes: 5
     permissions: { pull-requests: write }
     steps:
-      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
+      - uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2
         with: { egress-policy: audit }
       - name: Label the PR with its class
         env: { GH_TOKEN: "${{ github.token }}", CLASS: "${{ needs.classify.outputs.class }}", PR: "${{ github.event.pull_request.number }}" }
@@ -79,7 +79,7 @@ jobs:
     timeout-minutes: 10
     permissions: { contents: read }
     steps:
-      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
+      - uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { ref: "${{ env.BASE }}", fetch-depth: 0, filter: "blob:none", persist-credentials: false }
@@ -99,7 +99,7 @@ jobs:
     timeout-minutes: 5
     permissions: { contents: read }
     steps:
-      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
+      - uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { ref: "${{ env.BASE }}", fetch-depth: 0, filter: "blob:none", persist-credentials: false }
@@ -115,7 +115,7 @@ jobs:
     timeout-minutes: 5
     permissions: { contents: read }
     steps:
-      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
+      - uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { ref: "${{ env.BASE }}", fetch-depth: 0, filter: "blob:none", persist-credentials: false }
@@ -149,7 +149,7 @@ jobs:
     timeout-minutes: 30
     permissions: { contents: read, pull-requests: read }
     steps:
-      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
+      - uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2
         with: { egress-policy: audit }
       # The base commit with plain git, not actions/checkout: the repository is public, so nothing needs a token (the next step fetches the PR the
       # same way), and no credential is ever written into the checkout. Only the base is checked out; the PR is read as git objects.
@@ -183,7 +183,7 @@ jobs:
     timeout-minutes: 15
     permissions: { contents: read }
     steps:
-      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
+      - uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2
         with: { egress-policy: audit }
       # The base commit with plain git (see the scope-fix job): only the base is checked out, the PR is read as git objects.
       - name: The base commit (the checks are main's)
@@ -206,7 +206,7 @@ jobs:
     timeout-minutes: 15
     permissions: { contents: read }
     steps:
-      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
+      - uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2
         with: { egress-policy: audit }
       # The base commit with plain git (see the scope-fix job): only the base is checked out, the PR is read as git objects.
       - name: The base commit (the checks are main's)
@@ -229,7 +229,7 @@ jobs:
     timeout-minutes: 15
     permissions: { contents: read }
     steps:
-      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
+      - uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2
         with: { egress-policy: audit }
       # The base commit with plain git, not actions/checkout: the repository is public, so nothing needs a token (the next step fetches the PR the
       # same way), and no credential is ever written into the checkout. Only the base is checked out; the PR is read as git objects.
@@ -254,7 +254,7 @@ jobs:
     timeout-minutes: 10
     permissions: { contents: read }
     steps:
-      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
+      - uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2
         with: { egress-policy: audit }
       - name: The base commit (the checks are main's)
         run: |
@@ -276,7 +276,7 @@ jobs:
     timeout-minutes: 20
     permissions: { contents: read }
     steps:
-      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
+      - uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2
         with: { egress-policy: audit }
       - name: The base commit (the checks are main's)
         run: |
@@ -299,7 +299,7 @@ jobs:
         with: { ref: "${{ env.BASE }}", fetch-depth: 0, persist-credentials: false }
       - name: The PR's commits, as data (the checks are main's)
         run: git fetch -q --no-tags origin "+$PR_REF:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
-      - uses: trufflesecurity/trufflehog@4dd8831c5f12599465d4d45c3c447b4018a34c85 # v3.97.9
+      - uses: trufflesecurity/trufflehog@b2b0a92070f206ab7b5a1105d82a7f2f48d92341 # v3.99.0
         with:
           base: ${{ env.BASE }}
           head: ${{ env.HEAD }}
@@ -364,7 +364,7 @@ jobs:
       TENGOKU_VERIFY: require
       TENGOKU_TOPUPS: "1"
     steps:
-      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
+      - uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { ref: "${{ env.BASE }}", fetch-depth: 0, filter: "blob:none", persist-credentials: false }
@@ -443,7 +443,7 @@ jobs:
     timeout-minutes: 20
     permissions: { contents: read, statuses: read }
     steps:
-      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
+      - uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2
         with: { egress-policy: audit }
       # The base commit with plain git, not actions/checkout (as the scope-fix and queue-recheck jobs): the repository is public, nothing needs a token,
       # and none is written into the checkout. Only main's script runs here; the PR is read as commit statuses.
@@ -465,7 +465,7 @@ jobs:
     timeout-minutes: 15
     permissions: { contents: read }
     steps:
-      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
+      - uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2
         with: { egress-policy: audit }
       # The base commit with plain git, not actions/checkout: the repository is public, so nothing needs a token and none is ever written into
       # the checkout (the same as the scope-fix and restructure jobs). The entry is read as git objects.
