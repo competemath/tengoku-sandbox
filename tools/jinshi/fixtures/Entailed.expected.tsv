@@ -1,0 +1,3 @@
+# check	severity	name	a word the detail must contain
+entailed	warn	JinshiFixtures.restated	Nat.add_comm
+entailed	warn	JinshiFixtures.restated2	Nat.add_zero
