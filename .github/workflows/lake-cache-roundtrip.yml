@@ -64,7 +64,7 @@ jobs:
           lake build "$TARGET" -o out.jsonl 2>&1 | tail -3
           echo "took $(( $(date +%s) - start )) s; mappings: $(wc -l < out.jsonl) lines"
           du -sh .lake/build .lake/cache 2>/dev/null; df -h / | tail -1
-      - name: Upload: lake cache put (artifacts by content hash + the mappings under this revision)
+      - name: "Upload: lake cache put (artifacts by content hash + the mappings under this revision)"
         env: { LAKE_CACHE_DIR: "${{ github.workspace }}/.lake/cache" }
         run: |
           start=$(date +%s)
@@ -82,7 +82,7 @@ jobs:
           start=$(date +%s)
           lake build "$TARGET" --no-build 2>&1 | tail -2
           echo "--no-build from downloads alone: ok, took $(( $(date +%s) - start )) s"
-      - name: The merge-group case: a commit on top has no mappings of its own; Lake backtracks to the parent
+      - name: "The merge-group case: a commit on top has no mappings of its own; Lake backtracks to the parent"
         env: { TARGET: "${{ github.event.inputs.target }}", LAKE_CACHE_DIR: "${{ runner.temp }}/cache3" }
         run: |
           git clone -q --filter=blob:none "$GITHUB_WORKSPACE" "$RUNNER_TEMP/ws3" && cd "$RUNNER_TEMP/ws3"
@@ -92,16 +92,23 @@ jobs:
           start=$(date +%s)
           lake build Tengoku.Probe.Hello -o out3.jsonl 2>&1 | tail -3
           echo "the group built in $(( $(date +%s) - start )) s on top of downloads; mappings of this build: $(wc -l < out3.jsonl) lines"
-          # the group's own new mappings: its lines minus the parent's (deterministic set difference), staged for a privileged uploader
-          python3 - <<'PY'
-          base = set(l.strip() for l in open("../../work/tengoku-sandbox/tengoku-sandbox/out.jsonl") if l.strip()) if False else set()
+          # the group's own new mappings: its lines minus every mapping the store already had (the revision files `lake cache get`
+          # downloaded): a deterministic set difference, staged for a privileged uploader
+          python3 - "$LAKE_CACHE_DIR" <<'PY'
+          import glob, sys
+          had = set()
+          for f in glob.glob(sys.argv[1] + "/revisions/**/*.jsonl", recursive=True):
+              had.update(l.strip() for l in open(f) if l.strip())
+          mine = [l.strip() for l in open("out3.jsonl") if l.strip()]
+          new = [l for l in mine if l not in had]
+          open("out-new.jsonl", "w").write("".join(l + "\n" for l in new))
+          print(f"this build's mappings: {len(mine)}; already in the store: {len(mine) - len(new)}; new (the group's own): {len(new)}")
           PY
-          lake cache get --scope "$SCOPE" --mappings-only 2>&1 | tail -1 || true
-          lake cache stage out3.jsonl staging 2>&1 | tail -1
+          lake cache stage out-new.jsonl staging 2>&1 | tail -1
           echo "staged for upload: $(find staging -type f | wc -l) files, $(du -sh staging | cut -f1)"
           lake cache put-staged staging --scope "$SCOPE" --rev "$(git rev-parse HEAD)" 2>&1 | tail -3
           echo "the store now has a revision file for the group's commit: $(docker run --rm --network host --entrypoint sh minio/mc -c 'mc alias set m http://127.0.0.1:9000 minioadmin minioadmin >/dev/null && mc ls -r m/lake/r0' | wc -l) revision files"
-      - name: Control: an empty workspace with the store gone must not build with --no-build
+      - name: "Control: an empty workspace with the store gone must not build with --no-build"
         env: { TARGET: "${{ github.event.inputs.target }}", LAKE_CACHE_DIR: "${{ runner.temp }}/cache4" }
         run: |
           docker rm -f minio >/dev/null
