@@ -1,0 +1,112 @@
+# Probe for the Lake artifact cache (2026-10-13): what Lake's own cache does on this tree, measured on a runner.
+# No remote store yet: this measures the local half (do the seed's traces survive the switch, what a one-module
+# group stages, how fast a build directory comes back from the local cache). Nothing here publishes anything.
+name: lake-cache-probe
+on:
+  workflow_dispatch:
+    inputs:
+      import:
+        description: "an existing module the probe module imports"
+        required: false
+        default: "Tengoku.Pfr"
+permissions: {}
+defaults:
+  run:
+    shell: bash
+env:
+  TENGOKU_REPO: ${{ github.repository }}
+  TENGOKU_VERIFY: require
+  TENGOKU_TOPUPS: "1"
+  LAKE_ARTIFACT_CACHE: "true"
+  LAKE_CACHE_DIR: ${{ github.workspace }}/.lake/cache
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    permissions: { contents: read }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { fetch-depth: 0, filter: "blob:none", persist-credentials: false }
+      - name: Lean toolchain (pinned by lean-toolchain) and zstd
+        run: |
+          curl -sSfL https://github.com/leanprover/elan/releases/latest/download/elan-x86_64-unknown-linux-gnu.tar.gz | tar xz
+          ./elan-init -y --default-toolchain none && echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+          sudo apt-get install -y -q zstd >/dev/null
+      - name: Free disk
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache /usr/local/share/boost /usr/share/swift /usr/lib/jvm /usr/share/miniconda /usr/local/share/powershell /usr/local/lib/node_modules /opt/az /usr/local/graalvm /usr/local/share/chromium || true
+          sudo docker image prune --all --force >/dev/null 2>&1 || true
+          sudo swapoff -a >/dev/null 2>&1 || true; sudo rm -f /mnt/swapfile /swapfile || true
+          df -h / | tail -1
+      - name: Seed from the newest published cache (today's way)
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          scripts/cache.sh get 2>&1 | tail -3
+          { df -h / | tail -1; du -sh .lake/build; } | sed 's/^/after seeding: /'
+      - name: Lake and its cache
+        run: |
+          lake --version
+          lake cache services || true
+          echo "cache dir: $LAKE_CACHE_DIR"
+      - name: 1. The seeded tree with the artifact cache on (do the seed's traces survive the switch?)
+        run: |
+          start=$(date +%s)
+          set +e; lake build Tengoku.All -o out-all.jsonl > build1.log 2>&1; status=$?; set -e
+          tail -3 build1.log
+          echo "status $status; compiled: $(grep -c 'Built ' build1.log || true) modules; replayed/fetched lines: $(grep -ciE 'replay|fetch|cached' build1.log || true); took $(( $(date +%s) - start )) s"
+          grep -iE 'replay|fetch|cached' build1.log | head -3 || true
+          echo "mappings: $(wc -l < out-all.jsonl) lines, $(du -h out-all.jsonl | cut -f1)"
+          df -h / | tail -1; du -sh .lake/build .lake/cache .lake/cache/* 2>/dev/null || true
+          find .lake/cache -type f | wc -l | sed 's/^/files in the cache: /'
+          # are build-dir files and cache artifacts the same inodes (links) or copies?
+          f="$(find .lake/build/lib/lean/Tengoku -name '*.olean' | head -1)"; echo "example: $f links=$(stat -c %h "$f")"
+          test "$status" = 0
+      - name: 2. Everything is in the cache (lake build --no-build --rehash, Mathlib's check)
+        run: |
+          start=$(date +%s)
+          lake build Tengoku.All --no-build --rehash 2>&1 | tail -2
+          echo "took $(( $(date +%s) - start )) s"
+      - name: 3. A one-module group on top (what it builds, what it stages)
+        env: { IMPORT: "${{ github.event.inputs.import }}" }
+        run: |
+          mkdir -p Tengoku/Probe
+          printf 'import %s\n\ntheorem Tengoku.Probe.hello : 1 + 1 = 2 := rfl\n' "$IMPORT" > Tengoku/Probe/Hello.lean
+          start=$(date +%s)
+          lake build Tengoku.Probe.Hello -o out-probe.jsonl 2>&1 | tail -3
+          echo "took $(( $(date +%s) - start )) s; mappings for the probe build: $(wc -l < out-probe.jsonl) lines"
+          # what `-o` tracked: only the new module, or everything it touched?
+          python3 - <<'PY'
+          import json
+          rows = [json.loads(l) for l in open("out-probe.jsonl") if l.strip()]
+          print("keys of a row:", sorted(rows[0].keys()) if rows else "none")
+          print("first rows:", json.dumps(rows[:2])[:600])
+          PY
+          lake cache stage out-probe.jsonl staging-probe
+          echo "staged: $(find staging-probe -type f | wc -l) files, $(du -sh staging-probe | cut -f1)"
+          ls -la staging-probe | head -8
+      - name: 4. A group's own mappings = its lines minus the base's lines (deterministic set difference)
+        run: |
+          python3 - <<'PY'
+          base = set(l.strip() for l in open("out-all.jsonl") if l.strip())
+          new = [l.strip() for l in open("out-probe.jsonl") if l.strip() and l.strip() not in base]
+          open("out-new.jsonl", "w").write("".join(l + "\n" for l in new))
+          print(f"probe mappings {sum(1 for l in open('out-probe.jsonl') if l.strip())}, of which new vs the base: {len(new)}")
+          PY
+          rm -rf staging-new; lake cache stage out-new.jsonl staging-new
+          echo "staged (new only): $(find staging-new -type f | wc -l) files, $(du -sh staging-new | cut -f1)"
+      - name: 5. A fresh build directory from the local cache alone (what a queue job's seed becomes once the store is remote)
+        run: |
+          rm -rf .lake/build
+          start=$(date +%s)
+          set +e; lake build Tengoku.All Tengoku.Probe.Hello --no-build > build5.log 2>&1; status=$?; set -e
+          tail -3 build5.log
+          echo "status $status; took $(( $(date +%s) - start )) s; compiled lines: $(grep -c 'Built ' build5.log || true)"
+          du -sh .lake/build 2>/dev/null || true; df -h / | tail -1
+          test "$status" = 0
+      - name: 6. The same with the cache directory removed too (control: must fail with --no-build)
+        run: |
+          rm -rf .lake/build .lake/cache
+          if lake build Tengoku.Probe.Hello --no-build > build6.log 2>&1; then echo "::error::built with nothing cached?"; exit 1; else echo "refused as expected: $(tail -1 build6.log)"; fi
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with: { name: lake-cache-probe, path: "build1.log\nbuild5.log\nout-all.jsonl\nout-probe.jsonl\nout-new.jsonl", retention-days: 3, if-no-files-found: ignore }
