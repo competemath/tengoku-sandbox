@@ -1,308 +1,54 @@
-# Builds the Tengoku tree and publishes the compiled cache to this repository's
-# releases (tag `cache-<sha>`), so nobody — human, Leak service, or CI — has to
-# compile the tree from scratch. `scripts/cache.sh get` fetches it.
-#
-# Trusted := it is in the tree and this build finishes with no errors and no
-# `sorry`. Warnings are reported, not fatal (linters are style, not truth).
-#
-# The one-time seed build is hours of compile; GitHub-hosted jobs are capped at
-# 6 hours, so the build is RESUMABLE: whatever was compiled is saved to the
-# Actions cache even when the job runs out of time, and the workflow re-triggers
-# itself until the whole tree is built. After that, incremental builds finish in
-# minutes and every push to main publishes a fresh cache.
+# THROWAWAY RUN BRANCH (never merged): the stage -> pack -> unstage cycle of Lake's artifact cache on a one-module group (quick check, ~15 min).
 name: build
-
-on:
-  # Nightly only (like Mathlib's cache): a push to main never rebuilds or
-  # republishes the cache, so a bad commit has a grace period before it can
-  # reach a published cache. `workflow_dispatch` is for a deliberate manual
-  # run and for the build's own continuation of an unfinished run.
-  schedule:
-    - cron: "0 3 * * *"
-  workflow_dispatch:
-    inputs:
-      resume:
-        description: "internal: continuation of an unfinished build"
-        required: false
-        default: "false"
-      retried:
-        description: "internal: how many times this build has re-run on the tip after workflow files changed on main (max 2)"
-        required: false
-        default: "0"
-      resumed:
-        description: "internal: how many follow-up runs this build has had after the time cap (max 5)"
-        required: false
-        default: "0"
-
-concurrency:
-  group: build-${{ github.ref }}
-  cancel-in-progress: false
-
+on: { workflow_dispatch: {} }
 permissions: {}
-
-defaults:
-  run:
-    shell: bash   # -e -o pipefail on every run: step (the campaign found silent passes behind pipes)
-
+defaults: { run: { shell: bash } }
+env:
+  TENGOKU_REPO: ${{ github.repository }}
+  TENGOKU_VERIFY: require
+  TENGOKU_TOPUPS: "1"
+  LAKE_ARTIFACT_CACHE: "true"
+  LAKE_CACHE_DIR: ${{ github.workspace }}/.lake/cache
 jobs:
-  build:
+  q:
     runs-on: ubuntu-latest
-    timeout-minutes: 345
-    # This job compiles the tree, so it holds no write access at all, and the compile runs without network:
-    # publishing is the `publish` job's, re-dispatching the `relaunch` job's.
+    timeout-minutes: 90
     permissions: { contents: read }
-    env:
-      TENGOKU_REPO: ${{ github.repository }}     # publish here
-      TENGOKU_CACHE_SOURCE: competemath/tengoku  # seed from the library (a sandbox has no caches of its own)
-    outputs:
-      complete: ${{ steps.build.outputs.complete }}
-      stale: ${{ steps.guard.outputs.stale }}
     steps:
-      # The two counters bound the build's own re-dispatches (the relaunch job compares them numerically), so a
-      # manual dispatch must pass whole numbers inside the limits: -100 would otherwise allow 105 more builds.
-      - name: Reject out-of-range continuation counters
-        env:
-          RESUMED: ${{ github.event.inputs.resumed || '0' }}
-          RETRIED: ${{ github.event.inputs.retried || '0' }}
-        run: |
-          [[ "$RESUMED" =~ ^[0-9]+$ && "$RETRIED" =~ ^[0-9]+$ ]] || { echo "::error::resumed and retried must be whole numbers"; exit 1; }
-          (( 10#$RESUMED <= 5 && 10#$RETRIED <= 2 )) || { echo "::error::resumed is at most 5 and retried at most 2"; exit 1; }
-
-      # Full history, no file contents: `cache.sh get` picks the newest cache that is an ANCESTOR of this
-      # commit and `put` keeps a top-up that is AHEAD of it; a depth-1 clone can answer neither once main
-      # has moved since the last cache (the seed step silently fell back to the Actions cache for days).
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { fetch-depth: 0, filter: "blob:none", persist-credentials: false }
-
-      - name: Install elan (toolchain pinned by lean-toolchain)
+        with: { fetch-depth: 1, persist-credentials: false }
+      - name: Lean toolchain and zstd
         run: |
           curl -sSfL https://github.com/leanprover/elan/releases/latest/download/elan-x86_64-unknown-linux-gnu.tar.gz | tar xz
-          ./elan-init -y --default-toolchain none
-          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
-
-      - name: Free disk space (the tree's build is several GB)
+          ./elan-init -y --default-toolchain none && echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+          sudo apt-get install -y -q zstd >/dev/null
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache /usr/local/share/boost /usr/share/swift /usr/lib/jvm /usr/share/miniconda /usr/local/share/powershell /usr/local/lib/node_modules /opt/az /usr/local/graalvm /usr/local/share/chromium || true
+      - name: Seed
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: scripts/cache.sh get 2>&1 | tail -2
+      - name: "The base: the closure of Tengoku.Pfr (stands in for the nightly's base.jsonl)"
         run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL || true
-          df -h /
-
-      # Restore whatever earlier jobs compiled: exact tree first, then any
-      # earlier state of this branch (Lake rebuilds only what differs).
-      - name: Restore partial build
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: .lake/build
-          key: lake-${{ hashFiles('lean-toolchain') }}-${{ github.sha }}
-          restore-keys: |
-            lake-${{ hashFiles('lean-toolchain') }}-
-
-      - name: Tools for the cache (zstd)
-        run: sudo apt-get install -y -q zstd >/dev/null
-
-      - name: Seed from the last published cache (if any)
-        if: ${{ github.event.inputs.resume != 'true' }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: scripts/cache.sh get || echo "no published cache yet — building from source"
-
-      - name: The toolchain, while there is network (the build below has none)
+          start=$(date +%s); lake build Tengoku.Pfr -o base.jsonl > b.log 2>&1; tail -1 b.log
+          echo "took $(( $(date +%s) - start )) s; base mappings $(wc -l < base.jsonl); header line: $(head -1 base.jsonl | cut -c1-120)"
+      - name: A one-module group on top; stage ONLY its own mapping (header kept)
         run: |
-          lake --version
-          # the packer, copied before any of the tree's code runs: the build cannot change what packs its output
-          cp scripts/cache.sh "$RUNNER_TEMP/cache.sh"
-
-      - name: Build (sealed)
-        id: build
-        shell: bash
+          mkdir -p Tengoku/Probe && printf 'import Tengoku.Pfr\n\ntheorem Tengoku.Probe.hello : 1 + 1 = 2 := rfl\n' > Tengoku/Probe/Hello.lean
+          lake build Tengoku.Probe.Hello -o out.jsonl 2>&1 | tail -2
+          python3 - <<'PY'
+          rows = [l.rstrip("\n") for l in open("out.jsonl") if l.strip()]
+          head, mine = rows[0], rows[1:]
+          had = set(l.strip() for l in open("base.jsonl") if l.strip())
+          new = [l for l in mine if l not in had]
+          open("out-new.jsonl", "w").write("".join(l + "\n" for l in [head] + new))
+          print(f"header kept; build's mappings {len(mine)}; known {len(mine) - len(new)}; new {len(new)}")
+          PY
+          lake cache stage out-new.jsonl stage 2>&1 | tail -2
+          echo "staged: $(find stage -type f | wc -l) files, $(du -sh stage | cut -f1)"; find stage -type f | head -8
+          tar -c -C stage . | zstd -T0 -3 -q -o d-1.tar.zst; echo "delta: $(du -h d-1.tar.zst | cut -f1)"
+      - name: Lose the group's build and the whole local cache; restore from the delta alone; --no-build must pass
         run: |
-          set -o pipefail
-          # No network and a clean environment: whatever the tree's code does while it compiles, it can reach
-          # nothing and holds no token. Headroom before the job cap so the cache-save step always runs.
-          # the build's own status, read right after its pipeline
-          set +e
-          # its own PID namespace too: when the build ends, the kernel ends every process it started, so nothing the
-          # tree's code spawned is left to touch the workspace before the cache is packed
-          sudo unshare --net --pid --fork --mount-proc runuser -u "$(id -un)" -- env -i HOME="$HOME" PATH="$HOME/.elan/bin:/usr/local/bin:/usr/bin:/bin" LANG=C.UTF-8 \
-            timeout 320m lake build 2>&1 | tee build.log
-          status=${PIPESTATUS[0]}
-          set -e
-          grep -E "^(✖|error:)|declaration uses .sorry." build.log | head -n 50 || true
-          if grep -q "declaration uses \`sorry\`" build.log; then
-            echo "::error::a trusted module uses sorry — refusing"; exit 1
-          fi
-          if [ "$status" = "124" ]; then
-            echo "complete=false" >> "$GITHUB_OUTPUT"; echo "::warning::time cap reached; progress saved, continuing in a follow-up run"
-          elif [ "$status" != "0" ]; then
-            echo "complete=false" >> "$GITHUB_OUTPUT"; echo "::error::build failed"; exit 1
-          else
-            echo "complete=true" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Save partial/complete build
-        if: always()
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: .lake/build
-          key: lake-${{ hashFiles('lean-toolchain') }}-${{ github.sha }}-${{ github.run_attempt }}-${{ github.run_id }}
-
-      # GITHUB_TOKEN may not create a release (a tag) on a commit whose .github/workflows differ
-      # from main's tip: GitHub treats it as a workflow change and the job token can never hold
-      # `workflows`. A long build during which a workflow PR merged would fail at publish, so
-      # the run re-launches itself on the tip instead (the saved build makes that a short run).
-      - name: Did a workflow file land on main during this build?
-        if: steps.build.outputs.complete == 'true'
-        id: guard
-        run: |
-          git fetch -q origin main
-          if git diff --quiet "$GITHUB_SHA" origin/main -- .github/workflows; then echo "stale=false" >> "$GITHUB_OUTPUT"
-          else echo "stale=true" >> "$GITHUB_OUTPUT"; echo "::warning::.github/workflows changed on main since $GITHUB_SHA; publishing from a run on the tip instead"; fi
-
-      - name: Pack the cache (no network needed, no token)
-        if: steps.build.outputs.complete == 'true' && steps.guard.outputs.stale != 'true'
-        run: TENGOKU_ROOT="$GITHUB_WORKSPACE" bash "$RUNNER_TEMP/cache.sh" pack cache-out
-
-      - if: steps.build.outputs.complete == 'true' && steps.guard.outputs.stale != 'true'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with: { name: cache-parts, path: cache-out, retention-days: 1, compression-level: 0 }
-
-      # The content lint reads a word at column 0 as a command only if it is a command keyword of the tree's Lean (schemas/command-keywords.json). A seed update that
-      # adds one makes the list stale; this says so. It never blocks the cache: the build above is the verdict on the tree, this is a reminder about the list.
-      # It loads the tree (initializers of the seeded packages run), so it runs as the build does, with no network and in its own PID namespace, and only after the cache
-      # has been packed and uploaded: nothing it could write reaches what is published (CodeRabbit).
-      - name: The command keywords of the tree against the lint's list
-        if: steps.build.outputs.complete == 'true' && steps.guard.outputs.stale != 'true'
-        continue-on-error: true
-        run: |
-          set -o pipefail
-          sudo unshare --net --pid --fork --mount-proc runuser -u "$(id -un)" -- env -i HOME="$HOME" PATH="$HOME/.elan/bin:/usr/local/bin:/usr/bin:/bin" LANG=C.UTF-8 \
-            lake env lean --run tools/CommandKeywords.lean | python3 scripts/ci/cmdkw_check.py
-
-  # Publishes what the build packed: it runs no Lean, so it is the one job that may write releases and sign.
-  publish:
-    needs: build
-    if: needs.build.outputs.complete == 'true' && needs.build.outputs.stale != 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    permissions:
-      contents: write      # release assets (the cache)
-      id-token: write      # Sigstore signing identity for the attestation
-      attestations: write
-    env:
-      TENGOKU_REPO: ${{ github.repository }}
-    outputs:
-      published: ${{ steps.publish.outputs.tag != '' }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { fetch-depth: 0, filter: "blob:none", persist-credentials: false }
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with: { name: cache-parts, path: cache-out }
-      - name: Publish cache to releases
-        id: publish
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          test "$(cat cache-out/commit)" = "$GITHUB_SHA"
-          scripts/cache.sh publish cache-out | tee put.log
-          tag="$(grep -oE 'published cache-[0-9A-Z]+' put.log | awk '{print $2}')"
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
-      # Every part gets a build-provenance attestation; scripts/cache.sh get refuses parts without one.
-      - name: Attest the cache parts
-        id: attest
-        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
-        with:
-          subject-path: cache-out/tengoku-cache.tar.zst.part-*
-
-      # The same attestation as a file of the release: the signed Sigstore bundle of the parts' SLSA build
-      # provenance (one JSON line). It serves whoever downloads the release without GitHub's attestation API:
-      # `gh attestation verify <part> -R competemath/tengoku --bundle tengoku-cache.intoto.jsonl` checks a part
-      # against it. Consumers download only the parts (cache.sh, pin.sh), so the extra file changes nothing for them.
-      - name: The provenance, as a file of the release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ steps.publish.outputs.tag }}
-          BUNDLE: ${{ steps.attest.outputs.bundle-path }}
-        run: |
-          cp "$BUNDLE" tengoku-cache.intoto.jsonl
-          gh release upload "$TAG" tengoku-cache.intoto.jsonl -R "$TENGOKU_REPO" --clobber
-
-      # The licence texts and notices travel with the compiled code: Apache-2.0, MIT and BSD-3-Clause ask that whoever
-      # receives a copy also receives them. They go on the new cache release and on the standing top-up release (whose
-      # superseded assets `cache.sh topup-gc` retracts; it leaves anything that is not a top-up alone).
-      - name: The licence files, with the release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ steps.publish.outputs.tag }}
-        run: |
-          gh release upload "$TAG" LICENSE LICENSE-THIRD-PARTY.md NOTICE -R "$TENGOKU_REPO" --clobber
-          # the standing release may not exist yet (a nightly before the first merge-queue build): create it the way the
-          # queue does; any other failure to look it up is a failure here, not a skipped upload
-          if ! out="$(gh release view cache-topups -R "$TENGOKU_REPO" 2>&1)"; then
-            case "$out" in
-              *"release not found"*)
-                # the queue (or topup-put) may create it at the same moment: that failure is fine if the release
-                # exists now; any other failure of the create is not
-                if ! cout="$(gh release create cache-topups -R "$TENGOKU_REPO" --title "cache top-ups" --prerelease --target main \
-                  --notes "The small per-merge differences from the nightly cache. cache-latest.json names the one in force; everything else here is provisional or about to be collected." 2>&1)"; then
-                  gh release view cache-topups -R "$TENGOKU_REPO" >/dev/null 2>&1 || { echo "$cout" >&2; exit 1; }
-                fi ;;
-              *) echo "$out" >&2; exit 1 ;;
-            esac
-          fi
-          gh release upload cache-topups LICENSE LICENSE-THIRD-PARTY.md NOTICE -R "$TENGOKU_REPO" --clobber
-
-  # Re-dispatches the build: after the time cap (resume), or on the tip when a workflow file landed meanwhile.
-  relaunch:
-    needs: build
-    # only after a build job that ended well (time cap reached, or a stale tip): a failed build never re-dispatches
-    if: needs.build.result == 'success' && ((needs.build.outputs.complete == 'false' && fromJSON(github.event.inputs.resumed || '0') < 5) || (needs.build.outputs.stale == 'true' && fromJSON(github.event.inputs.retried || '0') < 2))
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions: { actions: write }
-    steps:
-      - name: Continue the build in a follow-up run (at most five)
-        if: needs.build.outputs.complete == 'false'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RESUMED: ${{ github.event.inputs.resumed || '0' }}
-        run: gh workflow run build.yml -R "$GITHUB_REPOSITORY" --ref "$GITHUB_REF_NAME" -f resume=true -f resumed="$(( ${RESUMED:-0} + 1 ))"
-      - name: Publish from a run on the tip (once)
-        if: needs.build.outputs.complete == 'true' && needs.build.outputs.stale == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RETRIED: ${{ github.event.inputs.retried || '0' }}
-        run: gh workflow run build.yml -R "$GITHUB_REPOSITORY" --ref "$GITHUB_REF_NAME" -f retried="$(( ${RETRIED:-0} + 1 ))"
-
-  # A fresh cache is out: move the hosted Leak services onto it. With an
-  # HF_TOKEN secret (a Hugging Face token with write access to the Spaces) each
-  # Space is factory-rebuilt, which bakes the new cache into its image so every
-  # later wake-up is fast. Without the token, each running Space is asked to
-  # refresh itself in place (POST /refresh: it pins to the newest cache and
-  # restarts its resident Lean); a sleeping Space is unreachable and instead
-  # refreshes itself the next time it starts. Nightly only, never on push.
-  notify:
-    needs: publish
-    if: needs.publish.outputs.published == 'true' && github.repository == 'competemath/tengoku'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    env:
-      HF_TOKEN: ${{ secrets.HF_TOKEN }}
-      SPACES: BarkingTree/Leak-I BarkingTree/Leak-II BarkingTree/Leak-IV
-    steps:
-      - name: Move the Leak Spaces onto the new cache
-        run: |
-          for space in $SPACES; do
-            host="$(echo "$space" | tr '/A-Z' '-a-z').hf.space"
-            if [ -n "$HF_TOKEN" ]; then
-              if curl -fsS -o /dev/null -X POST -H "Authorization: Bearer $HF_TOKEN" \
-                   "https://huggingface.co/api/spaces/$space/restart?factory=true"; then
-                echo "$space: factory rebuild requested (bakes the new cache into the image)"
-              else
-                echo "::warning::$space: rebuild request failed; it refreshes itself on its next start"
-              fi
-            else
-              if out="$(curl -fsS -m 30 -X POST "https://$host/refresh" 2>/dev/null)"; then
-                echo "$space: $out"
-              else
-                echo "$space: not reachable (asleep?) — it refreshes itself on its next start"
-              fi
-            fi
-          done
+          rm -rf .lake/build/lib/lean/Tengoku/Probe .lake/build/ir/Tengoku/Probe .lake/cache stage
+          if lake build Tengoku.Probe.Hello --no-build >/dev/null 2>&1; then echo "::error::built without the delta?"; exit 1; else echo "control: refused without the delta, as expected"; fi
+          mkdir d1 && zstd -dc d-1.tar.zst | tar -x -C d1 && lake cache unstage d1 2>&1 | tail -2
+          start=$(date +%s); lake build Tengoku.Probe.Hello --no-build -v 2>&1 | tail -3
+          echo "restored from the delta with --no-build in $(( $(date +%s) - start )) s"; ls -la .lake/build/lib/lean/Tengoku/Probe/ | head -5
