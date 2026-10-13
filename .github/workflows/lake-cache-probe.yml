@@ -103,7 +103,7 @@ jobs:
           echo "status $status; took $(( $(date +%s) - start )) s; compiled lines: $(grep -c 'Built ' build5.log || true)"
           du -sh .lake/build 2>/dev/null || true; df -h / | tail -1
           test "$status" = 0
-      - name: 6. The same with the cache directory removed too (control: must fail with --no-build)
+      - name: "6. The same with the cache directory removed too (control: must fail with --no-build)"
         run: |
           rm -rf .lake/build .lake/cache
           if lake build Tengoku.Probe.Hello --no-build > build6.log 2>&1; then echo "::error::built with nothing cached?"; exit 1; else echo "refused as expected: $(tail -1 build6.log)"; fi
