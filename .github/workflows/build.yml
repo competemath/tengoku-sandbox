@@ -1,13 +1,13 @@
-# Round trip of Lake's remote artifact cache with a throwaway S3 store ON THE RUNNER (MinIO), 2026-10-13: no secret, no bucket,
-# nothing persists. It proves the queue's shape end to end: build with `-o`, `lake cache put` (SigV4 upload), then a second,
-# empty workspace does `lake cache get` by git revision (including the backtrack a merge-group commit needs) and
-# `lake build --no-build` succeeds from downloads alone. The real store only changes the two endpoint URLs and the key.
+# THROWAWAY RUN BRANCH (never merged): round trip of Lake's artifact cache with GITHUB RELEASES as the store (free, CDN-served).
+# Lake's cache machinery is unchanged: it looks mappings up by git revision (backtracking to the parent for a merge-group commit),
+# verifies every download against its content hash and fetches artifacts lazily. Only the upload is ours: `gh release upload` of the
+# files `lake cache stage` lays out. The nightly tarball stays the bulk seed; the release carries just the merges since.
 name: build
 on:
   workflow_dispatch:
     inputs:
       target:
-        description: "the build target whose closure is round-tripped (small enough for the runner's disk three times over)"
+        description: "an existing module the probe module imports"
         required: false
         default: "Tengoku.Pfr"
 permissions: {}
@@ -19,15 +19,16 @@ env:
   TENGOKU_VERIFY: require
   TENGOKU_TOPUPS: "1"
   LAKE_ARTIFACT_CACHE: "true"
-  # the throwaway store: MinIO on localhost, created below with a password made up in the job (LAKE_CACHE_KEY is set there)
-  LAKE_CACHE_ARTIFACT_ENDPOINT: http://127.0.0.1:9000/lake/a0
-  LAKE_CACHE_REVISION_ENDPOINT: http://127.0.0.1:9000/lake/r0
-  SCOPE: tengoku-sandbox
+  # Lake's S3-kind endpoints, pointed at this repository's release downloads: an artifact is <endpoint>/<scope>/<hash>.art and the
+  # mappings of a revision <endpoint>/<scope>/<rev>.jsonl, so the scope is a release tag and every file an asset of it
+  LAKE_CACHE_ARTIFACT_ENDPOINT: https://github.com/${{ github.repository }}/releases/download
+  LAKE_CACHE_REVISION_ENDPOINT: https://github.com/${{ github.repository }}/releases/download
+  SCOPE: lake-rt-${{ github.run_id }}
 jobs:
   roundtrip:
     runs-on: ubuntu-latest
-    timeout-minutes: 150
-    permissions: { contents: read }
+    timeout-minutes: 200
+    permissions: { contents: write }   # the throwaway release; deleted at the end
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { fetch-depth: 0, filter: "blob:none", persist-credentials: false }
@@ -39,81 +40,82 @@ jobs:
       - name: Free disk
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache /usr/local/share/boost /usr/share/swift /usr/lib/jvm /usr/share/miniconda /usr/local/share/powershell /usr/local/lib/node_modules /opt/az /usr/local/graalvm /usr/local/share/chromium || true
+          sudo docker image prune --all --force >/dev/null 2>&1 || true
           sudo swapoff -a >/dev/null 2>&1 || true; sudo rm -f /mnt/swapfile /swapfile || true
           df -h / | tail -1
-      - name: A throwaway S3 store on this runner (MinIO), bucket `lake`, anonymous reads
-        run: |
-          mkdir -p "$RUNNER_TEMP/minio"
-          pw="$(openssl rand -hex 16)"   # the store's root credential for this job only; never written to the file
-          echo "::add-mask::$pw"
-          { echo "MINIO_PW=$pw"; echo "LAKE_CACHE_KEY=lake:$pw"; } >> "$GITHUB_ENV"
-          docker run -d --name minio -p 9000:9000 -e MINIO_ROOT_USER=lake -e "MINIO_ROOT_PASSWORD=$pw" -e MINIO_SITE_REGION=auto -v "$RUNNER_TEMP/minio:/data" minio/minio server /data
-          for i in $(seq 1 30); do curl -sf http://127.0.0.1:9000/minio/health/live && break; sleep 1; done
-          docker run --rm --network host -e "MC_PW=$pw" --entrypoint sh minio/mc -c 'mc alias set m http://127.0.0.1:9000 lake "$MC_PW" >/dev/null && mc mb m/lake && mc anonymous set download m/lake'
-          export LAKE_CACHE_KEY="lake:$pw"
-          # Lake's own kind of request: a SigV4 PUT with curl, then an anonymous GET of the same object
-          echo probe > "$RUNNER_TEMP/probe.txt"
-          curl -sf --aws-sigv4 aws:amz:auto:s3 --user "$LAKE_CACHE_KEY" -X PUT -T "$RUNNER_TEMP/probe.txt" http://127.0.0.1:9000/lake/a0/probe.txt
-          test "$(curl -sf http://127.0.0.1:9000/lake/a0/probe.txt)" = probe && echo "store answers: SigV4 PUT (region auto) and anonymous GET work"
-      - name: Seed from the newest published cache (today's way)
+      - name: Seed from the newest published cache (the nightly tarball stays the bulk seed)
         env: { GH_TOKEN: "${{ github.token }}" }
         run: |
           scripts/cache.sh get 2>&1 | tail -3
           { df -h / | tail -1; du -sh .lake/build; } | sed 's/^/after seeding: /'
-      - name: Build the target with the artifact cache on, mappings to a file
-        env: { TARGET: "${{ github.event.inputs.target }}", LAKE_CACHE_DIR: "${{ github.workspace }}/.lake/cache" }
-        run: |
-          start=$(date +%s)
-          lake build "$TARGET" -o out.jsonl 2>&1 | tail -3
-          echo "took $(( $(date +%s) - start )) s; mappings: $(wc -l < out.jsonl) lines"
-          du -sh .lake/build .lake/cache 2>/dev/null; df -h / | tail -1
-      - name: "Upload: lake cache put (artifacts by content hash + the mappings under this revision)"
+      - name: "1. The base's full mappings: lake build Tengoku.All -o (cache on)"
         env: { LAKE_CACHE_DIR: "${{ github.workspace }}/.lake/cache" }
         run: |
           start=$(date +%s)
-          lake cache put out.jsonl --scope "$SCOPE" 2>&1 | tail -5
-          echo "took $(( $(date +%s) - start )) s"
-          echo "objects in the store: $(docker run --rm --network host -e "MC_PW=$MINIO_PW" --entrypoint sh minio/mc -c 'mc alias set m http://127.0.0.1:9000 lake "$MC_PW" >/dev/null && mc ls -r m/lake | wc -l')"; du -sh "$RUNNER_TEMP/minio" | cut -f1 | sed 's/^/store size: /'
-          echo "the revision file: $(docker run --rm --network host -e "MC_PW=$MINIO_PW" --entrypoint sh minio/mc -c 'mc alias set m http://127.0.0.1:9000 lake "$MC_PW" >/dev/null && mc ls -r m/lake/r0')"
-      - name: A second, empty workspace (fresh clone, fresh cache dir) gets everything by revision and builds with --no-build
-        env: { TARGET: "${{ github.event.inputs.target }}", LAKE_CACHE_DIR: "${{ runner.temp }}/cache2" }
+          lake build Tengoku.All -o out-all.jsonl > build1.log 2>&1 || { tail -20 build1.log; exit 1; }
+          echo "compiled: $(grep -c 'Built ' build1.log || true) modules; took $(( $(date +%s) - start )) s; mappings: $(wc -l < out-all.jsonl) lines, $(du -h out-all.jsonl | cut -f1)"
+          du -sh .lake/build .lake/cache; df -h / | tail -1
+      - name: "2. The store: a release named by the scope; the base's mappings as <base-sha>.jsonl"
+        env: { GH_TOKEN: "${{ github.token }}" }
         run: |
-          git clone -q --filter=blob:none "$GITHUB_WORKSPACE" "$RUNNER_TEMP/ws2" && cd "$RUNNER_TEMP/ws2"
-          start=$(date +%s)
-          lake cache get --scope "$SCOPE" 2>&1 | tail -5
-          echo "get took $(( $(date +%s) - start )) s; cache2: $(du -sh "$LAKE_CACHE_DIR" | cut -f1), $(find "$LAKE_CACHE_DIR" -type f | wc -l) files"
-          start=$(date +%s)
-          lake build "$TARGET" --no-build 2>&1 | tail -2
-          echo "--no-build from downloads alone: ok, took $(( $(date +%s) - start )) s"
-      - name: "The merge-group case: a commit on top has no mappings of its own; Lake backtracks to the parent"
-        env: { TARGET: "${{ github.event.inputs.target }}", LAKE_CACHE_DIR: "${{ runner.temp }}/cache3" }
+          gh release create "$SCOPE" -R "$GITHUB_REPOSITORY" --title "lake cache round trip $GITHUB_RUN_ID (throwaway)" --notes "deleted by the run that made it" --prerelease --target "$GITHUB_SHA"
+          cp out-all.jsonl "$GITHUB_SHA.jsonl" && gh release upload "$SCOPE" "$GITHUB_SHA.jsonl" -R "$GITHUB_REPOSITORY"
+          echo "the revision file is served at: $LAKE_CACHE_REVISION_ENDPOINT/$SCOPE/$GITHUB_SHA.jsonl"
+          curl -sfL -o /dev/null -w "GET %{http_code} after %{num_redirects} redirect(s), %{size_download} bytes\n" "$LAKE_CACHE_REVISION_ENDPOINT/$SCOPE/$GITHUB_SHA.jsonl"
+      - name: "3. A group on top: build it, stage ONLY its own new mappings, upload them with gh"
+        env: { GH_TOKEN: "${{ github.token }}", TARGET: "${{ github.event.inputs.target }}", LAKE_CACHE_DIR: "${{ github.workspace }}/.lake/cache" }
         run: |
-          git clone -q --filter=blob:none "$GITHUB_WORKSPACE" "$RUNNER_TEMP/ws3" && cd "$RUNNER_TEMP/ws3"
           mkdir -p Tengoku/Probe && printf 'import %s\n\ntheorem Tengoku.Probe.hello : 1 + 1 = 2 := rfl\n' "$TARGET" > Tengoku/Probe/Hello.lean
           git -c user.name=probe -c user.email=probe@example.invalid add -A && git -c user.name=probe -c user.email=probe@example.invalid commit -qm "a group on top"
-          lake cache get --scope "$SCOPE" 2>&1 | tail -4
+          rev="$(git rev-parse HEAD)"; echo "group commit $rev"
           start=$(date +%s)
-          lake build Tengoku.Probe.Hello -o out3.jsonl 2>&1 | tail -3
-          echo "the group built in $(( $(date +%s) - start )) s on top of downloads; mappings of this build: $(wc -l < out3.jsonl) lines"
-          # the group's own new mappings: its lines minus every mapping the store already had (the revision files `lake cache get`
-          # downloaded): a deterministic set difference, staged for a privileged uploader
-          python3 - "$LAKE_CACHE_DIR" <<'PY'
-          import glob, sys
-          had = set()
-          for f in glob.glob(sys.argv[1] + "/revisions/**/*.jsonl", recursive=True):
-              had.update(l.strip() for l in open(f) if l.strip())
-          mine = [l.strip() for l in open("out3.jsonl") if l.strip()]
-          new = [l for l in mine if l not in had]
+          lake build Tengoku.Probe.Hello -o out-probe.jsonl 2>&1 | tail -2
+          echo "the group built in $(( $(date +%s) - start )) s; its build's mappings: $(wc -l < out-probe.jsonl) lines"
+          python3 - <<'PY'
+          base = set(l.strip() for l in open("out-all.jsonl") if l.strip())
+          mine = [l.strip() for l in open("out-probe.jsonl") if l.strip()]
+          new = [l for l in mine if l not in base]
           open("out-new.jsonl", "w").write("".join(l + "\n" for l in new))
-          print(f"this build's mappings: {len(mine)}; already in the store: {len(mine) - len(new)}; new (the group's own): {len(new)}")
+          print(f"already in the base: {len(mine) - len(new)}; new (the group's own): {len(new)}")
           PY
           lake cache stage out-new.jsonl staging 2>&1 | tail -1
-          echo "staged for upload: $(find staging -type f | wc -l) files, $(du -sh staging | cut -f1)"
-          lake cache put-staged staging --scope "$SCOPE" --rev "$(git rev-parse HEAD)" 2>&1 | tail -3
-          echo "the store now has a revision file for the group's commit: $(docker run --rm --network host -e "MC_PW=$MINIO_PW" --entrypoint sh minio/mc -c 'mc alias set m http://127.0.0.1:9000 lake "$MC_PW" >/dev/null && mc ls -r m/lake/r0' | wc -l) revision files"
-      - name: "Control: an empty workspace with the store gone must not build with --no-build"
-        env: { TARGET: "${{ github.event.inputs.target }}", LAKE_CACHE_DIR: "${{ runner.temp }}/cache4" }
+          echo "staged: $(find staging -type f | wc -l) files, $(du -sh staging | cut -f1)"; ls staging | head -5
+          # the upload: every staged artifact, and the group's mappings under its revision; the whole revision's mappings (base + new) so a
+          # consumer that finds this revision needs no second file
+          cat out-all.jsonl out-new.jsonl > "$rev.jsonl"
+          start=$(date +%s)
+          find staging -name '*.art' -print0 | xargs -0 -n 20 -P 4 gh release upload "$SCOPE" -R "$GITHUB_REPOSITORY" --clobber
+          gh release upload "$SCOPE" "$rev.jsonl" -R "$GITHUB_REPOSITORY" --clobber
+          echo "uploaded in $(( $(date +%s) - start )) s"
+          echo "rev=$rev" >> "$GITHUB_ENV"
+      - name: "4. A fresh runner's view: tarball seed + lake cache get (mappings only) + lake build --no-build; the artifact comes from the release"
+        env: { GH_TOKEN: "${{ github.token }}", LAKE_CACHE_DIR: "${{ runner.temp }}/cache2" }
         run: |
-          docker rm -f minio >/dev/null
-          git clone -q --filter=blob:none "$GITHUB_WORKSPACE" "$RUNNER_TEMP/ws4" && cd "$RUNNER_TEMP/ws4"
-          if lake cache get --scope "$SCOPE" >/dev/null 2>&1 && lake build "$TARGET" --no-build >/dev/null 2>&1; then echo "::error::built with no store?"; exit 1; else echo "refused as expected"; fi
+          git clone -q --filter=blob:none "$GITHUB_WORKSPACE" "$RUNNER_TEMP/ws2" && cd "$RUNNER_TEMP/ws2"
+          git remote set-url origin "https://github.com/$GITHUB_REPOSITORY"   # cache.sh wants the real origin for the ancestor check of the cache
+          test "$(git rev-parse HEAD)" = "$rev"
+          scripts/cache.sh get 2>&1 | tail -2
+          start=$(date +%s)
+          lake cache get --scope "$SCOPE" --mappings-only 2>&1 | tail -4
+          echo "get (mappings only) took $(( $(date +%s) - start )) s"
+          start=$(date +%s)
+          lake build Tengoku.Probe.Hello --no-build -v 2>&1 | grep -iE "download|fetch|Built|error|no-build" | head -6
+          echo "--no-build with the artifact fetched lazily from the release: ok, took $(( $(date +%s) - start )) s"
+          ls -la .lake/build/lib/lean/Tengoku/Probe/ 2>/dev/null | head -4
+      - name: "5. The merge-group case: a commit on top has no mappings; Lake backtracks to the parent"
+        env: { GH_TOKEN: "${{ github.token }}", LAKE_CACHE_DIR: "${{ runner.temp }}/cache2" }
+        run: |
+          cd "$RUNNER_TEMP/ws2"
+          echo "touched" >> README.md && git -c user.name=probe -c user.email=probe@example.invalid commit -qam "the next group"
+          lake cache get --scope "$SCOPE" --mappings-only 2>&1 | tail -3
+          rm -rf .lake/build/lib/lean/Tengoku/Probe   # make Lake need the artifact again
+          lake build Tengoku.Probe.Hello --no-build 2>&1 | tail -1 && echo "backtrack to the parent's mappings: ok"
+      - name: "6. Control: a scope with no release must not build with --no-build"
+        env: { LAKE_CACHE_DIR: "${{ runner.temp }}/cache3" }
+        run: |
+          cd "$RUNNER_TEMP/ws2"; rm -rf .lake/build/lib/lean/Tengoku/Probe
+          if lake cache get --scope "lake-rt-bogus" --mappings-only >/dev/null 2>&1 && lake build Tengoku.Probe.Hello --no-build >/dev/null 2>&1; then echo "::error::built with no store?"; exit 1; else echo "refused as expected"; fi
+      - name: Delete the throwaway release
+        if: always()
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: gh release delete "$SCOPE" -R "$GITHUB_REPOSITORY" --cleanup-tag -y || true
