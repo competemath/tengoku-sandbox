@@ -19,10 +19,9 @@ env:
   TENGOKU_VERIFY: require
   TENGOKU_TOPUPS: "1"
   LAKE_ARTIFACT_CACHE: "true"
-  # the throwaway store: MinIO on localhost, created below; the key is MinIO's default root credential, nothing of ours
+  # the throwaway store: MinIO on localhost, created below with a password made up in the job (LAKE_CACHE_KEY is set there)
   LAKE_CACHE_ARTIFACT_ENDPOINT: http://127.0.0.1:9000/lake/a0
   LAKE_CACHE_REVISION_ENDPOINT: http://127.0.0.1:9000/lake/r0
-  LAKE_CACHE_KEY: minioadmin:minioadmin
   SCOPE: tengoku-sandbox
 jobs:
   roundtrip:
@@ -45,9 +44,13 @@ jobs:
       - name: A throwaway S3 store on this runner (MinIO), bucket `lake`, anonymous reads
         run: |
           mkdir -p "$RUNNER_TEMP/minio"
-          docker run -d --name minio -p 9000:9000 -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin -e MINIO_SITE_REGION=auto -v "$RUNNER_TEMP/minio:/data" minio/minio server /data
+          pw="$(openssl rand -hex 16)"   # the store's root credential for this job only; never written to the file
+          echo "::add-mask::$pw"
+          { echo "MINIO_PW=$pw"; echo "LAKE_CACHE_KEY=lake:$pw"; } >> "$GITHUB_ENV"
+          docker run -d --name minio -p 9000:9000 -e MINIO_ROOT_USER=lake -e "MINIO_ROOT_PASSWORD=$pw" -e MINIO_SITE_REGION=auto -v "$RUNNER_TEMP/minio:/data" minio/minio server /data
           for i in $(seq 1 30); do curl -sf http://127.0.0.1:9000/minio/health/live && break; sleep 1; done
-          docker run --rm --network host --entrypoint sh minio/mc -c "mc alias set m http://127.0.0.1:9000 minioadmin minioadmin >/dev/null && mc mb m/lake && mc anonymous set download m/lake"
+          docker run --rm --network host -e "MC_PW=$pw" --entrypoint sh minio/mc -c 'mc alias set m http://127.0.0.1:9000 lake "$MC_PW" >/dev/null && mc mb m/lake && mc anonymous set download m/lake'
+          export LAKE_CACHE_KEY="lake:$pw"
           # Lake's own kind of request: a SigV4 PUT with curl, then an anonymous GET of the same object
           echo probe > "$RUNNER_TEMP/probe.txt"
           curl -sf --aws-sigv4 aws:amz:auto:s3 --user "$LAKE_CACHE_KEY" -X PUT -T "$RUNNER_TEMP/probe.txt" http://127.0.0.1:9000/lake/a0/probe.txt
@@ -70,8 +73,8 @@ jobs:
           start=$(date +%s)
           lake cache put out.jsonl --scope "$SCOPE" 2>&1 | tail -5
           echo "took $(( $(date +%s) - start )) s"
-          echo "objects in the store: $(docker run --rm --network host --entrypoint sh minio/mc -c 'mc alias set m http://127.0.0.1:9000 minioadmin minioadmin >/dev/null && mc ls -r m/lake | wc -l')"; du -sh "$RUNNER_TEMP/minio" | cut -f1 | sed 's/^/store size: /'
-          echo "the revision file: $(docker run --rm --network host --entrypoint sh minio/mc -c 'mc alias set m http://127.0.0.1:9000 minioadmin minioadmin >/dev/null && mc ls -r m/lake/r0')"
+          echo "objects in the store: $(docker run --rm --network host -e "MC_PW=$MINIO_PW" --entrypoint sh minio/mc -c 'mc alias set m http://127.0.0.1:9000 lake "$MC_PW" >/dev/null && mc ls -r m/lake | wc -l')"; du -sh "$RUNNER_TEMP/minio" | cut -f1 | sed 's/^/store size: /'
+          echo "the revision file: $(docker run --rm --network host -e "MC_PW=$MINIO_PW" --entrypoint sh minio/mc -c 'mc alias set m http://127.0.0.1:9000 lake "$MC_PW" >/dev/null && mc ls -r m/lake/r0')"
       - name: A second, empty workspace (fresh clone, fresh cache dir) gets everything by revision and builds with --no-build
         env: { TARGET: "${{ github.event.inputs.target }}", LAKE_CACHE_DIR: "${{ runner.temp }}/cache2" }
         run: |
@@ -107,7 +110,7 @@ jobs:
           lake cache stage out-new.jsonl staging 2>&1 | tail -1
           echo "staged for upload: $(find staging -type f | wc -l) files, $(du -sh staging | cut -f1)"
           lake cache put-staged staging --scope "$SCOPE" --rev "$(git rev-parse HEAD)" 2>&1 | tail -3
-          echo "the store now has a revision file for the group's commit: $(docker run --rm --network host --entrypoint sh minio/mc -c 'mc alias set m http://127.0.0.1:9000 minioadmin minioadmin >/dev/null && mc ls -r m/lake/r0' | wc -l) revision files"
+          echo "the store now has a revision file for the group's commit: $(docker run --rm --network host -e "MC_PW=$MINIO_PW" --entrypoint sh minio/mc -c 'mc alias set m http://127.0.0.1:9000 lake "$MC_PW" >/dev/null && mc ls -r m/lake/r0' | wc -l) revision files"
       - name: "Control: an empty workspace with the store gone must not build with --no-build"
         env: { TARGET: "${{ github.event.inputs.target }}", LAKE_CACHE_DIR: "${{ runner.temp }}/cache4" }
         run: |
