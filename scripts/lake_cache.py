@@ -16,7 +16,8 @@ holds at most 1000 assets, so a day's merges fit and a new nightly starts a new 
                                              line 1 — `lake cache stage` refuses a mappings file without it
   pack   [--assets N] [--budget-mb N]        stage out-new.jsonl and pack it as delta-out/d-<HEAD>.tar.zst — or, over the size budget or with the
                                              release nearly full, write delta-out/needs-nightly instead (the merge lands; a nightly follows)
-  check  [--fail]                            modules build.log says were COMPILED that are not in targets-only.txt: restores that missed
+  check  [--fail]                            modules build.log says were COMPILED that were not asked for: not in targets-only.txt, not changed by the
+                                             group (BASE...HEAD) and not importing a changed module: restores that missed
 
 No command takes a path: the files are the workspace's fixed names (the queue's working directory), and the commit is HEAD's. Nothing typed on a
 command line becomes a path or a process argument.
@@ -42,6 +43,8 @@ from pathlib import Path
 
 DELTA = re.compile(r"^d-([0-9a-f]{40})\.tar\.zst$")
 BUILT = re.compile(r"\bBuilt\s+(\S+)")
+IMPORT = re.compile(r"^import\s+(\S+)", re.M)  # the header's import lines, at the start of a line
+TREE_ROOT_FILE = "Tengoku.lean"  # the library's root module, next to the Tengoku/ directory
 LAKE = Path(".lake")
 BASE_FILE = LAKE / ".cache-base"  # "<tag> <commit>", written by cache.sh get
 APPLIED = LAKE / ".deltas-applied"  # one asset name per line
@@ -88,6 +91,48 @@ def diff(out: list[str], had: set[str]) -> list[str]:
 def compiled(log: str) -> set[str]:
     """Modules a Lake build log says it built (a module that was only replayed or restored is not built)."""
     return {m.group(1) for m in BUILT.finditer(log)}
+
+
+def module_of(path: str) -> str | None:
+    """The Lean module a tracked file is (None for anything that is not a module of the tree)."""
+    if not path.endswith(".lean") or not (path == TREE_ROOT_FILE or path.startswith("Tengoku/")):
+        return None
+    return path[: -len(".lean")].replace("/", ".")
+
+
+def imports_of(text: str) -> list[str]:
+    return IMPORT.findall(text)
+
+
+def downstream(changed: set[str], graph: dict[str, list[str]]) -> set[str]:
+    """The changed modules and every module that imports one of them, however far: what Lake must compile when only these inputs changed."""
+    importers: dict[str, list[str]] = {}
+    for mod, deps in graph.items():
+        for dep in deps:
+            importers.setdefault(dep, []).append(mod)
+    seen, todo = set(changed), list(changed)
+    while todo:
+        for mod in importers.get(todo.pop(), []):
+            if mod not in seen:
+                seen.add(mod)
+                todo.append(mod)
+    return seen
+
+
+def import_graph() -> dict[str, list[str]]:
+    """module -> the modules it imports, from the tree's own files (the working directory is the checkout)."""
+    graph = {}
+    for path in [Path(TREE_ROOT_FILE), *sorted(Path("Tengoku").rglob("*.lean"))]:
+        mod = module_of(path.as_posix())
+        if mod and path.is_file():
+            graph[mod] = imports_of(path.read_text(encoding="utf-8", errors="replace"))
+    return graph
+
+
+def changed_modules(base: str) -> set[str]:
+    """The modules whose files the group changes: git diff <the queue's base>...HEAD."""
+    out = run("git", "diff", "--name-only", f"{base}...HEAD", "--", "Tengoku", TREE_ROOT_FILE).stdout.split("\n")
+    return {m for m in map(module_of, out) if m}
 
 
 def decide(size: int, assets: int, budget: int, cap: int = ASSET_CAP) -> str:
@@ -366,8 +411,19 @@ def cmd_diff(a) -> int:
 def cmd_check(a) -> int:
     targets = set(read_lines(TARGETS))
     built = compiled(BUILD_LOG.read_text(encoding="utf-8", errors="replace"))
-    missed = sorted(built - targets)
-    print(json.dumps({"targets": len(targets), "compiled": len(built), "misses": len(missed), "first": missed[:5]}))
+    base = os.environ.get("BASE", "")  # the merge group's base commit (the queue's workflow sets it); without it nothing counts as changed
+    expected = set(targets)
+    changed: set[str] = set()
+    if base:
+        if not re.fullmatch(r"[0-9a-f]{40}", base):
+            print(f"check: BASE is {base!r}, not a commit id", file=sys.stderr)
+            return 2
+        changed = changed_modules(base)
+        expected |= downstream(changed, import_graph())
+    missed = sorted(built - expected)
+    print(
+        json.dumps({"targets": len(targets), "changed": len(changed), "compiled": len(built), "misses": len(missed), "first": missed[:5]})
+    )
     return 1 if (a.fail and missed) else 0
 
 

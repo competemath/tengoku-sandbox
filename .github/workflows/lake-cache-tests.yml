@@ -178,7 +178,11 @@ jobs:
           scripts/cache.sh get 2>&1 | tail -2
           start=$(date +%s)
           python3 scripts/lake_cache.py restore --fresh | tee restore.json
-          python3 -c 'import json; s=json.load(open("restore.json")); print(f"{s[\"revs\"]} merge(s) since {s[\"tag\"]}: {len(s[\"applied\"])} applied, {len(s[\"skipped\"])} without a delta, {len(s[\"refused\"])} refused")' | tee -a "$GITHUB_STEP_SUMMARY"
+          python3 - <<'PY' | tee -a "$GITHUB_STEP_SUMMARY"
+          import json
+          s = json.load(open("restore.json"))
+          print(f"{s['revs']} merge(s) since {s['tag']}: {len(s['applied'])} applied, {len(s['skipped'])} without a delta, {len(s['refused'])} refused")
+          PY
           echo "restore took $(( $(date +%s) - start )) s" | tee -a "$GITHUB_STEP_SUMMARY"
       - name: "lake build Tengoku.All --no-build: every output of every merge since the nightly came back"
         run: |
