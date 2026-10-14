@@ -62,8 +62,10 @@ import json, subprocess
 s = json.load(open("schemas/sources.json"))
 src = s["corpora"]["equational-theories"]
 url, rev = src["repo"], src["commit"]
-subprocess.run(["git", "clone", "-q", url, "corpora/equational-theories"], check=True)
-subprocess.run(["git", "-C", "corpora/equational-theories", "checkout", "-q", rev], check=True)
+# the pinned commit is not on any branch of the upstream (a clone does not have it): fetched by its hash
+subprocess.run(["git", "init", "-q", "corpora/equational-theories"], check=True)
+subprocess.run(["git", "-C", "corpora/equational-theories", "fetch", "-q", "--depth", "1", url, rev], check=True)
+subprocess.run(["git", "-C", "corpora/equational-theories", "checkout", "-q", "FETCH_HEAD"], check=True)
 PY
 }
 promotion() {  # NAME NRECORDS [proof]  -> opens promote/deltas-NAME, records its PR number
@@ -92,11 +94,11 @@ if [ "$MODE" = "--report" ]; then column -t -s $'\t' "$DR"; exit 0; fi
 : > "$DR"
 log "=== deltas T2 on $REPO (cache $(cache_tag)); assets now: $(assets | wc -l)"
 log "=== 1. three clean promotion PRs, queued together (stacked groups)"
-promotion clean-1 3; promotion clean-2 3; promotion clean-3 3
+promotion clean-1 3 || exit 1; promotion clean-2 3 || exit 1; promotion clean-3 3 || exit 1
 for s in clean-1 clean-2 clean-3; do enqueue "$(pr_of dl-$s)"; done
 for s in clean-1 clean-2 clean-3; do judge_merged "$s"; done
 log "=== 2. a broken PR between two clean ones, queued in order"
-promotion a 2; promotion broken 1 ':= by\n  exact (by decide : (1 : Nat) + 1 = 3)'; promotion b 2
+promotion a 2 || exit 1; promotion broken 1 ':= by\n  exact (by decide : (1 : Nat) + 1 = 3)' || exit 1; promotion b 2 || exit 1
 for s in a broken b; do enqueue "$(pr_of dl-$s)"; sleep 20; done
 judge_merged a
 n=$(pr_of dl-broken); got=$(wait_pr "$n" 45); sha=$(gh pr view "$n" -R "$REPO" --json headRefOid -q .headRefOid); v=OK; [ "$got" = ejected ] || v=WRONG
@@ -110,7 +112,7 @@ n=$(pr_of dl-docs-only); enqueue "$n"; got=$(wait_pr "$n" 30); l=$(qb_log "$n");
 grep -q "no Lean targets in this group" <<< "$l" || v="$v(targets?)"; sha=$(merge_sha "$n"); assets | grep -q "d-$sha" && v="$v(a delta for a docs change?)"
 record dl-docs-only "$n" "merged, no delta" "$got" "$v"
 log "=== 4. the gate cannot publish (knob: TOPUP_TEST_FAIL)"
-promotion publish-fail 1; n=$(pr_of dl-publish-fail)
+promotion publish-fail 1 || exit 1; n=$(pr_of dl-publish-fail)
 knob=$(gh variable get TOPUP_TEST_FAIL -R "$REPO" 2>/dev/null || true)
 if [ "$knob" = "$n" ]; then
   enqueue "$n"; got=$(wait_pr "$n" 45); v=OK; [ "$got" = ejected ] || v=WRONG
@@ -122,7 +124,7 @@ fi
 log "=== 5. over the delta budget (knob: TENGOKU_DELTA_BUDGET_MB = 0)"
 knob=$(gh variable get TENGOKU_DELTA_BUDGET_MB -R "$REPO" 2>/dev/null || true)
 if [ "$knob" = 0 ]; then
-  promotion over-budget 1; n=$(pr_of dl-over-budget); t0=$(date -u +%Y-%m-%dT%H:%M:%SZ); enqueue "$n"; got=$(wait_pr "$n" 45)
+  promotion over-budget 1 || exit 1; n=$(pr_of dl-over-budget); t0=$(date -u +%Y-%m-%dT%H:%M:%SZ); enqueue "$n"; got=$(wait_pr "$n" 45)
   l=$(qb_log "$n"); dec=$(json_field decision <<< "$l"); v=OK; [ "$got" = merged ] || v=WRONG; [ "$dec" = "needs-nightly:over-budget" ] || v="$v(decision=$dec)"
   sha=$(merge_sha "$n"); assets | grep -q "d-$sha" && v="$v(a delta although over budget?)"; [ "$(build_runs_after "$t0")" -ge 1 ] || v="$v(no nightly started)"
   record dl-over-budget "$n" "merged, needs-nightly, nightly started" "$got decision=$dec" "$v"

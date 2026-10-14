@@ -197,13 +197,23 @@ class CampaignFixture(unittest.TestCase):
         import json
 
         src = json.loads((ROOT / "schemas" / "sources.json").read_text(encoding="utf-8"))["corpora"]["equational-theories"]
-        self.assertEqual(calls[0], ["git", "clone", "-q", src["repo"], "corpora/equational-theories"])
-        self.assertEqual(calls[1], ["git", "-C", "corpora/equational-theories", "checkout", "-q", src["commit"]])
+        dest = "corpora/equational-theories"
+        self.assertEqual(calls[0], ["git", "init", "-q", dest])
+        self.assertEqual(
+            calls[1],
+            ["git", "-C", dest, "fetch", "-q", "--depth", "1", src["repo"], src["commit"]],
+            "fetched by hash: the pin is on no branch",
+        )
+        self.assertEqual(calls[2], ["git", "-C", dest, "checkout", "-q", "FETCH_HEAD"])
 
     def test_a_scenario_whose_fixture_cannot_be_built_stops_instead_of_opening_a_pull_request(self):
         text = self.DELTAS.read_text(encoding="utf-8")
         self.assertIn("corpus || {", text)
         self.assertRegex(text, r"generate\.py --corpus [^\n]*\|\| \{ log \"FIXTURE-ERROR")
+        # and the run ends there: no judging or queueing of a pull request that was never opened
+        calls = re.findall(r"(?m)(?:^|; |^  )promotion [a-z0-9-]+ \d+(?: '[^']*')?( \|\| exit 1)?", text)
+        self.assertEqual(len(calls), 8, "promotion calls in the main flow")
+        self.assertTrue(all(calls), "every promotion call ends the run when it fails")
 
 
 class Verdict(unittest.TestCase):
