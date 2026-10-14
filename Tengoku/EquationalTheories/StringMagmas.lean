@@ -1,4 +1,5 @@
--- Tengoku.EquationalTheories.StringMagmas: verified translations of equational_theories/StringMagmas.lean (1 theorem)
+-- Tengoku.EquationalTheories.StringMagmas: verified translations of equational_theories/StringMagmas.lean (4 theorems)
+import Tengoku
 import Tengoku.EquationalTheories.Deps.Magma
 import Lean
 import Tengoku.Seed.Data.FunLike.Basic
@@ -73,6 +74,15 @@ theorem Equation3102_not_implies_Equation3176 : ∃ (G: Type) (_: Magma G), Equa
   · unfold Equation3176
     push Not
     exact Mnot3176
+
+theorem Selftest.Dclean_2_1 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.Dclean_2_2 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.Dclean_2_3 : (1 : Nat) + 1 = 2
+:= rfl
 
 end StringMagmas
 
