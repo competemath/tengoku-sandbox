@@ -57,11 +57,12 @@ def inside(path: str | Path) -> Path:
     """The absolute, symlink-free form of a path given on the command line, which must lie under the working directory or the temp directory
     (RUNNER_TEMP on a runner): a path argument never leaves the workspace, and being absolute it can never be read as an option by the tool it is
     handed to."""
-    real = Path(os.path.realpath(path))
-    roots = [Path(os.path.realpath(r)) for r in (Path.cwd(), tempfile.gettempdir(), os.environ.get("RUNNER_TEMP") or tempfile.gettempdir())]
-    if not any(real == r or r in real.parents for r in roots):
-        raise ValueError(f"{str(path)!r} is outside the workspace and the temp directory")
-    return real
+    real = os.path.realpath(path)
+    for root in (os.getcwd(), tempfile.gettempdir(), os.environ.get("RUNNER_TEMP") or tempfile.gettempdir()):
+        base = os.path.realpath(root)
+        if os.path.commonpath([base, real]) == base:
+            return Path(real)
+    raise ValueError(f"{str(path)!r} is outside the workspace and the temp directory")
 
 
 def read_lines(path: Path) -> list[str]:
@@ -313,29 +314,36 @@ def cmd_restore(a) -> int:
 # ---- pack ----------------------------------------------------------------------------------------------------------------
 
 
+def stage_and_pack(new: Path, delta: Path) -> int | None:
+    """lake cache stage <new> into a scratch directory and pack it as <delta>; the number of staged files, or None when Lake refuses."""
+    with tempfile.TemporaryDirectory(prefix="stage-") as d:
+        stage = Path(d) / "stage"
+        r = subprocess.run(["lake", "cache", "stage", str(new), str(stage)], capture_output=True, text=True)
+        if r.returncode != 0:
+            print(f"lake cache stage failed: {r.stderr.strip()[:300]}", file=sys.stderr)
+            return None
+        files = sum(1 for p in stage.rglob("*") if p.is_file())
+        pack_dir(stage, delta)
+    return files
+
+
 def cmd_pack(a) -> int:
     if not re.fullmatch(r"[0-9a-f]{40}", a.rev):
         print(f"--rev is a 40-hex commit id, not {a.rev!r}", file=sys.stderr)
         return 2
     out = a.out
     out.mkdir(parents=True, exist_ok=True)
-    rows = read_lines(a.new)
-    if len(rows) <= 1:
+    if len(read_lines(a.new)) <= 1:
         (out / "empty").write_text("this group changed no build output\n")
         print(json.dumps({"decision": "empty", "files": 0, "bytes": 0}))
         return 0
-    budget = int(a.budget_mb if a.budget_mb is not None else (os.environ.get("TENGOKU_DELTA_BUDGET_MB") or 1500)) * 1024 * 1024
-    with tempfile.TemporaryDirectory(prefix="stage-") as d:
-        stage = Path(d) / "stage"
-        r = subprocess.run(["lake", "cache", "stage", str(a.new), str(stage)], capture_output=True, text=True)
-        if r.returncode != 0:
-            print(f"lake cache stage failed: {r.stderr.strip()[:300]}", file=sys.stderr)
-            return 1
-        files = sum(1 for p in stage.rglob("*") if p.is_file())
-        delta = out / f"d-{a.rev}.tar.zst"
-        pack_dir(stage, delta)
+    budget_mb = a.budget_mb if a.budget_mb is not None else int(os.environ.get("TENGOKU_DELTA_BUDGET_MB") or 1500)
+    delta = out / f"d-{a.rev}.tar.zst"
+    files = stage_and_pack(a.new, delta)
+    if files is None:
+        return 1
     size = delta.stat().st_size
-    decision = decide(size, int(a.release_assets or 0), budget)
+    decision = decide(size, int(a.release_assets or 0), budget_mb * 1024 * 1024)
     if decision != "publish":
         delta.unlink()
         (out / "needs-nightly").write_text(decision + "\n")
