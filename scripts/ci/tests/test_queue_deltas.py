@@ -210,17 +210,23 @@ class CampaignFixture(unittest.TestCase):
         text = self.DELTAS.read_text(encoding="utf-8")
         self.assertIn("corpus || {", text)
         self.assertRegex(text, r"generate\.py --corpus [^\n]*\|\| \{ log \"FIXTURE-ERROR")
-        # stacked promotion PRs must not conflict: each edits its own module, with the record next to that module's rows, and leaves All.lean alone
-        self.assertIn('--only "$sp"', text)
+        # the generator is run for the one module and Tengoku/All.lean is put back (a real promotion never touches it)
+        self.assertIn('--only "$SRC_PATH"', text)
         self.assertIn("git checkout -q -- Tengoku/All.lean", text)
-        sources = re.findall(r"^    ([a-z0-9-]+)\) echo (equational_theories/\S+\.lean) ;;$", text, re.M)
-        self.assertEqual(len(sources), 8)
-        self.assertEqual(len({sp for _, sp in sources}), 8, "one module per scenario")
-        self.assertIn("lines.insert(at,", text)
-        # and the run ends there: no judging or queueing of a pull request that was never opened
-        calls = re.findall(r"(?m)(?:^|; |^  )promotion [a-z0-9-]+ \d+(?: '[^']*')?( \|\| exit 1)?", text)
-        self.assertEqual(len(calls), 8, "promotion calls in the main flow")
-        self.assertTrue(all(calls), "every promotion call ends the run when it fails")
+        # promotions run ONE AT A TIME: data files are append-only (the gate refuses any other edit), so two open together conflict in the queue
+        # the moment the first merges. Every promotion call ends the run when it fails, and each is opened after the previous one was judged.
+        calls = [
+            m
+            for m in re.finditer(
+                r"(?m)^(?!promotion\(\)).*?\bpromotion (?:[a-z0-9-]+|\"\$1\") (?:\d+|\"\$2\")(?: '[^']*')?( \|\| exit 1)?", text
+            )
+        ]
+        self.assertGreaterEqual(len(calls), 4)
+        self.assertTrue(all(m.group(1) for m in calls), "every promotion call ends the run when it fails")
+        order = [text.index(k) for k in ("clean clean-1 3", "clean clean-2 3", "promotion broken 1", "clean clean-3 2")]
+        self.assertEqual(order, sorted(order), "opened in the designed order")
+        self.assertNotRegex(text, r"for s in clean-1 clean-2", "no scenario PR is opened before the previous one was judged")
+        self.assertNotIn("lines.insert(", text, "a record is appended, never inserted (append-only data files)")
 
 
 class Verdict(unittest.TestCase):

@@ -6,9 +6,14 @@
 #   scripts/ci/campaign/deltas.sh --report   # print the results table again
 #
 # What each scenario proves (the invariants of docs/testing.md, "The delta store"):
-#   dl-clean-1..3   three promotion PRs queued together: each compiles ONLY its own modules (restores that missed = 0), each publishes a delta
-#   dl-a/broken/b   a broken PR between two clean ones: the clean ones merge with deltas, the broken one is ejected and publishes none,
-#                   and no delta is applied for a commit that is not in main's history (orphans are listed, never used)
+#   dl-clean-1      a promotion PR: compiles ONLY its own modules (restores that missed = 0), publishes a delta NAMED BY ITS MERGE COMMIT on main
+#   dl-clean-2      the next one: its queue build restores the first's delta (the check that the squash-merged commit and the delta name agree)
+#   dl-broken       a broken promotion: ejected, publishes no delta
+#   dl-clean-3      a clean one after the ejection: merges with a delta; no delta is applied for a commit that is not in main's history
+#                   (orphans are listed, never used)
+# The scenarios run ONE AT A TIME, each from the main the previous left: data files are append-only (the gate refuses any other edit), so two
+# promotions open together conflict in the queue as soon as the first merges. Each promotion PR touches data/trusted/, which the code owner
+# approves: the script opens the PR, says so in the log, and waits for the approval and the merge (up to 45 min per scenario).
 #   dl-docs-only    a group that changes no build output merges with no delta and the gate green
 #   dl-publish-fail (needs the repository variable TOPUP_TEST_FAIL = its PR number) the gate cannot publish: removed from the queue with
 #                   the "not because of your change" comment, nothing merged, no delta
@@ -68,46 +73,23 @@ subprocess.run(["git", "-C", "corpora/equational-theories", "fetch", "-q", "--de
 subprocess.run(["git", "-C", "corpora/equational-theories", "checkout", "-q", "FETCH_HEAD"], check=True)
 PY
 }
-# The module (source file) each scenario edits: a distinct small leaf module each, so that groups stacked in the queue merge without a conflict.
-# Appending to the end of data/trusted/ (what a single promotion does) made the second of two stacked PRs conflict with the first, so a record goes
-# next to its own module's rows instead.
-src_of() {
-  case "$1" in
-    clean-1) echo equational_theories/Completeness.lean ;;
-    clean-2) echo equational_theories/StringMagmas.lean ;;
-    clean-3) echo equational_theories/Sheffer.lean ;;
-    a) echo equational_theories/InfModel.lean ;;
-    broken) echo equational_theories/ManuallyProved/Equation1447.lean ;;
-    b) echo equational_theories/Generated/Constant.lean ;;
-    publish-fail) echo equational_theories/ManuallyProved/Equation677.lean ;;
-    over-budget) echo equational_theories/Generated/Greedy/OrLemmas.lean ;;
-  esac
-}
+# One promotion at a time, each opened from the main the previous one left. A promotion appends its records at the end of
+# data/trusted/equational-theories.jsonl (the gate refuses any other edit of a data file), so two promotions open at once conflict in the queue
+# the moment the first merges (reproduced with git merge), and the library is the only one the promotion class can promote.
 promotion() {  # NAME NRECORDS [proof]  -> opens promote/deltas-NAME, records its PR number
-  local name=$1 n=$2 proof=${3:-":= rfl"} i sp
-  sp=$(src_of "$name"); [ -n "$sp" ] || { log "FIXTURE-ERROR $name: no module assigned"; return 1; }
+  local name=$1 n=$2 proof=${3:-":= rfl"} i
   cd "$WORK" && git fetch -q origin main && git checkout -q -B "promote/deltas-$name" origin/main || return 1
   corpus || { log "FIXTURE-ERROR $name: the corpus could not be fetched"; return 1; }
-  for i in $(seq 1 "$n"); do rec "D${name//-/_}_$i" "proof=$proof" "status=trusted" "source_path=$sp" "source_url=${SRC_URL%"$SRC_PATH"}$sp" | python3 -c '
-import json, sys, datetime
-r = json.loads(sys.stdin.read())
-r["promoted_at"] = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-p = "data/trusted/equational-theories.jsonl"
-lines = open(p, encoding="utf-8").read().split("\n")
-if lines and lines[-1] == "":
-    lines.pop()
-at = max((k for k, ln in enumerate(lines) if json.loads(ln).get("source_path") == r["source_path"]), default=len(lines) - 1) + 1
-lines.insert(at, json.dumps(r, ensure_ascii=False))
-open(p, "w", encoding="utf-8").write("\n".join(lines) + "\n")' || { log "FIXTURE-ERROR $name: could not add the record"; return 1; }; done
+  for i in $(seq 1 "$n"); do rec "D${name//-/_}_$i" "proof=$proof" "status=trusted" | python3 -c 'import json,sys,datetime; r=json.loads(sys.stdin.read()); r["promoted_at"]=datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"); print(json.dumps(r, ensure_ascii=False))' >> data/trusted/equational-theories.jsonl; done
   # --only: the one module; the generator knows a single corpus here and would rewrite Tengoku/All.lean down to the libraries it sees (a real promotion never touches it)
-  python3 scripts/generate.py --corpus corpora/equational-theories --libraries equational-theories --only "$sp" >/dev/null 2>&1 || { log "FIXTURE-ERROR $name: generate.py failed"; return 1; }
+  python3 scripts/generate.py --corpus corpora/equational-theories --libraries equational-theories --only "$SRC_PATH" >/dev/null 2>&1 || { log "FIXTURE-ERROR $name: generate.py failed"; return 1; }
   git checkout -q -- Tengoku/All.lean
   git add -A . && git commit -q -s -m "Promote equational-theories: deltas scenario $name" && git push -q -f origin "promote/deltas-$name"
   local num
   num=$(gh pr list -R "$REPO" --head "promote/deltas-$name" --state open --json number -q '.[0].number')
-  [ -n "$num" ] || { gh pr create -R "$REPO" --head "promote/deltas-$name" --title "Promote equational-theories: deltas scenario $name" --body "T2 of the delta store (scripts/ci/campaign/deltas.sh): $n record(s)." >/dev/null 2>&1; num=$(gh pr list -R "$REPO" --head "promote/deltas-$name" --state open --json number -q '.[0].number'); }
+  [ -n "$num" ] || { gh pr create -R "$REPO" --head "promote/deltas-$name" --title "Promote equational-theories: deltas scenario $name" --body "T2 of the delta store (scripts/ci/campaign/deltas.sh): $n record(s). Needs the code owner's approval (data/trusted/)." >/dev/null 2>&1; num=$(gh pr list -R "$REPO" --head "promote/deltas-$name" --state open --json number -q '.[0].number'); }
   printf "%s\t%s\t%s\t%s\t%s\t%s\n" "dl-$name" pass - queue "$num" "deltas scenario $name" >> "$EXPECT"
-  log "opened #$num dl-$name"; git checkout -q -f main
+  log "opened #$num dl-$name: needs the code owner's approval, then it is queued"; git checkout -q -f main
 }
 judge_merged() {  # NAME: merged, 0 misses, a delta published for its merge commit
   local name=$1 n got l misses dec sha v
@@ -121,35 +103,41 @@ judge_merged() {  # NAME: merged, 0 misses, a delta published for its merge comm
 if [ "$MODE" = "--report" ]; then column -t -s $'\t' "$DR"; exit 0; fi
 : > "$DR"
 log "=== deltas T2 on $REPO (cache $(cache_tag)); assets now: $(assets | wc -l)"
-log "=== 1. three clean promotion PRs, queued together (stacked groups)"
-promotion clean-1 3 || exit 1; promotion clean-2 3 || exit 1; promotion clean-3 3 || exit 1
-for s in clean-1 clean-2 clean-3; do enqueue "$(pr_of dl-$s)"; done
-for s in clean-1 clean-2 clean-3; do judge_merged "$s"; done
-log "=== 2. a broken PR between two clean ones, queued in order"
-promotion a 2 || exit 1; promotion broken 1 ':= by\n  exact (by decide : (1 : Nat) + 1 = 3)' || exit 1; promotion b 2 || exit 1
-for s in a broken b; do enqueue "$(pr_of dl-$s)"; sleep 20; done
-judge_merged a
+clean() {  # NAME NRECORDS: a promotion from the current main, queued once approved, judged
+  promotion "$1" "$2" || exit 1; enqueue "$(pr_of "dl-$1")"; judge_merged "$1"
+}
+log "=== 1. a clean promotion: compiles only its own modules, publishes a delta named by its merge commit"
+clean clean-1 3
+log "=== 2. a second one on top of it: restores the first's delta, compiles only its own modules"
+clean clean-2 3
+n=$(pr_of dl-clean-2); applied=$(qb_log "$n" | json_field applied); first=$(merge_sha "$(pr_of dl-clean-1)"); v=OK
+[[ "$applied" == *"d-$first"* ]] || v="WRONG(restored: $applied)"
+record dl-clean-2-restore "$n" "restored d-${first:0:9}" "$applied" "$v"
+log "=== 3. a broken promotion is ejected and publishes no delta"
+promotion broken 1 ':= by\n  exact (by decide : (1 : Nat) + 1 = 3)' || exit 1; enqueue "$(pr_of dl-broken)"
 n=$(pr_of dl-broken); got=$(wait_pr "$n" 45); sha=$(gh pr view "$n" -R "$REPO" --json headRefOid -q .headRefOid); v=OK; [ "$got" = ejected ] || v=WRONG
 assets | grep -q "d-$sha" && v="$v(a delta for the ejected head?)"; record dl-broken "$n" ejected "$got" "$v"
-judge_merged b
+log "=== 4. a clean one after the ejection: merges with a delta, and no delta is applied for a commit that is not in main's history"
+clean clean-3 2
 orphans=0; for a in $(assets | grep -E '^d-[0-9a-f]{40}\.tar\.zst$'); do c=${a:2:40}; git -C "$WORK" fetch -q origin main; git -C "$WORK" merge-base --is-ancestor "$c" origin/main 2>/dev/null || orphans=$((orphans + 1)); done
 log "orphan deltas in the release (published for commits not on main; never applied, collected with the nightly): $orphans"
-log "=== 3. a group that changes no build output"
+log "=== 5. a group that changes no build output"
 cd "$WORK" && scenario dl-docs-only pass - yes queue "A docs line: no Lean target, no delta, green." 'printf "\n<!-- deltas scenario -->\n" >> docs/testing.md'
 n=$(pr_of dl-docs-only); enqueue "$n"; got=$(wait_pr "$n" 30); l=$(qb_log "$n"); v=OK; [ "$got" = merged ] || v=WRONG
 grep -q "no Lean targets in this group" <<< "$l" || v="$v(targets?)"; sha=$(merge_sha "$n"); assets | grep -q "d-$sha" && v="$v(a delta for a docs change?)"
 record dl-docs-only "$n" "merged, no delta" "$got" "$v"
-log "=== 4. the gate cannot publish (knob: TOPUP_TEST_FAIL)"
-promotion publish-fail 1 || exit 1; n=$(pr_of dl-publish-fail)
+log "=== 6. the gate cannot publish (knob: TOPUP_TEST_FAIL)"
 knob=$(gh variable get TOPUP_TEST_FAIL -R "$REPO" 2>/dev/null || true)
-if [ "$knob" = "$n" ]; then
+if [ -z "$knob" ]; then
+  record dl-publish-fail "-" "removed, nothing merged" "SKIPPED" "set the repository variable TOPUP_TEST_FAIL to the number of the PR this scenario opens (the next number in the repository), then re-run"
+else
+  promotion publish-fail 1 || exit 1; n=$(pr_of dl-publish-fail)
+  [ "$knob" = "$n" ] || log "TOPUP_TEST_FAIL is $knob, this scenario's PR is #$n: the publish will not be made to fail"
   enqueue "$n"; got=$(wait_pr "$n" 45); v=OK; [ "$got" = ejected ] || v=WRONG
   gh api "repos/$REPO/issues/$n/comments" -q '.[].body' | grep -q "not because of your change" || v="$v(no comment)"
   record dl-publish-fail "$n" "removed, nothing merged" "$got" "$v"
-else
-  record dl-publish-fail "$n" "removed, nothing merged" "SKIPPED" "set the repository variable TOPUP_TEST_FAIL to $n, then re-run this scenario"
 fi
-log "=== 5. over the delta budget (knob: TENGOKU_DELTA_BUDGET_MB = 0)"
+log "=== 7. over the delta budget (knob: TENGOKU_DELTA_BUDGET_MB = 0)"
 knob=$(gh variable get TENGOKU_DELTA_BUDGET_MB -R "$REPO" 2>/dev/null || true)
 if [ "$knob" = 0 ]; then
   promotion over-budget 1 || exit 1; n=$(pr_of dl-over-budget); t0=$(date -u +%Y-%m-%dT%H:%M:%SZ); enqueue "$n"; got=$(wait_pr "$n" 45)
@@ -159,7 +147,7 @@ if [ "$knob" = 0 ]; then
 else
   record dl-over-budget "-" "merged, needs-nightly, nightly started" "SKIPPED" "set the repository variable TENGOKU_DELTA_BUDGET_MB to 0 (and unset it afterwards), then re-run this scenario"
 fi
-log "=== 6. the real tree: seed + restore every delta of main + lake build Tengoku.All --no-build"
+log "=== 8. the real tree: seed + restore every delta of main + lake build Tengoku.All --no-build"
 gh workflow run lake-cache-tests.yml -R "$REPO" --ref main -f real_tree=true >/dev/null 2>&1 && sleep 20
 rid=$(gh run list -R "$REPO" --workflow lake-cache-tests.yml --limit 1 --json databaseId -q '.[0].databaseId')
 for i in $(seq 1 120); do st=$(gh run view "$rid" -R "$REPO" --json status,conclusion -q '.status + " " + (.conclusion // "")'); case "$st" in completed*) break;; esac; sleep 30; done
