@@ -134,7 +134,7 @@ jobs:
           cd "$RUNNER_TEMP/toy"; export LAKE_CACHE_DIR="$RUNNER_TEMP/cache-tamper"
           rm -rf .lake/build && cp -r "$RUNNER_TEMP/tarball-build" .lake/build
           d="$(mktemp -d)"; zstd -dc "$SHIM_DIR/assets/lake-deltas-cache-toy/d-$C2.tar.zst" | tar -x -C "$d"
-          f="$(ls "$d"/*.ltar | head -1)"; printf '\xff' | dd of="$f" bs=1 seek=40 conv=notrunc 2>/dev/null
+          f="$(find "$d" -name '*.ltar' -print -quit)"; printf '\xff' | dd of="$f" bs=1 seek=40 conv=notrunc 2>/dev/null
           lake cache unstage "$d" 2>&1 | tail -2 || true
           if lake build Toy --no-build >/dev/null 2>&1; then echo "::error::a tampered artifact was used"; exit 1; fi
           echo "I8 ok: the tampered artifact was refused (and the queue would have refused the file's attestation before this)"
