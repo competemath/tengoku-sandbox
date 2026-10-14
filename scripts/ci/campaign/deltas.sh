@@ -68,12 +68,40 @@ subprocess.run(["git", "-C", "corpora/equational-theories", "fetch", "-q", "--de
 subprocess.run(["git", "-C", "corpora/equational-theories", "checkout", "-q", "FETCH_HEAD"], check=True)
 PY
 }
+# The module (source file) each scenario edits: a distinct small leaf module each, so that groups stacked in the queue merge without a conflict.
+# Appending to the end of data/trusted/ (what a single promotion does) made the second of two stacked PRs conflict with the first, so a record goes
+# next to its own module's rows instead.
+src_of() {
+  case "$1" in
+    clean-1) echo equational_theories/Completeness.lean ;;
+    clean-2) echo equational_theories/StringMagmas.lean ;;
+    clean-3) echo equational_theories/Sheffer.lean ;;
+    a) echo equational_theories/InfModel.lean ;;
+    broken) echo equational_theories/ManuallyProved/Equation1447.lean ;;
+    b) echo equational_theories/Generated/Constant.lean ;;
+    publish-fail) echo equational_theories/ManuallyProved/Equation677.lean ;;
+    over-budget) echo equational_theories/Generated/Greedy/OrLemmas.lean ;;
+  esac
+}
 promotion() {  # NAME NRECORDS [proof]  -> opens promote/deltas-NAME, records its PR number
-  local name=$1 n=$2 proof=${3:-":= rfl"} i
+  local name=$1 n=$2 proof=${3:-":= rfl"} i sp
+  sp=$(src_of "$name"); [ -n "$sp" ] || { log "FIXTURE-ERROR $name: no module assigned"; return 1; }
   cd "$WORK" && git fetch -q origin main && git checkout -q -B "promote/deltas-$name" origin/main || return 1
   corpus || { log "FIXTURE-ERROR $name: the corpus could not be fetched"; return 1; }
-  for i in $(seq 1 "$n"); do rec "D${name//-/_}_$i" "proof=$proof" "status=trusted" | python3 -c 'import json,sys,datetime; r=json.loads(sys.stdin.read()); r["promoted_at"]=datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"); print(json.dumps(r, ensure_ascii=False))' >> data/trusted/equational-theories.jsonl; done
-  python3 scripts/generate.py --corpus corpora/equational-theories --libraries equational-theories >/dev/null 2>&1 || { log "FIXTURE-ERROR $name: generate.py failed"; return 1; }
+  for i in $(seq 1 "$n"); do rec "D${name//-/_}_$i" "proof=$proof" "status=trusted" "source_path=$sp" "source_url=${SRC_URL%"$SRC_PATH"}$sp" | python3 -c '
+import json, sys, datetime
+r = json.loads(sys.stdin.read())
+r["promoted_at"] = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+p = "data/trusted/equational-theories.jsonl"
+lines = open(p, encoding="utf-8").read().split("\n")
+if lines and lines[-1] == "":
+    lines.pop()
+at = max((k for k, ln in enumerate(lines) if json.loads(ln).get("source_path") == r["source_path"]), default=len(lines) - 1) + 1
+lines.insert(at, json.dumps(r, ensure_ascii=False))
+open(p, "w", encoding="utf-8").write("\n".join(lines) + "\n")' || { log "FIXTURE-ERROR $name: could not add the record"; return 1; }; done
+  # --only: the one module; the generator knows a single corpus here and would rewrite Tengoku/All.lean down to the libraries it sees (a real promotion never touches it)
+  python3 scripts/generate.py --corpus corpora/equational-theories --libraries equational-theories --only "$sp" >/dev/null 2>&1 || { log "FIXTURE-ERROR $name: generate.py failed"; return 1; }
+  git checkout -q -- Tengoku/All.lean
   git add -A . && git commit -q -s -m "Promote equational-theories: deltas scenario $name" && git push -q -f origin "promote/deltas-$name"
   local num
   num=$(gh pr list -R "$REPO" --head "promote/deltas-$name" --state open --json number -q '.[0].number')

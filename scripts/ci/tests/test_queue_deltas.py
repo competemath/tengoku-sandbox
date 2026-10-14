@@ -210,6 +210,13 @@ class CampaignFixture(unittest.TestCase):
         text = self.DELTAS.read_text(encoding="utf-8")
         self.assertIn("corpus || {", text)
         self.assertRegex(text, r"generate\.py --corpus [^\n]*\|\| \{ log \"FIXTURE-ERROR")
+        # stacked promotion PRs must not conflict: each edits its own module, with the record next to that module's rows, and leaves All.lean alone
+        self.assertIn('--only "$sp"', text)
+        self.assertIn("git checkout -q -- Tengoku/All.lean", text)
+        sources = re.findall(r"^    ([a-z0-9-]+)\) echo (equational_theories/\S+\.lean) ;;$", text, re.M)
+        self.assertEqual(len(sources), 8)
+        self.assertEqual(len({sp for _, sp in sources}), 8, "one module per scenario")
+        self.assertIn("lines.insert(at,", text)
         # and the run ends there: no judging or queueing of a pull request that was never opened
         calls = re.findall(r"(?m)(?:^|; |^  )promotion [a-z0-9-]+ \d+(?: '[^']*')?( \|\| exit 1)?", text)
         self.assertEqual(len(calls), 8, "promotion calls in the main flow")
