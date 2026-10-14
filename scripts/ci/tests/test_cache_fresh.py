@@ -23,15 +23,20 @@ class TimeBudget(unittest.TestCase):
     BEFORE, SEED, CANDIDATES, PACK = 3, 4, 6, 2  # minutes, worst cases of the real runs
     WORKFLOW = HERE.parent.parent.parent / ".github" / "workflows" / "queue-gate.yml"
 
-    def test_the_wait_and_what_follows_fit_the_queue_limit(self):
+    def test_the_restore_and_what_follows_fit_the_queue_limit(self):
+        """Since the deltas (scripts/lake_cache.py) the queue no longer waits for a fresh cache: it restores what merged since the nightly, under its
+        own cap. That cap takes the old wait's place in the budget."""
         text = self.WORKFLOW.read_text(encoding="utf-8")
-        waits = re.findall(r"cache_fresh\.py \"\$BASE\" --wait (\d+)", text)
+        self.assertNotIn("cache_fresh.py", text, "the queue no longer refuses a stale cache: it restores the deltas instead")
+        restores = re.findall(r"timeout -k \d+ (\d+)m python3 scripts/lake_cache\.py restore", text)
         caps = re.findall(r"timeout -k \d+ (\d+)m lake build Tengoku\.All", text)
-        self.assertEqual((len(waits), len(caps)), (1, 1), "the step or the build's own cap was not found")
-        wait, cap = int(waits[0]), int(caps[0])
-        worst = self.BEFORE + wait + self.SEED + self.CANDIDATES + cap + self.PACK
+        self.assertEqual((len(restores), len(caps)), (1, 1), "the restore step or the build's own cap was not found")
+        restore, cap = int(restores[0]), int(caps[0])
+        worst = self.BEFORE + restore + self.SEED + self.CANDIDATES + cap + self.PACK
         self.assertLessEqual(
-            worst, self.LIMIT, f"waiting {wait} min, then a build capped at {cap}, can take {worst} min of the queue's {self.LIMIT}"
+            worst,
+            self.LIMIT,
+            f"restoring for up to {restore} min, then a build capped at {cap}, can take {worst} min of the queue's {self.LIMIT}",
         )
 
 

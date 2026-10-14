@@ -1,0 +1,145 @@
+"""queue-gate.yml with the deltas (scripts/lake_cache.py): the shape of the two jobs, pinned, and the verdict step run as the shell it is.
+
+What a faulty queue merge looked like before (2026-10-13): a group refused for a stale cache (1116 modules behind a 1000 limit), a seed that
+took 49 minutes applying an 807 MB cumulative top-up, a publish over GitHub's 2 GiB asset cap, a merge whose top-up was never promoted.
+These pin the workflow against each: no staleness guard, no top-up, a delta per merge under a size budget, the required check green only
+once the delta is published or the group needs a nightly, and the job that runs the group's code holding no write permission."""
+
+import os
+import re
+import stat
+import subprocess
+import tempfile
+import unittest
+from pathlib import Path
+
+import yaml
+
+HERE = Path(__file__).resolve().parent
+ROOT = HERE.parent.parent.parent
+WORKFLOW = ROOT / ".github" / "workflows" / "queue-gate.yml"
+BUILD = ROOT / ".github" / "workflows" / "build.yml"
+CACHE_SH = ROOT / "scripts" / "cache.sh"
+
+
+def load():
+    return yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+
+
+def step(job: dict, name_part: str) -> dict:
+    for s in job["steps"]:
+        if name_part in (s.get("name") or ""):
+            return s
+    raise AssertionError(f"no step named like {name_part!r}: {[s.get('name') for s in job['steps']]}")
+
+
+class Shape(unittest.TestCase):
+    def setUp(self):
+        self.wf = load()
+        self.build = self.wf["jobs"]["queue-build"]
+        self.gate = self.wf["jobs"]["queue-gate"]
+
+    def test_the_job_that_runs_the_groups_code_holds_no_write_permission(self):
+        perms = self.build["permissions"]
+        self.assertTrue(all(v == "read" for v in perms.values()), perms)
+        self.assertEqual(self.wf["permissions"], {})
+
+    def test_the_queue_seeds_the_nightly_base_only_and_restores_the_deltas(self):
+        env = self.wf["env"]
+        self.assertEqual(str(env["TENGOKU_TOPUPS"]), "0")
+        self.assertEqual(str(env["LAKE_ARTIFACT_CACHE"]), "true")
+        self.assertIn("LAKE_CACHE_DIR", env)
+        seed = step(self.build, "restore what merged since it")
+        self.assertIn("scripts/cache.sh get", seed["run"])
+        self.assertIn("scripts/lake_cache.py restore --fresh", seed["run"])
+        self.assertNotIn("cache_fresh.py", WORKFLOW.read_text(encoding="utf-8"))
+
+    def test_every_lean_build_of_the_group_records_its_mappings(self):
+        cand = step(self.build, "Generate candidates")
+        self.assertIn("lake build $targets -o out-candidates.jsonl", cand["run"])
+        self.assertIn("scripts/lake_cache.py check --targets", cand["run"])
+        whole = step(self.build, "Build the library as main will have it")
+        self.assertRegex(whole["run"], r"timeout -k \d+ \d+m lake build Tengoku\.All -o out-all\.jsonl")
+        self.assertIn("scripts/lake_cache.py diff --out out-all.jsonl --had", whole["run"])
+        self.assertIn('scripts/lake_cache.py pack --rev "$GITHUB_SHA"', whole["run"])
+        self.assertNotIn("topup", whole["run"])
+
+    def test_the_states_a_build_can_end_in_are_the_ones_the_gate_handles(self):
+        whole = step(self.build, "Build the library as main will have it")
+        states = set(re.findall(r'echo "state=([a-z-]+)"', whole["run"])) | set(
+            re.findall(r'"publish": "([a-z-]+)", "empty": "([a-z-]+)"', whole["run"])[0]
+        )
+        self.assertEqual(states, {"needs-nightly", "complete", "empty"})
+        pub = step(self.gate, "Publish it")
+        for st in ("empty", "needs-nightly"):
+            self.assertIn(f"{st})", pub["run"], f"the publish step handles state {st}")
+
+    def test_the_gate_attests_the_delta_and_publishes_it_to_the_days_release(self):
+        att = step(self.gate, "Attest the delta")
+        self.assertIn("delta-out/d-*.tar.zst", att["with"]["subject-path"])
+        pub = step(self.gate, "Publish it")
+        self.assertIn('rel="lake-deltas-$tag"', pub["run"])
+        self.assertIn('gh release upload "$rel" delta-out/d-*.tar.zst', pub["run"])
+        self.assertIn("gh workflow run build.yml", pub["run"], "a needs-nightly merge starts the cache build")
+        self.assertIn("actions", self.gate["permissions"])
+
+    def test_the_nightly_publishes_its_mappings_and_opens_the_days_delta_release(self):
+        b = BUILD.read_text(encoding="utf-8")
+        self.assertIn("lake build Tengoku.All -o base.jsonl", b)
+        self.assertIn("cache-out/base.jsonl", b)
+        c = CACHE_SH.read_text(encoding="utf-8")
+        self.assertIn('gh release upload "$tag" "$tmp/base.jsonl"', c)
+        self.assertIn('gh release create "lake-deltas-$tag"', c)
+        self.assertIn('gh release delete "lake-deltas-$old"', c)
+
+
+class Verdict(unittest.TestCase):
+    """The Verdict step's shell, run for real with a fake gh: green only when the build passed and the publish step passed."""
+
+    def run_verdict(self, build: str, publish: str, event: str = "merge_group") -> tuple[int, list[str]]:
+        run = step(load()["jobs"]["queue-gate"], "Verdict")["run"]
+        # the expressions the runner would substitute
+        run = (
+            run.replace("${{ github.event_name }}", event)
+            .replace("${{ github.server_url }}", "https://github.test")
+            .replace("${{ github.repository }}", "o/r")
+            .replace("${{ github.run_id }}", "1")
+        )
+        with tempfile.TemporaryDirectory() as d:
+            gh = Path(d) / "gh"
+            gh.write_text('#!/usr/bin/env bash\necho "$*" >> "$GH_LOG"\n')
+            gh.chmod(gh.stat().st_mode | stat.S_IEXEC)
+            log = Path(d) / "gh.log"
+            env = {
+                **os.environ,
+                "PATH": f"{d}{os.pathsep}{os.environ['PATH']}",
+                "GH_LOG": str(log),
+                "BUILD": build,
+                "PUBLISH": publish,
+                "GITHUB_REF": "refs/heads/gh-readonly-queue/main/pr-42-0123456789abcdef0123456789abcdef01234567",
+                "GITHUB_REPOSITORY": "o/r",
+            }
+            r = subprocess.run(["bash", "-e", "-o", "pipefail", "-c", run], env=env, capture_output=True, text=True)
+            return r.returncode, (log.read_text().splitlines() if log.exists() else [])
+
+    def test_green_only_when_the_build_and_the_publish_both_passed(self):
+        self.assertEqual(self.run_verdict("success", "success")[0], 0)
+        self.assertEqual(self.run_verdict("failure", "skipped")[0], 1)
+        self.assertEqual(self.run_verdict("success", "failure")[0], 1)
+        self.assertEqual(self.run_verdict("success", "skipped")[0], 1)
+
+    def test_a_group_that_compiled_but_could_not_publish_is_told_it_was_not_its_fault(self):
+        rc, calls = self.run_verdict("success", "failure")
+        self.assertEqual(rc, 1)
+        self.assertTrue(any(c.startswith("pr comment 42 ") and "not because of your change" in c for c in calls), calls)
+
+    def test_a_failed_build_gets_no_such_comment(self):
+        rc, calls = self.run_verdict("failure", "skipped")
+        self.assertEqual((rc, calls), (1, []))
+
+    def test_on_a_pull_request_the_check_passes_at_once(self):
+        self.assertEqual(self.run_verdict("success", "skipped", event="pull_request")[0], 0)
+
+
+if __name__ == "__main__":
+    unittest.main()
