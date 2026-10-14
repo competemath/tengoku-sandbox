@@ -139,23 +139,44 @@ they do not disturb a build. Without this, a busy queue of tooling PRs could
 defeat the nightly's relaunch every night and no cache would ever publish. The
 build itself relaunches on the tip up to twice.
 
-### A cache that matches the base
+### The delta store
 
-The queue starts from the newest published cache (and the promoted top-up) and compiles the difference. After a change that touches many modules, and before its
-cache build has published, that difference is most of the tree: a group would build for hours against the 40-minute limit. `scripts/ci/cache_fresh.py` counts the
-Lean modules that differ between what the cache is for and the base (limit 1,000, or the repository variable `TENGOKU_STALE_LIMIT`); over the limit it waits up to
-5 minutes while a cache build is running (the wait comes out of the queue's 40 minutes, with the seed, the build and the pack still to come: the
-arithmetic is pinned by a test), and otherwise fails with a message that says it is not the author's change. On the real commits of 2026-10-05
-(cache from before the seed's move, base = the move) it counts 9,992 modules; on a normal day 230 to 305. Its tests are scenario tests on synthetic histories, and
-each rule has a mutation that fails them.
+The queue starts from the nightly cache and restores what merged since it: one small attested file per merge, `d-<commit>.tar.zst`, on the
+release `lake-deltas-<cache tag>` (`scripts/lake_cache.py`; the design and its measurements are in the pull request that brought it). Lake's
+own artifact cache keys every build output by a hash of its inputs, so a restored output is used only when the sources hash to it: the worst a
+wrong or missing delta can do is cost a rebuild. A consumer applies the deltas of the commits in its own history (`git rev-list base..HEAD`), so
+a delta of a rebuilt or never-merged group is never applied. There is no "too stale" any more, no cumulative file that grows through the day,
+and no promotion step. What the tests pin, each against the failure it prevents (2026-10-13: a group refused 1116 modules behind a 1000 limit, a
+49-minute seed applying an 807 MB top-up, a publish over GitHub's 2 GiB asset cap, a merge whose top-up was never promoted):
 
-### The top-up
+| | invariant | prevents |
+|---|---|---|
+| I1 | seed + the deltas of `base..C` + `lake build --no-build` passes and compiles nothing | stale seed, wrong-base top-up |
+| I2 | a group's delta is complete (its modules and the umbrellas above them) and minimal (nothing the store knew) | cumulative growth |
+| I3 | deltas apply in any order and twice | ordering, orphans |
+| I4 | a delta of a commit outside the consumer's history is never applied | the promote race |
+| I5 | a delta is under a size budget; over it, the merge lands marked `needs-nightly` and the nightly follows | the 2 GiB cap |
+| I6 | a delta release never reaches GitHub's 1000 assets (stop at 990; a new nightly, a new release) | the asset cap |
+| I7 | restore cost is flat: seconds per delta, capped at 5 minutes | the 49-minute seed |
+| I8 | the job that runs the group's code holds no write permission; deltas are attested by the gate job; an unattested or tampered delta is refused | the trust boundary |
+| I9 | the required check is green only once the delta is published (or the group changed nothing, or needs a nightly) | a merge outrunning the store |
+| I10 | the cache turned on over the nightly tarball compiles nothing | stale outputs after a restructure |
+| I12 | the disk after seed + restore + build is reported | the runner that ran out of disk |
 
-After the checks above, the queue restores the tree to the group's own commit, builds the whole
-library as main will have it (from the nightly cache plus the newest top-up, so only the group's
-own changes compile) and publishes the compiled difference before the merge is allowed. A failed
-publish ejects the PR with a comment that says it was not the author's fault. The full story,
-including how the services follow it and what was tested, is in [top-ups](topups.md).
+Four tiers, and no change to `scripts/lake_cache.py`, `scripts/cache.sh`, `scripts/pin.sh` or `queue-gate.yml` reaches the library before all four
+are green on the sandbox:
+
+- **T0, unit and static** (`scripts/tests/test_lake_cache*.py`, `scripts/ci/tests/test_queue_deltas.py`, `test_cache_fresh.py`): the pure rules
+  (order, orphans, idempotence, header handling, budget and cap decisions), `restore` and `pack` with gh/curl/lake/zstd shimmed (attestation refusal
+  in `require` mode, the macOS tar bug), the shape of the two queue jobs, the Verdict step run as shell, the time budget. Every rule has a mutation
+  that fails the suite.
+- **T1, real Lean on a toy package** (`lake-cache-tests.yml`, on every change to these files): I1 with the umbrella, I3, I4, I8, and the control
+  that `--no-build` fails without the deltas.
+- **T2, scenario pull requests through the sandbox's merge queue** (`scripts/ci/campaign/deltas.sh`): three stacked clean groups (each compiles
+  only its own modules, each publishes), a broken group between two clean ones (ejected, no delta, the orphan never applied), a group that changes
+  no output, the gate unable to publish (`TOPUP_TEST_FAIL`), a merge over the budget (`TENGOKU_DELTA_BUDGET_MB=0`: `needs-nightly`, the nightly
+  starts), and the real tree restored on a fresh runner (`lake-cache-tests.yml` with `real_tree=true`).
+- **T3, the canary**: the real-tree job again after a day of merges; the nightly's `base.jsonl` and delta release.
 
 ### The independent check
 

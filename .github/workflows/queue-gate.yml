@@ -1,17 +1,16 @@
 # Merge-queue gate (docs/tengoku-security-plan.md §5): the only CI that runs Lean.
-# Seeds the nightly cache, builds only the candidate modules of the group, checks
-# axioms, regenerates derived files and diffs them. On failure the PRs in the
-# group get a comment naming the file, line, record and what to do.
+# Seeds the nightly cache, restores what merged since it, builds only the candidate modules of the group, checks axioms,
+# regenerates derived files and diffs them. On failure the PRs in the group get a comment naming the file, line, record and
+# what to do.
 #
-# Then it builds the library exactly as it will be on main and publishes the small
-# difference from the nightly cache (a "top-up"), so the services can follow main
-# merge by merge without ever compiling. The merge waits for that publish:
+# Then it builds the library exactly as it will be on main and publishes what that changed as ONE small file, the group's
+# delta (scripts/lake_cache.py): Lake's own artifact cache keys every output by a hash of its inputs, so a restored output is
+# used only when the sources hash to it. The merge waits for that publish:
 #   queue-build   compiles the group (runs the group's Lean code; read-only token)
-#   queue-gate    the required check: attests and uploads the top-up (write token; runs no code of the
-#                 group), green only when the build passed and the top-up is published
-# A top-up is invisible until topup-promote.yml names it in cache-latest.json, which
-# happens only for a commit that really is on main — a group that fails or is rebuilt
-# leaves an orphan that is collected, never followed.
+#   queue-gate    the required check: attests and uploads the delta (write token; runs no code of the group), green only
+#                 when the build passed and the delta is published (or the group changed no output, or it needs a nightly)
+# A consumer applies the deltas of the commits in ITS OWN history (git rev-list base..HEAD): a delta of a group that was
+# rebuilt or never reached main is never applied, and is collected with its nightly's release.
 name: queue-gate
 # Required check: on a pull request it passes immediately (the build happens in
 # the queue); on the merge group it does the work.
@@ -21,8 +20,10 @@ on:
 permissions: {}
 env:
   TENGOKU_REPO: ${{ github.repository }}
-  TENGOKU_VERIFY: require   # the published caches and top-ups carry build attestations; an unattested or tampered one is refused
-  TENGOKU_TOPUPS: "1"   # the queue starts from the nightly cache plus the newest promoted top-up and builds only what is newer
+  TENGOKU_VERIFY: require   # the published caches and deltas carry build attestations; an unattested or tampered one is refused
+  TENGOKU_TOPUPS: "0"       # the nightly base only; what merged since comes back as deltas (scripts/lake_cache.py restore)
+  LAKE_ARTIFACT_CACHE: "true"
+  LAKE_CACHE_DIR: ${{ github.workspace }}/.lake/cache
 defaults:
   run:
     shell: bash   # -e -o pipefail on every run: step (the campaign found silent passes behind pipes)
@@ -33,7 +34,7 @@ jobs:
     timeout-minutes: 90   # a pipeline staging group can carry dozens of candidate modules
     permissions: { contents: read, pull-requests: read, actions: read }   # actions: read — to see a running cache build. No write permission: this job runs the group's Lean code
     outputs:
-      topup: ${{ steps.topup.outputs.state }}
+      delta: ${{ steps.delta.outputs.state }}
     steps:
       - name: On a pull request there is nothing to build here
         if: github.event_name == 'pull_request'
@@ -93,26 +94,33 @@ jobs:
           set -o pipefail
           python3 scripts/ci/lint_banked.py "${{ github.event.merge_group.base_sha }}" HEAD 2>&1 | tee -a build.log  # the ejection comment reads build.log
       # The tree's cache is several GB packed and about ten times that unpacked, and the group's build adds to it: on a stock runner (about 14 GB free)
-      # the seeding died ("the runner has received a shutdown signal") on every group once the tree had grown by about twenty libraries (the sandbox,
-      # 2026-10-04: 108 GB are free after this step). build.yml already frees this space; the queue did not.
+      # the seeding died ("the runner has received a shutdown signal") on every group once the tree had grown by about twenty libraries. Every
+      # workflow that holds the compiled tree frees the same set (tengoku #537); df/du lines go to the log for the budget.
       - name: Free disk (the tree's cache and build are several GB)
         if: github.event_name == 'merge_group'
         run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/local/share/boost /usr/share/swift || true
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache /usr/local/share/boost /usr/share/swift /usr/lib/jvm /usr/share/miniconda /usr/local/share/powershell /usr/local/lib/node_modules /opt/az /usr/local/graalvm /usr/local/share/chromium || true
+          sudo docker image prune --all --force >/dev/null 2>&1 || true
+          sudo swapoff -a >/dev/null 2>&1 || true; sudo rm -f /mnt/swapfile /swapfile || true
           df -h / | tail -1
-      # The queue seeds from the newest published cache and compiles the difference. After a change that touches many modules (the seed's move renamed every one)
-      # and before its cache build publishes, the difference is most of the tree: hours against a 40-minute limit, and runners taken from the very build the
-      # group waits for (2026-10-05). scripts/ci/cache_fresh.py waits while a cache build runs, and otherwise says what happened. The wait comes out of the same 40
-      # minutes as everything after it (CodeRabbit): about 3 before it (checkout, disk), then the seed (up to 4), candidates and axioms (up to 6), the build (its
-      # own 20-minute cap) and the pack (2), so 5 minutes of waiting is what is left. test_cache_fresh.py pins the arithmetic against this file.
-      - name: A cache close enough to this group's base
+      # The seed is the nightly tarball (verified) plus the deltas of every merge since it that is in this group's history: each a small
+      # attested file, restored into Lake's cache in seconds. There is no "too stale" any more: a base far behind only means more to restore,
+      # or, for a merge that published no delta, more for Lake to compile. The step's own cap keeps a broken store from eating the queue's clock.
+      - name: Seed from the newest published cache (verified), then restore what merged since it
         if: github.event_name == 'merge_group'
-        env: { GH_TOKEN: "${{ github.token }}", BASE: "${{ github.event.merge_group.base_sha }}", TENGOKU_STALE_LIMIT: "${{ vars.TENGOKU_STALE_LIMIT }}" }
-        run: python3 scripts/ci/cache_fresh.py "$BASE" --wait 5 2>&1 | tee -a build.log   # the ejection comment reads build.log
-      - name: Seed from the newest published cache (verified)
-        if: github.event_name == 'merge_group'
+        id: seed
         env: { GH_TOKEN: "${{ github.token }}" }
-        run: scripts/cache.sh get 2>&1 | tail -3
+        run: |
+          scripts/cache.sh get 2>&1 | tail -3
+          { df -h / | tail -1; du -sh .lake/build; } 2>&1 | sed 's/^/after seeding: /'
+          timeout -k 30 5m python3 scripts/lake_cache.py restore --fresh | tee restore.json
+          python3 - <<'PY' | tee -a "$GITHUB_STEP_SUMMARY"
+          import json
+          s = json.load(open("restore.json"))
+          print(f"restore: base {s['tag']} ({s['base'][:9]}), {s['revs']} merge(s) since it, {len(s['applied'])} delta(s) applied, {len(s['skipped'])} without a delta, {len(s['refused'])} refused, {s['seconds']} s; base mappings {s['base_mappings']}")
+          for r in s["refused"]: print(f"::warning::refused delta {r}")
+          PY
+          cut -d' ' -f1 .lake/.cache-base > base-tag.txt
       # A group made only of the pipeline's own staging PRs (author vars.TENGOKU_BOT, branch bank/…, nothing but
       # data/staging/ changed) is not held back by a file that does not build yet: those records land in staging and
       # stay there (promotion builds every file again, checks vacuity, and trusts only what builds). Everything else —
@@ -140,7 +148,7 @@ jobs:
         if: github.event_name == 'merge_group'
         id: build
         shell: bash
-        env: { SOFT: "${{ steps.soft.outputs.soft }}", BASE: "${{ github.event.merge_group.base_sha }}" }
+        env: { SOFT: "${{ steps.soft.outputs.soft }}", BASE: "${{ github.event.merge_group.base_sha }}", STRICT: "${{ vars.TENGOKU_CACHE_STRICT }}" }
         run: |
           set -o pipefail
           # the helper's own failure message (FAIL: … and its ::error:: annotation) is on stdout, so targets.txt is shown too
@@ -152,7 +160,7 @@ jobs:
           echo "building: $targets"
           set +e
           # shellcheck disable=SC2086  # targets is a space-separated module list
-          lake build $targets 2>&1 | tee -a build.log
+          lake build $targets -o out-candidates.jsonl 2>&1 | tee -a build.log
           rc=${PIPESTATUS[0]}
           set -e
           # lake reports sorry as a warning with file:line:col; restate it as an error so the ejection comment can name the record
@@ -171,6 +179,11 @@ jobs:
             targets="$built"
           fi
           echo "targets=$targets" >> "$GITHUB_OUTPUT"
+          # What the build compiled beyond the group's own targets is a restore that missed (a merge without a delta, a refused delta): a cost,
+          # never a wrong result, so it is reported; TENGOKU_CACHE_STRICT=1 (the sandbox's scenarios) makes it a failure.
+          grep -E '^Tengoku\.' targets.txt > targets-only.txt
+          if [ "$STRICT" = 1 ]; then python3 scripts/lake_cache.py check --fail | tee -a "$GITHUB_STEP_SUMMARY"
+          else python3 scripts/lake_cache.py check | tee -a "$GITHUB_STEP_SUMMARY"; fi
       - name: Axioms of every new declaration
         if: github.event_name == 'merge_group' && steps.build.outputs.targets != ''
         shell: bash
@@ -220,46 +233,58 @@ jobs:
             paths --no-pager diff --stat | tee -a build.log
             echo "error: regenerated derived files differ from the PR (hand-edited generated file?)" | tee -a build.log; exit 1
           fi
-      # Everything above compiled scratch modules. Now the tree goes back to the group's own commit and the
-      # whole library is built as main will have it; what differs from the nightly cache is the top-up.
-      # 20 minutes is the budget inside the queue's 40: a change that rebuilds more than that (a core module)
-      # still merges, marked "incomplete" — the services stay on the last complete top-up, and topup-promote.yml
-      # starts a cache build the moment the commit is on main (every later group meets the same wall until then).
-      - name: Build the library as main will have it, and pack the difference
+      # Everything above compiled scratch modules. Now the tree goes back to the group's own commit and the whole library is built as
+      # main will have it: with the base and the deltas restored, that compiles the group's modules and the umbrellas above them and
+      # nothing else. Its mappings minus what the store already knew are the group's delta. 20 minutes is the budget inside the queue's
+      # check timeout: a change that rebuilds more than that (a core module) still merges, marked "needs a nightly" — consumers stay on
+      # the deltas they have, and the cache build that follows the merge publishes a new base.
+      - name: Build the library as main will have it, and pack what that changed
         if: github.event_name == 'merge_group'
-        id: topup
-        env: { TEST_BROKEN_MAIN: "${{ vars.TOPUP_TEST_BROKEN_MAIN }}" }   # sandbox only: pretend the library does not build
+        id: delta
+        # the test knobs are sandbox variables: TOPUP_TEST_BROKEN_MAIN pretends the library does not build, TENGOKU_DELTA_BUDGET_MB=0 makes every delta over budget
+        env: { TEST_BROKEN_MAIN: "${{ vars.TOPUP_TEST_BROKEN_MAIN }}", TENGOKU_DELTA_BUDGET_MB: "${{ vars.TENGOKU_DELTA_BUDGET_MB }}", GH_TOKEN: "${{ github.token }}" }
         run: |
           git checkout -q -- Tengoku/ data/ && git clean -fdqx Tengoku/
           set +e
-          timeout -k 30 20m lake build Tengoku.All 2>&1 | tee -a build.log | tail -5
+          timeout -k 30 20m lake build Tengoku.All -o out-all.jsonl 2>&1 | tee -a build.log | tail -5
           rc=${PIPESTATUS[0]}
           set -e
-          mkdir -p topup-out
+          mkdir -p delta-out && cp base-tag.txt delta-out/base-tag
           if [ "$rc" = 124 ]; then
-            echo "::warning::the library build did not finish inside the queue's budget; this merge is marked incomplete and a cache build is started"
-            echo "over the queue's build budget; a cache build follows the merge" > "topup-out/topup-$GITHUB_SHA.incomplete"
-            echo "state=incomplete" >> "$GITHUB_OUTPUT"; exit 0
+            echo "::warning::the library build did not finish inside the queue's budget; this merge is marked as needing a nightly, and a cache build is started"
+            echo "needs-nightly:over-budget-time" > delta-out/needs-nightly
+            echo "state=needs-nightly" >> "$GITHUB_OUTPUT"; exit 0
           fi
           if [ "$GITHUB_REPOSITORY" = "competemath/tengoku-sandbox" ] && [ "$TEST_BROKEN_MAIN" = 1 ]; then rc=1; echo "error: Tengoku/Injected.lean:1:0: injected failure (TOPUP_TEST_BROKEN_MAIN)" | tee -a build.log; fi
           if [ "$rc" != 0 ]; then
-            # Whose fault? A group that changes no Lean file under Tengoku/ cannot have broken the library:
-            # main was broken before it. Failing every group behind a broken main would wedge the queue, so
-            # such a group still merges, marked incomplete (the services stay where they are), and the
-            # failure is raised here and by the cache build that follows. A group that does change Lean
-            # files is held responsible and leaves the queue.
+            # Whose fault? A group that changes no Lean file under Tengoku/ cannot have broken the library: main was broken before it. Failing every
+            # group behind a broken main would wedge the queue, so such a group still merges, marked as needing a nightly, and the failure is raised
+            # here and by the cache build that follows. A group that does change Lean files is held responsible and leaves the queue.
             if git diff --name-only "${{ github.event.merge_group.base_sha }}...HEAD" -- Tengoku/ | grep -q '\.lean$'; then
               echo "error: the library does not build with this group merged" | tee -a build.log; exit 1
             fi
             echo "::error::main does not build, and this group changes no Lean file, so it is not the cause: $(grep -m1 -E '^error: ' build.log || echo 'see the build log')"
-            echo "main does not build (not this group's doing); a cache build follows the merge" > "topup-out/topup-$GITHUB_SHA.incomplete"
-            echo "state=incomplete" >> "$GITHUB_OUTPUT"; exit 0
+            echo "needs-nightly:main-broken" > delta-out/needs-nightly
+            echo "state=needs-nightly" >> "$GITHUB_OUTPUT"; exit 0
           fi
-          scripts/cache.sh topup-make "$GITHUB_SHA" topup-out
-          echo "state=complete" >> "$GITHUB_OUTPUT"
+          # The nightly's own mappings (base.jsonl) are what the delta is measured against. Without them (a nightly older than this design, or one whose
+          # upload or attestation failed) the delta cannot be told from the base: this tree already holds the group, so building it again would list the
+          # group's modules as the base's. The group merges marked "needs a nightly" and the nightly that follows publishes the mappings.
+          if [ -f .lake/.base-missing ]; then
+            echo "::warning::the nightly this tree builds on published no mappings: this merge publishes no delta; a nightly follows"
+            echo "needs-nightly:base-mappings-missing" > delta-out/needs-nightly
+            echo "state=needs-nightly" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          # no command of lake_cache.py takes a path or a commit: its files are the workspace's fixed names (out-all.jsonl in, out-new.jsonl, delta-out/ out) and the delta is named by HEAD
+          python3 scripts/lake_cache.py diff | tee -a "$GITHUB_STEP_SUMMARY"
+          tag="$(cat base-tag.txt)"
+          assets="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/lake-deltas-$tag" -q '.assets|length' 2>/dev/null || echo 0)"
+          python3 scripts/lake_cache.py pack --assets "$assets" | tee pack.json | tee -a "$GITHUB_STEP_SUMMARY"
+          state="$(python3 -c 'import json; d=json.load(open("pack.json")); print({"publish": "complete", "empty": "empty"}.get(d["decision"], "needs-nightly"))')"
+          echo "state=$state" >> "$GITHUB_OUTPUT"
       - if: github.event_name == 'merge_group'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with: { name: topup, path: topup-out/, retention-days: 1, if-no-files-found: error }
+        with: { name: delta, path: delta-out/, retention-days: 1, if-no-files-found: error }
       # What went wrong, as data for the job that may write (queue-gate below): this job ran the group's code, so it holds no token and
       # its output is only read, never run. The first Lean error, its source line, its record and the PRs of the group.
       - name: What went wrong, as facts
@@ -273,7 +298,7 @@ jobs:
         with: { name: queue-failure, path: failure-out/, retention-days: 1, if-no-files-found: ignore }
 
   # The required check. On a pull request it passes at once; in the queue it is green only when the group
-  # compiled AND its top-up is published, so a merge can never outrun the services' cache. It holds the write
+  # compiled AND its delta is published, so a merge can never outrun the store. It holds the write
   # token and runs nothing from the group: it only signs and uploads what queue-build packed. (Publishing and the
   # verdict are one job: a separate verdict job waited up to 24 minutes for a runner, and the queue's 40-minute
   # check timeout removed groups that had already passed.)
@@ -282,32 +307,42 @@ jobs:
     if: ${{ !cancelled() }}   # a failed build still gets its verdict; a cancelled entry (rebuilt, or stopped by pr-gate) just stops
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    permissions: { contents: write, id-token: write, attestations: write, pull-requests: write }
+    permissions: { contents: write, id-token: write, attestations: write, pull-requests: write, actions: write }   # actions: write — to start the nightly a "needs-nightly" merge asks for
     steps:
       - if: github.event_name == 'merge_group' && needs.queue-build.result == 'success'
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with: { name: topup, path: topup-out }
-      - name: Attest the top-up
-        if: github.event_name == 'merge_group' && needs.queue-build.result == 'success' && needs.queue-build.outputs.topup == 'complete'
+        with: { name: delta, path: delta-out }
+      - name: Attest the delta
+        if: github.event_name == 'merge_group' && needs.queue-build.result == 'success' && needs.queue-build.outputs.delta == 'complete'
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
-        with: { subject-path: "topup-out/topup-*.tar.zst" }
-      - name: Publish it (provisional until this commit is on main)
+        with:
+          subject-path: delta-out/d-*.tar.zst
+      - name: Publish it (a consumer applies it only once this commit is in its history)
         id: publish
         if: github.event_name == 'merge_group' && needs.queue-build.result == 'success'
         env:
           GH_TOKEN: "${{ github.token }}"
+          STATE: "${{ needs.queue-build.outputs.delta }}"
           TEST_FAIL: "${{ vars.TOPUP_TEST_FAIL }}"   # sandbox only: a PR number whose publish is made to fail
         run: |
           if [ "$GITHUB_REPOSITORY" = "competemath/tengoku-sandbox" ] && [ -n "$TEST_FAIL" ] && [[ "$GITHUB_REF" == *"/pr-$TEST_FAIL-"* ]]; then
             echo "error: injected publish failure (TOPUP_TEST_FAIL=$TEST_FAIL)"; exit 1
           fi
-          gh release view cache-topups -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 || gh release create cache-topups -R "$GITHUB_REPOSITORY" --title "cache top-ups" --prerelease --target main \
-            --notes "The small per-merge differences from the nightly cache. cache-latest.json names the one in force; everything else here is provisional or about to be collected." >/dev/null
+          tag="$(cat delta-out/base-tag)"; rel="lake-deltas-$tag"
+          case "$STATE" in
+            empty) echo "this group changed no build output: nothing to publish"; exit 0 ;;
+            needs-nightly) echo "::warning::$(cat delta-out/needs-nightly): this merge publishes no delta; a nightly follows"
+              busy=$(( $(gh run list -R "$GITHUB_REPOSITORY" --workflow build.yml --status in_progress --json databaseId -q 'length') + $(gh run list -R "$GITHUB_REPOSITORY" --workflow build.yml --status queued --json databaseId -q 'length') ))
+              if [ "$busy" = 0 ]; then gh workflow run build.yml -R "$GITHUB_REPOSITORY" --ref main && echo "started a cache build"; else echo "a cache build is already running"; fi
+              exit 0 ;;
+          esac
+          gh release view "$rel" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 || gh release create "$rel" -R "$GITHUB_REPOSITORY" --title "deltas on $tag" --prerelease --target "$GITHUB_SHA" \
+            --notes "What each merge since the nightly cache $tag changed in the compiled tree, one attested file per merge commit (scripts/lake_cache.py restore). Collected with its nightly." >/dev/null
           for attempt in 1 2 3; do
-            if gh release upload cache-topups topup-out/topup-* -R "$GITHUB_REPOSITORY" --clobber; then echo "published:"; printf '  %s\n' topup-out/topup-*; exit 0; fi
+            if gh release upload "$rel" delta-out/d-*.tar.zst -R "$GITHUB_REPOSITORY" --clobber; then echo "published:"; printf '  %s\n' delta-out/d-*.tar.zst; exit 0; fi
             echo "upload attempt $attempt failed; retrying"; sleep $((attempt * 15))
           done
-          echo "error: the cache top-up could not be published"; exit 1
+          echo "error: the delta could not be published"; exit 1
       # The group failed to build: tell its author. The facts come from the job that ran the group's code and are data here; the script is
       # main's (the base commit, with plain git: the repository is public, so no token is written into the checkout), and it checks
       # the shape of every fact before it renders the comment.
@@ -334,13 +369,13 @@ jobs:
         env:
           GH_TOKEN: "${{ github.token }}"
           BUILD: "${{ needs.queue-build.result }}"
-          TOPUP: "${{ steps.publish.outcome }}"
+          PUBLISH: "${{ steps.publish.outcome }}"
         run: |
           if [ "${{ github.event_name }}" = pull_request ]; then [ "$BUILD" = success ] && exit 0; echo "queue-build: $BUILD"; exit 1; fi
-          echo "queue-build: $BUILD   top-up publish: $TOPUP"
-          if [ "$BUILD" = success ] && [ "$TOPUP" = success ]; then exit 0; fi
+          echo "queue-build: $BUILD   delta publish: $PUBLISH"
+          if [ "$BUILD" = success ] && [ "$PUBLISH" = success ]; then exit 0; fi
           if [ "$BUILD" = success ]; then
             pr="$(printf '%s' "$GITHUB_REF" | sed -nE 's#.*/pr-([0-9]+)-[0-9a-f]+$#\1#p')"
-            [ -z "$pr" ] || gh pr comment "$pr" -R "$GITHUB_REPOSITORY" --body "**Removed from the merge queue — not because of your change.** The group compiled, but its cache top-up could not be published ([run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})), and a merge never lands without it (the proof services would fall behind main). Nothing was merged and nothing was published. Put the PR back in the queue; if it happens twice, [tell the maintainers](${{ github.server_url }}/${{ github.repository }}/issues/new?labels=gate-bug&title=cache+top-up+publish+failed)." || true
+            [ -z "$pr" ] || gh pr comment "$pr" -R "$GITHUB_REPOSITORY" --body "**Removed from the merge queue — not because of your change.** The group compiled, but what it changed in the compiled tree could not be published ([run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})), and a merge never lands without it (the proof services would fall behind main). Nothing was merged and nothing was published. Put the PR back in the queue; if it happens twice, [tell the maintainers](${{ github.server_url }}/${{ github.repository }}/issues/new?labels=gate-bug&title=delta+publish+failed)." || true
           fi
           exit 1
