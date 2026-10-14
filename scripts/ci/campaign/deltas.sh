@@ -4,6 +4,7 @@
 #
 #   scripts/ci/campaign/deltas.sh            # open the scenario PRs, queue them in the designed order, judge each (hours)
 #   scripts/ci/campaign/deltas.sh --report   # print the results table again
+#   DELTAS_FROM=3 scripts/ci/campaign/deltas.sh   # resume at scenario 3 (a PR of an earlier scenario that is still open or merged is picked up, not reopened)
 #
 # What each scenario proves (the invariants of docs/testing.md, "The delta store"):
 #   dl-clean-1      a promotion PR: compiles ONLY its own modules (restores that missed = 0), publishes a delta NAMED BY ITS MERGE COMMIT on main
@@ -22,6 +23,9 @@
 # A knob the user has not set skips its scenario and says so: this script never changes repository variables.
 source "$(dirname "$0")/lib.sh"
 DR="$C/deltas-results.tsv"
+FROM=${DELTAS_FROM:-1}
+APPROVAL_AND_QUEUE_MIN=${DELTAS_WAIT_MIN:-300}   # the code owner approves each promotion: that wait is most of it, the queue build is ~45 min
+step() { [ "$FROM" -le "$1" ]; }
 MODE=${1:-run}
 record() { printf "%s\t%s\t%s\t%s\t%s\n" "$1" "$2" "$3" "$4" "$5" >> "$DR"; log "deltas $1 (#$2): expected $3, got $4 | $5"; }
 
@@ -93,7 +97,7 @@ promotion() {  # NAME NRECORDS [proof]  -> opens promote/deltas-NAME, records it
 }
 judge_merged() {  # NAME: merged, 0 misses, a delta published for its merge commit
   local name=$1 n got l misses dec sha v
-  n=$(pr_of "dl-$name"); got=$(wait_pr "$n" 45)
+  n=$(pr_of "dl-$name"); got=$(wait_pr "$n" "$APPROVAL_AND_QUEUE_MIN")
   l=$(qb_log "$n"); misses=$(json_field misses <<< "$l"); dec=$(json_field decision <<< "$l"); sha=$(merge_sha "$n")
   v=OK; [ "$got" = merged ] || v=WRONG; [ "$misses" = 0 ] || v="WRONG(misses=$misses)"; [ "$dec" = publish ] || v="$v(decision=$dec)"
   if [ -n "$sha" ] && ! assets | grep -qx "d-$sha.tar.zst"; then v="$v(no delta d-${sha:0:9})"; fi
@@ -101,31 +105,46 @@ judge_merged() {  # NAME: merged, 0 misses, a delta published for its merge comm
 }
 
 if [ "$MODE" = "--report" ]; then column -t -s $'\t' "$DR"; exit 0; fi
-: > "$DR"
+[ "$FROM" = 1 ] && : > "$DR"
 log "=== deltas T2 on $REPO (cache $(cache_tag)); assets now: $(assets | wc -l)"
-clean() {  # NAME NRECORDS: a promotion from the current main, queued once approved, judged
-  promotion "$1" "$2" || exit 1; enqueue "$(pr_of "dl-$1")"; judge_merged "$1"
+clean() {  # NAME NRECORDS: a promotion from the current main (an earlier run's PR, open or merged, is picked up), queued once approved, judged
+  local n st=""
+  n=$(pr_of "dl-$1"); [ -z "$n" ] || st=$(gh pr view "$n" -R "$REPO" --json state -q .state)
+  if [ "$st" != OPEN ] && [ "$st" != MERGED ]; then promotion "$1" "$2" || exit 1; fi
+  [ "$st" = MERGED ] || enqueue "$(pr_of "dl-$1")"
+  judge_merged "$1"
 }
+step 1 && {
 log "=== 1. a clean promotion: compiles only its own modules, publishes a delta named by its merge commit"
 clean clean-1 3
+}
+step 2 && {
 log "=== 2. a second one on top of it: restores the first's delta, compiles only its own modules"
 clean clean-2 3
 n=$(pr_of dl-clean-2); applied=$(qb_log "$n" | json_field applied); first=$(merge_sha "$(pr_of dl-clean-1)"); v=OK
 [[ "$applied" == *"d-$first"* ]] || v="WRONG(restored: $applied)"
 record dl-clean-2-restore "$n" "restored d-${first:0:9}" "$applied" "$v"
+}
+step 3 && {
 log "=== 3. a broken promotion is ejected and publishes no delta"
 promotion broken 1 ':= by\n  exact (by decide : (1 : Nat) + 1 = 3)' || exit 1; enqueue "$(pr_of dl-broken)"
-n=$(pr_of dl-broken); got=$(wait_pr "$n" 45); sha=$(gh pr view "$n" -R "$REPO" --json headRefOid -q .headRefOid); v=OK; [ "$got" = ejected ] || v=WRONG
+n=$(pr_of dl-broken); got=$(wait_pr "$n" "$APPROVAL_AND_QUEUE_MIN"); sha=$(gh pr view "$n" -R "$REPO" --json headRefOid -q .headRefOid); v=OK; [ "$got" = ejected ] || v=WRONG
 assets | grep -q "d-$sha" && v="$v(a delta for the ejected head?)"; record dl-broken "$n" ejected "$got" "$v"
+}
+step 4 && {
 log "=== 4. a clean one after the ejection: merges with a delta, and no delta is applied for a commit that is not in main's history"
 clean clean-3 2
 orphans=0; for a in $(assets | grep -E '^d-[0-9a-f]{40}\.tar\.zst$'); do c=${a:2:40}; git -C "$WORK" fetch -q origin main; git -C "$WORK" merge-base --is-ancestor "$c" origin/main 2>/dev/null || orphans=$((orphans + 1)); done
 log "orphan deltas in the release (published for commits not on main; never applied, collected with the nightly): $orphans"
+}
+step 5 && {
 log "=== 5. a group that changes no build output"
 cd "$WORK" && scenario dl-docs-only pass - yes queue "A docs line: no Lean target, no delta, green." 'printf "\n<!-- deltas scenario -->\n" >> docs/testing.md'
 n=$(pr_of dl-docs-only); enqueue "$n"; got=$(wait_pr "$n" 30); l=$(qb_log "$n"); v=OK; [ "$got" = merged ] || v=WRONG
 grep -q "no Lean targets in this group" <<< "$l" || v="$v(targets?)"; sha=$(merge_sha "$n"); assets | grep -q "d-$sha" && v="$v(a delta for a docs change?)"
 record dl-docs-only "$n" "merged, no delta" "$got" "$v"
+}
+step 6 && {
 log "=== 6. the gate cannot publish (knob: TOPUP_TEST_FAIL)"
 knob=$(gh variable get TOPUP_TEST_FAIL -R "$REPO" 2>/dev/null || true)
 if [ -z "$knob" ]; then
@@ -133,23 +152,28 @@ if [ -z "$knob" ]; then
 else
   promotion publish-fail 1 || exit 1; n=$(pr_of dl-publish-fail)
   [ "$knob" = "$n" ] || log "TOPUP_TEST_FAIL is $knob, this scenario's PR is #$n: the publish will not be made to fail"
-  enqueue "$n"; got=$(wait_pr "$n" 45); v=OK; [ "$got" = ejected ] || v=WRONG
+  enqueue "$n"; got=$(wait_pr "$n" "$APPROVAL_AND_QUEUE_MIN"); v=OK; [ "$got" = ejected ] || v=WRONG
   gh api "repos/$REPO/issues/$n/comments" -q '.[].body' | grep -q "not because of your change" || v="$v(no comment)"
   record dl-publish-fail "$n" "removed, nothing merged" "$got" "$v"
 fi
+}
+step 7 && {
 log "=== 7. over the delta budget (knob: TENGOKU_DELTA_BUDGET_MB = 0)"
 knob=$(gh variable get TENGOKU_DELTA_BUDGET_MB -R "$REPO" 2>/dev/null || true)
 if [ "$knob" = 0 ]; then
-  promotion over-budget 1 || exit 1; n=$(pr_of dl-over-budget); t0=$(date -u +%Y-%m-%dT%H:%M:%SZ); enqueue "$n"; got=$(wait_pr "$n" 45)
+  promotion over-budget 1 || exit 1; n=$(pr_of dl-over-budget); t0=$(date -u +%Y-%m-%dT%H:%M:%SZ); enqueue "$n"; got=$(wait_pr "$n" "$APPROVAL_AND_QUEUE_MIN")
   l=$(qb_log "$n"); dec=$(json_field decision <<< "$l"); v=OK; [ "$got" = merged ] || v=WRONG; [ "$dec" = "needs-nightly:over-budget" ] || v="$v(decision=$dec)"
   sha=$(merge_sha "$n"); assets | grep -q "d-$sha" && v="$v(a delta although over budget?)"; [ "$(build_runs_after "$t0")" -ge 1 ] || v="$v(no nightly started)"
   record dl-over-budget "$n" "merged, needs-nightly, nightly started" "$got decision=$dec" "$v"
 else
   record dl-over-budget "-" "merged, needs-nightly, nightly started" "SKIPPED" "set the repository variable TENGOKU_DELTA_BUDGET_MB to 0 (and unset it afterwards), then re-run this scenario"
 fi
+}
+step 8 && {
 log "=== 8. the real tree: seed + restore every delta of main + lake build Tengoku.All --no-build"
 gh workflow run lake-cache-tests.yml -R "$REPO" --ref main -f real_tree=true >/dev/null 2>&1 && sleep 20
 rid=$(gh run list -R "$REPO" --workflow lake-cache-tests.yml --limit 1 --json databaseId -q '.[0].databaseId')
 for i in $(seq 1 120); do st=$(gh run view "$rid" -R "$REPO" --json status,conclusion -q '.status + " " + (.conclusion // "")'); case "$st" in completed*) break;; esac; sleep 30; done
 record real-tree "$rid" "restore + --no-build pass" "$st" "$( [ "$st" = "completed success" ] && echo OK || echo WRONG)"
+}
 log "=== done"; column -t -s $'\t' "$DR"

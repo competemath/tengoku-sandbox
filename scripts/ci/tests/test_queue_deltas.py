@@ -227,6 +227,14 @@ class CampaignFixture(unittest.TestCase):
         self.assertEqual(order, sorted(order), "opened in the designed order")
         self.assertNotRegex(text, r"for s in clean-1 clean-2", "no scenario PR is opened before the previous one was judged")
         self.assertNotIn("lines.insert(", text, "a record is appended, never inserted (append-only data files)")
+        # resumable: the code owner approves each promotion, so a run can stop between scenarios (the first run gave up after 45 minutes without an approval)
+        self.assertIn("DELTAS_FROM", text)
+        self.assertIn('[ "$FROM" = 1 ] && : > "$DR"', text, "a resumed run keeps the results so far")
+        self.assertIn(
+            '[ "$st" != OPEN ] && [ "$st" != MERGED ]', text, "a PR of an earlier run, open or merged, is picked up, not reopened"
+        )
+        self.assertIn('[ "$st" = MERGED ] || enqueue', text)
+        self.assertNotIn('wait_pr "$n" 45', text, "a wait that includes the code owner's approval is hours, not 45 minutes")
 
 
 class Verdict(unittest.TestCase):
