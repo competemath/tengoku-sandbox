@@ -413,6 +413,15 @@ class Cli(unittest.TestCase):
     def test_module_names_map_to_files(self):
         self.assertEqual(isnad.module_file("A.B.C", Path("/r")), Path("/r/A/B/C.lean"))
 
+    def test_a_module_name_that_could_leave_the_root_is_refused(self):
+        """2026-10-08 (Sonar S8707): `.etc.passwd` became the absolute path /etc/passwd.lean (a leading dot is an empty component, and joining an absolute path
+        drops the root), and the file was read or rewritten. Module names come from --module."""
+        for bad in (".etc.passwd", "A..B", "A.", "", "A/B", "A\\B", "A\0B"):
+            with self.assertRaises(ValueError, msg=repr(bad)):
+                isnad.module_file(bad, Path("/r"))
+        for good in ("A", "Tengoku.Seed.Algebra.AddConstMap.Equiv", "A.B'", "A.«x y»"):
+            self.assertTrue(str(isnad.module_file(good, Path("/r"))).startswith("/r/"), good)
+
     def test_the_plan_joins_records_and_ranges_by_module_and_name(self):
         plan, skipped = isnad.plan_tags(*fixture_inputs("Tengoku.Seed.X"))
         self.assertEqual((list(plan), skipped), (["Tengoku.Seed.X"], []))

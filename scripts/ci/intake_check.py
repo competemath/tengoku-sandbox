@@ -70,12 +70,25 @@ extending = bool(part_files)
 if len(part_files) > 1:
     fail(f"an extend PR adds one part, not {len(part_files)}: {part_files}")
 MANIFEST, UMBRELLA = f"data/intake/{lib}/manifest.jsonl", f"Tengoku/{ns}.lean"
+LEAN = ".lean"
+
+
+def is_module(p: str) -> bool:
+    """A Lean module of this library's folder."""
+    return p.startswith(f"Tengoku/{ns}/") and p.endswith(LEAN)
+
+
+def member_name(p: str) -> str:
+    """The name a file has inside the archive the factory attested: the part's report is report.json, a data/intake file loses its data/intake/<library>/ prefix."""
+    if extending and p == part_files[0]:
+        return "report.json"
+    return p.split("/", 3)[3] if p.startswith("data/intake/") else p
 
 
 def allowed_paths(p: str) -> bool:
     if extending:
-        return p in (MANIFEST, UMBRELLA, part_files[0]) or (p.startswith(f"Tengoku/{ns}/") and p.endswith(".lean"))
-    return p in (MANIFEST, f"data/intake/{lib}/report.json", UMBRELLA, ALL) or (p.startswith(f"Tengoku/{ns}/") and p.endswith(".lean"))
+        return p in (MANIFEST, UMBRELLA, part_files[0]) or is_module(p)
+    return p in (MANIFEST, f"data/intake/{lib}/report.json", UMBRELLA, ALL) or is_module(p)
 
 
 errors: list[str] = []
@@ -164,9 +177,7 @@ if extending:
             errors.append(f"{part_files[0]} says part {rep.get('part')!r} of {rep.get('library')!r}")
     except Exception as e:  # noqa: BLE001
         errors.append(f"{part_files[0]} is not a JSON report: {e}")
-    new_mods = sorted(
-        p[: -len(".lean")].replace("/", ".") for p in (q for _, q in files) if p.startswith(f"Tengoku/{ns}/") and p.endswith(".lean")
-    )
+    new_mods = sorted(p[: -len(LEAN)].replace("/", ".") for p in (q for _, q in files) if is_module(p))
     if len(new_mods) > MAX_PART_MODULES:
         errors.append(f"{len(new_mods)} modules in one part (cap {MAX_PART_MODULES}): cut the bundle into smaller parts")
 
@@ -218,7 +229,7 @@ command_keywords = set(json.loads((ROOT / "schemas" / "command-keywords.json").r
 if lint_mode not in LINT_MODES:
     fail(f"--lint is one of {', '.join(LINT_MODES)}, not {lint_mode!r}")
 total = 0
-for p in sorted(p for _, p in files if p.endswith(".lean") and p != ALL):
+for p in sorted(p for _, p in files if p.endswith(LEAN) and p != ALL):
     try:
         text = show(p)
     except UnicodeDecodeError:
@@ -258,7 +269,7 @@ if tar_out:
             fail(f"{p} is not readable at {head}")
         if extending and p == MANIFEST:
             raw = manifest_new  # the part's archive holds its own lines only
-        members["report.json" if extending and p == part_files[0] else p.split("/", 3)[3] if p.startswith("data/intake/") else p] = raw
+        members[member_name(p)] = raw
     print(f"archive rebuilt: {tar_out} sha256 {write_tar(members, tar_out)}")
 if extending:
     print(f"extend ok: {lib}: part {part_files[0][-8:-5]}, {len(modules)} modules, {len(manifest)} theorems, lint {lint_mode}")

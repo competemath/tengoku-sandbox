@@ -291,6 +291,19 @@ def _attribute_violations(code: str) -> tuple[list[str], str]:
     return out, stripped
 
 
+def _command_lead(line: str) -> str:
+    """The word that starts a command on this column-0 line once its modifiers are skipped; "" when the line only continues the command above."""
+    m = _LEAD.match(line)
+    if not m or not re.match(r"[A-Za-z_]", m.group(0)):
+        return ""  # a symbol at column 0 continues the command above (`| 0 => …`, `⟨…⟩`)
+    words = line.split()
+    while words and words[0] in MODIFIERS:
+        words = words[1:]
+    # a modifier can be followed by a symbol (`meta : Nat` is a field called meta), never by a command
+    after = _LEAD.match(words[0]) if words else None
+    return after.group(0) if after and re.match(r"[A-Za-z_]", after.group(0)) else ""
+
+
 def _command_start_violations(stripped: str, command_keywords: set[str] | None = None) -> list[str]:
     """The lines whose first word starts a command that is not allowed. With `command_keywords` (the tree's own, schemas/command-keywords.json) only a word that
     IS a command keyword counts: any other word at column 0 continues the command above (`termination_by`, `decreasing_by`, `by`, `fun`, `rfl`, a proof term) and
@@ -299,15 +312,7 @@ def _command_start_violations(stripped: str, command_keywords: set[str] | None =
     for line in stripped.split("\n"):
         if not line.strip() or line[0].isspace():
             continue
-        m = _LEAD.match(line)
-        if not m or not re.match(r"[A-Za-z_]", m.group(0)):
-            continue  # a symbol at column 0 continues the command above (`| 0 => …`, `⟨…⟩`)
-        words = line.split()
-        while words and words[0] in MODIFIERS:
-            words = words[1:]
-        # a modifier can be followed by a symbol (`meta : Nat` is a field called meta), never by a command
-        after = _LEAD.match(words[0]) if words else None
-        lead = after.group(0) if after and re.match(r"[A-Za-z_]", after.group(0)) else ""
+        lead = _command_lead(line)
         if lead and lead not in COMMANDS and (command_keywords is None or lead in command_keywords):
             out.append(f"`{lead}` does not start an allowed command")
     return out

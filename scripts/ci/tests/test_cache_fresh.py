@@ -35,6 +35,33 @@ class TimeBudget(unittest.TestCase):
         )
 
 
+class CommitIds(unittest.TestCase):
+    """2026-10-08 (Sonar S6350): the cache pointer is read from the network, and a commit from it was passed to `git fetch` and `git cat-file` as it came."""
+
+    def setUp(self):
+        sys.path.insert(0, str(HERE.parent))
+        import cache_fresh
+
+        self.cf = cache_fresh
+
+    def test_only_forty_hex_digits_are_a_commit_id(self):
+        good = "AbC1" * 10  # 40 hex digits in mixed case, built rather than written out: detect-secrets reads a long hex literal as a key
+        self.assertEqual(self.cf.sha(good), good.lower())
+        for bad in ("--upload-pack=touch /tmp/x", "-c", "abc123", good + "0", good[:-1], good[:-1] + "g", "", None, 5, ["a" * 40]):
+            self.assertIsNone(self.cf.sha(bad), repr(bad))
+
+    def test_a_pointer_value_that_is_not_a_commit_never_reaches_git(self):
+        from unittest import mock
+
+        hostile = "--upload-pack=touch /tmp/pwned"
+        with mock.patch.object(self.cf.subprocess, "run") as run:
+            self.assertFalse(self.cf.have(hostile))
+            self.assertFalse(self.cf.is_ancestor(hostile, "a" * 40))
+            self.assertFalse(self.cf.is_ancestor("a" * 40, hostile))
+            self.assertEqual(self.cf.reference({"commit": hostile}, "a" * 40), None)
+        run.assert_not_called()
+
+
 class CacheFresh(unittest.TestCase):
     """The merge queue seeds from the newest published cache: cache_fresh.py lets a group on only when that cache is close enough to the base. Regression of
     2026-10-05: the seed moved (every module renamed), five approved PRs were queued before the rebuild published, and each would have recompiled the seed."""

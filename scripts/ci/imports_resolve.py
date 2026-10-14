@@ -23,12 +23,13 @@ from _git import ROOT, changed_files, fail, run
 IMPORT = re.compile(r"(?:(?:public|private|meta)[ \t]+)*import[ \t]+(?:all[ \t]+)?(?P<mod>[^\s]+)")
 KEYWORD = re.compile(r"(?:module|prelude)\b")
 LIMIT = 20  # errors listed
+ROOT_MODULE, ROOT_FILE = "Tengoku", "Tengoku.lean"
 
 
 def module_of(path: str) -> str | None:
     """`Tengoku/A/B.lean` is Tengoku.A.B; `Tengoku.lean` is Tengoku; any other path is not a module of the tree."""
-    if path == "Tengoku.lean":
-        return "Tengoku"
+    if path == ROOT_FILE:
+        return ROOT_MODULE
     if path.startswith("Tengoku/") and path.endswith(".lean"):
         return path[: -len(".lean")].replace("/", ".")
     return None
@@ -42,24 +43,28 @@ def strip_comments(text: str) -> str:
     while i < n:
         two = text[i : i + 2]
         if depth:
-            if two == "/-":
-                depth, i = depth + 1, i + 2
-            elif two == "-/":
-                depth, i = depth - 1, i + 2
-                if not depth:
-                    out.append(" ")
-            else:
-                out.append("\n" if text[i] == "\n" else "")
-                i += 1
+            i, depth, kept = _inside_block(text, i, depth)
+            out.append(kept)
         elif two == "/-":
             depth, i = 1, i + 2
         elif two == "--":
-            while i < n and text[i] != "\n":
-                i += 1
+            end = text.find("\n", i)
+            i = n if end < 0 else end  # the newline itself is read next
         else:
             out.append(text[i])
             i += 1
     return "".join(out)
+
+
+def _inside_block(text: str, i: int, depth: int) -> tuple[int, int, str]:
+    """One step inside a `/- … -/` at nesting `depth`: (the next index, the new depth, what it leaves in the output: a space when the outermost comment closes,
+    a newline where the comment has one, nothing otherwise)."""
+    two = text[i : i + 2]
+    if two == "/-":
+        return i + 2, depth + 1, ""
+    if two == "-/":
+        return i + 2, depth - 1, " " if depth == 1 else ""
+    return i + 1, depth, "\n" if text[i] == "\n" else ""
 
 
 def header_imports(text: str) -> list[str]:
@@ -77,7 +82,7 @@ def header_imports(text: str) -> list[str]:
 
 
 def modules_at(rev: str) -> set[str]:
-    names = run("ls-tree", "-r", "--name-only", rev, "--", "Tengoku", "Tengoku.lean").splitlines()
+    names = run("ls-tree", "-r", "--name-only", rev, "--", ROOT_MODULE, ROOT_FILE).splitlines()
     return {m for p in names if (m := module_of(p))}
 
 
@@ -102,6 +107,29 @@ def read_blobs(rev: str, paths: list[str]) -> dict[str, str]:
     return out
 
 
+def what_to_check(changes: list[tuple[str, str]], modules: set[str]) -> tuple[list[str], str]:
+    """(the files whose imports are read, and what that covers in words): every module of the tree when the change removes or moves one, else the files it adds or edits."""
+    if any(st == "D" for st, _ in changes):
+        targets = sorted(f"{m.replace('.', '/')}.lean" if m != ROOT_MODULE else ROOT_FILE for m in modules)
+        return targets, f"every module of the tree ({len(targets)}): the change removes or moves one"
+    targets = sorted(p for st, p in changes if st != "D")
+    return targets, f"the {len(targets)} module(s) the change adds or edits"
+
+
+def unresolved(path: str, text: str, modules: set[str]) -> list[str]:
+    """The imports of one file that name a module the tree does not have, each as an error line."""
+    errors: list[str] = []
+    for mod in header_imports(text):
+        if mod.split(".")[0] != ROOT_MODULE or mod in modules:
+            continue  # Lean, Init, Std: the toolchain's; the intake and lint gates decide what else may be imported
+        hint = ""
+        seed = "Tengoku.Seed." + mod.removeprefix("Tengoku.")
+        if mod != ROOT_MODULE and seed in modules:
+            hint = f" (the seed moved into Tengoku/Seed/: did you mean {seed}, or just `import Tengoku`?)"
+        errors.append(f"{path}: imports {mod}, which is not a module of the tree after this change{hint}")
+    return errors
+
+
 def main() -> None:
     base, head = sys.argv[1], sys.argv[2]
     changes = [(st, p) for st, p in changed_files(base, head) if module_of(p)]
@@ -109,23 +137,8 @@ def main() -> None:
         print("imports: no Lean module changed")
         return
     modules = modules_at(head)
-    removed = any(st == "D" for st, _ in changes)
-    if removed:
-        targets = sorted(f"{m.replace('.', '/')}.lean" if m != "Tengoku" else "Tengoku.lean" for m in modules)
-        scope = f"every module of the tree ({len(targets)}): the change removes or moves one"
-    else:
-        targets = sorted(p for st, p in changes if st != "D")
-        scope = f"the {len(targets)} module(s) the change adds or edits"
-    errors: list[str] = []
-    for path, text in read_blobs(head, targets).items():
-        for mod in header_imports(text):
-            if mod.split(".")[0] != "Tengoku" or mod in modules:
-                continue  # Lean, Init, Std: the toolchain's; the intake and lint gates decide what else may be imported
-            hint = ""
-            seed = "Tengoku.Seed." + mod.removeprefix("Tengoku.")
-            if mod != "Tengoku" and seed in modules:
-                hint = f" (the seed moved into Tengoku/Seed/: did you mean {seed}, or just `import Tengoku`?)"
-            errors.append(f"{path}: imports {mod}, which is not a module of the tree after this change{hint}")
+    targets, scope = what_to_check(changes, modules)
+    errors = [e for path, text in read_blobs(head, targets).items() for e in unresolved(path, text, modules)]
     if errors:
         shown = errors[:LIMIT] + ([f"… and {len(errors) - LIMIT} more"] if len(errors) > LIMIT else [])
         fail("an import names a module that does not exist:\n  " + "\n  ".join(shown))
