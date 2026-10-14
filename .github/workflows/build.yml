@@ -8,7 +8,7 @@ on:
       parts:
         description: "how many parts to chain (1-9)"
         required: false
-        default: "9"
+        default: "3"
 concurrency:
   group: lake-chain
   cancel-in-progress: false
@@ -60,7 +60,7 @@ jobs:
           gh release upload "$SCOPE" base.jsonl -R "$GITHUB_REPOSITORY"
   g1:
     needs: g0
-    if: ${{ fromJSON(github.event.inputs.parts || '9') >= 1 }}
+    if: ${{ fromJSON(github.event.inputs.parts || '3') >= 1 }}
     runs-on: ubuntu-latest
     timeout-minutes: 150
     permissions: { contents: write }
@@ -139,7 +139,7 @@ jobs:
           echo "uploaded in $(( $(date +%s) - start )) s"
   g2:
     needs: g1
-    if: ${{ fromJSON(github.event.inputs.parts || '9') >= 2 }}
+    if: ${{ fromJSON(github.event.inputs.parts || '3') >= 2 }}
     runs-on: ubuntu-latest
     timeout-minutes: 150
     permissions: { contents: write }
@@ -218,7 +218,7 @@ jobs:
           echo "uploaded in $(( $(date +%s) - start )) s"
   g3:
     needs: g2
-    if: ${{ fromJSON(github.event.inputs.parts || '9') >= 3 }}
+    if: ${{ fromJSON(github.event.inputs.parts || '3') >= 3 }}
     runs-on: ubuntu-latest
     timeout-minutes: 150
     permissions: { contents: write }
@@ -295,482 +295,8 @@ jobs:
           start=$(date +%s)
           gh release upload "$SCOPE" d-3.tar.zst -R "$GITHUB_REPOSITORY"
           echo "uploaded in $(( $(date +%s) - start )) s"
-  g4:
-    needs: g3
-    if: ${{ fromJSON(github.event.inputs.parts || '9') >= 4 }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 150
-    permissions: { contents: write }
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { fetch-depth: 0, filter: "blob:none", persist-credentials: false }
-      - name: Lean toolchain (pinned by lean-toolchain) and zstd
-        run: |
-          curl -sSfL https://github.com/leanprover/elan/releases/latest/download/elan-x86_64-unknown-linux-gnu.tar.gz | tar xz
-          ./elan-init -y --default-toolchain none && echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
-          sudo apt-get install -y -q zstd >/dev/null
-      - name: Free disk
-        run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache /usr/local/share/boost /usr/share/swift /usr/lib/jvm /usr/share/miniconda /usr/local/share/powershell /usr/local/lib/node_modules /opt/az /usr/local/graalvm /usr/local/share/chromium || true
-          sudo docker image prune --all --force >/dev/null 2>&1 || true
-          sudo swapoff -a >/dev/null 2>&1 || true; sudo rm -f /mnt/swapfile /swapfile || true
-          df -h / | tail -1
-      - name: Seed from the newest published cache (the nightly tarball stays the bulk seed)
-        env: { GH_TOKEN: "${{ github.token }}" }
-        run: |
-          start=$(date +%s)
-          scripts/cache.sh get 2>&1 | tail -3
-          echo "seed took $(( $(date +%s) - start )) s"; { df -h / | tail -1; du -sh .lake/build; } | sed 's/^/after seeding: /'
-      - name: "Restore the earlier groups: their deltas from the store, lake cache unstage"
-        env: { GH_TOKEN: "${{ github.token }}" }
-        run: |
-          start=$(date +%s)
-          gh release download "$SCOPE" -R "$GITHUB_REPOSITORY" -p base.jsonl
-          cp base.jsonl had.jsonl
-          for j in $(seq 1 3); do
-            gh release download "$SCOPE" -R "$GITHUB_REPOSITORY" -p "d-$j.tar.zst"
-            mkdir "d-$j" && zstd -dc "d-$j.tar.zst" | tar -x -C "d-$j" && rm "d-$j.tar.zst"
-            lake cache unstage "d-$j" 2>&1 | tail -1
-            cat "d-$j/outputs.jsonl" >> had.jsonl
-          done
-          echo "restored 3 earlier group(s) in $(( $(date +%s) - start )) s; known mappings: $(wc -l < had.jsonl); local cache: $(du -sh "$LAKE_CACHE_DIR" 2>/dev/null | cut -f1)"
-      - name: "This group's sources: parts 1..4 (module files only)"
-        env: { GH_TOKEN: "${{ github.token }}" }
-        run: |
-          for j in $(seq 1 4); do
-            gh release download oai-test-parts -R "$GITHUB_REPOSITORY" -p "oai-part-0$j.tar"
-            tar -xf "oai-part-0$j.tar" --exclude 'Tengoku/OpenaiMath.lean' --exclude manifest.jsonl --exclude report.json
-          done
-          tar -tf oai-part-04.tar | grep '^Tengoku/OpenaiMath/.*\.lean$' | sed 's/\.lean$//; s|/|.|g' | sort > mods.txt
-          echo "this group: $(wc -l < mods.txt) modules; sources in the tree now: $(find Tengoku/OpenaiMath -name '*.lean' | wc -l)"
-      - name: "Compile this group ONLY (lake build <its modules> -o): anything else compiled is a cache miss"
-        run: |
-          start=$(date +%s)
-          set +e; lake build $(cat mods.txt) -o out.jsonl > build.log 2>&1; status=$?; set -e
-          tail -3 build.log
-          compiled=$(grep -E ' Built ' build.log | sed -E 's/.*Built ([^ ]+).*/\1/' | sort -u); echo "$compiled" > built.txt
-          echo "status $status; compiled $(wc -l < built.txt) module(s) in $(( $(date +%s) - start )) s; its build's mappings: $(wc -l < out.jsonl) lines"
-          foreign=$(comm -13 mods.txt built.txt | wc -l); echo "compiled but not of this group (cache misses): $foreign"; comm -13 mods.txt built.txt | head -5
-          grep -E "^error:|declaration uses .sorry." build.log | head -8 || true
-          test "$status" = 0
-          test "$foreign" = 0
-      - name: "Stage this group's OWN new mappings, pack ONE delta, publish it"
-        env: { GH_TOKEN: "${{ github.token }}" }
-        run: |
-          python3 - <<'PY'
-          had = set(l.strip() for l in open("had.jsonl") if l.strip())
-          rows = [l.rstrip("\n") for l in open("out.jsonl") if l.strip()]
-          head, mine = rows[0], rows[1:]   # the first line is the file's header (schema version): Lake refuses a mappings file without it
-          new = [l for l in mine if l not in had]
-          open("out-new.jsonl", "w").write("".join(l + "\n" for l in [head] + new))
-          print(f"mappings of this build: {len(mine)}; already known: {len(mine) - len(new)}; new (this group's own): {len(new)}")
-          PY
-          test "$(wc -l < out-new.jsonl)" -gt 1
-          start=$(date +%s)
-          lake cache stage out-new.jsonl stage 2>&1 | tail -2
-          echo "staged: $(find stage -type f | wc -l) files, $(du -sh stage | cut -f1) (first: $(ls stage | head -3 | tr '\n' ' '))"
-          tar -c -C stage . | zstd -T0 -3 -q -o d-4.tar.zst
-          echo "delta d-4.tar.zst: $(du -h d-4.tar.zst | cut -f1); packed in $(( $(date +%s) - start )) s"
-          start=$(date +%s)
-          gh release upload "$SCOPE" d-4.tar.zst -R "$GITHUB_REPOSITORY"
-          echo "uploaded in $(( $(date +%s) - start )) s"
-  g5:
-    needs: g4
-    if: ${{ fromJSON(github.event.inputs.parts || '9') >= 5 }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 150
-    permissions: { contents: write }
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { fetch-depth: 0, filter: "blob:none", persist-credentials: false }
-      - name: Lean toolchain (pinned by lean-toolchain) and zstd
-        run: |
-          curl -sSfL https://github.com/leanprover/elan/releases/latest/download/elan-x86_64-unknown-linux-gnu.tar.gz | tar xz
-          ./elan-init -y --default-toolchain none && echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
-          sudo apt-get install -y -q zstd >/dev/null
-      - name: Free disk
-        run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache /usr/local/share/boost /usr/share/swift /usr/lib/jvm /usr/share/miniconda /usr/local/share/powershell /usr/local/lib/node_modules /opt/az /usr/local/graalvm /usr/local/share/chromium || true
-          sudo docker image prune --all --force >/dev/null 2>&1 || true
-          sudo swapoff -a >/dev/null 2>&1 || true; sudo rm -f /mnt/swapfile /swapfile || true
-          df -h / | tail -1
-      - name: Seed from the newest published cache (the nightly tarball stays the bulk seed)
-        env: { GH_TOKEN: "${{ github.token }}" }
-        run: |
-          start=$(date +%s)
-          scripts/cache.sh get 2>&1 | tail -3
-          echo "seed took $(( $(date +%s) - start )) s"; { df -h / | tail -1; du -sh .lake/build; } | sed 's/^/after seeding: /'
-      - name: "Restore the earlier groups: their deltas from the store, lake cache unstage"
-        env: { GH_TOKEN: "${{ github.token }}" }
-        run: |
-          start=$(date +%s)
-          gh release download "$SCOPE" -R "$GITHUB_REPOSITORY" -p base.jsonl
-          cp base.jsonl had.jsonl
-          for j in $(seq 1 4); do
-            gh release download "$SCOPE" -R "$GITHUB_REPOSITORY" -p "d-$j.tar.zst"
-            mkdir "d-$j" && zstd -dc "d-$j.tar.zst" | tar -x -C "d-$j" && rm "d-$j.tar.zst"
-            lake cache unstage "d-$j" 2>&1 | tail -1
-            cat "d-$j/outputs.jsonl" >> had.jsonl
-          done
-          echo "restored 4 earlier group(s) in $(( $(date +%s) - start )) s; known mappings: $(wc -l < had.jsonl); local cache: $(du -sh "$LAKE_CACHE_DIR" 2>/dev/null | cut -f1)"
-      - name: "This group's sources: parts 1..5 (module files only)"
-        env: { GH_TOKEN: "${{ github.token }}" }
-        run: |
-          for j in $(seq 1 5); do
-            gh release download oai-test-parts -R "$GITHUB_REPOSITORY" -p "oai-part-0$j.tar"
-            tar -xf "oai-part-0$j.tar" --exclude 'Tengoku/OpenaiMath.lean' --exclude manifest.jsonl --exclude report.json
-          done
-          tar -tf oai-part-05.tar | grep '^Tengoku/OpenaiMath/.*\.lean$' | sed 's/\.lean$//; s|/|.|g' | sort > mods.txt
-          echo "this group: $(wc -l < mods.txt) modules; sources in the tree now: $(find Tengoku/OpenaiMath -name '*.lean' | wc -l)"
-      - name: "Compile this group ONLY (lake build <its modules> -o): anything else compiled is a cache miss"
-        run: |
-          start=$(date +%s)
-          set +e; lake build $(cat mods.txt) -o out.jsonl > build.log 2>&1; status=$?; set -e
-          tail -3 build.log
-          compiled=$(grep -E ' Built ' build.log | sed -E 's/.*Built ([^ ]+).*/\1/' | sort -u); echo "$compiled" > built.txt
-          echo "status $status; compiled $(wc -l < built.txt) module(s) in $(( $(date +%s) - start )) s; its build's mappings: $(wc -l < out.jsonl) lines"
-          foreign=$(comm -13 mods.txt built.txt | wc -l); echo "compiled but not of this group (cache misses): $foreign"; comm -13 mods.txt built.txt | head -5
-          grep -E "^error:|declaration uses .sorry." build.log | head -8 || true
-          test "$status" = 0
-          test "$foreign" = 0
-      - name: "Stage this group's OWN new mappings, pack ONE delta, publish it"
-        env: { GH_TOKEN: "${{ github.token }}" }
-        run: |
-          python3 - <<'PY'
-          had = set(l.strip() for l in open("had.jsonl") if l.strip())
-          rows = [l.rstrip("\n") for l in open("out.jsonl") if l.strip()]
-          head, mine = rows[0], rows[1:]   # the first line is the file's header (schema version): Lake refuses a mappings file without it
-          new = [l for l in mine if l not in had]
-          open("out-new.jsonl", "w").write("".join(l + "\n" for l in [head] + new))
-          print(f"mappings of this build: {len(mine)}; already known: {len(mine) - len(new)}; new (this group's own): {len(new)}")
-          PY
-          test "$(wc -l < out-new.jsonl)" -gt 1
-          start=$(date +%s)
-          lake cache stage out-new.jsonl stage 2>&1 | tail -2
-          echo "staged: $(find stage -type f | wc -l) files, $(du -sh stage | cut -f1) (first: $(ls stage | head -3 | tr '\n' ' '))"
-          tar -c -C stage . | zstd -T0 -3 -q -o d-5.tar.zst
-          echo "delta d-5.tar.zst: $(du -h d-5.tar.zst | cut -f1); packed in $(( $(date +%s) - start )) s"
-          start=$(date +%s)
-          gh release upload "$SCOPE" d-5.tar.zst -R "$GITHUB_REPOSITORY"
-          echo "uploaded in $(( $(date +%s) - start )) s"
-  g6:
-    needs: g5
-    if: ${{ fromJSON(github.event.inputs.parts || '9') >= 6 }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 150
-    permissions: { contents: write }
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { fetch-depth: 0, filter: "blob:none", persist-credentials: false }
-      - name: Lean toolchain (pinned by lean-toolchain) and zstd
-        run: |
-          curl -sSfL https://github.com/leanprover/elan/releases/latest/download/elan-x86_64-unknown-linux-gnu.tar.gz | tar xz
-          ./elan-init -y --default-toolchain none && echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
-          sudo apt-get install -y -q zstd >/dev/null
-      - name: Free disk
-        run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache /usr/local/share/boost /usr/share/swift /usr/lib/jvm /usr/share/miniconda /usr/local/share/powershell /usr/local/lib/node_modules /opt/az /usr/local/graalvm /usr/local/share/chromium || true
-          sudo docker image prune --all --force >/dev/null 2>&1 || true
-          sudo swapoff -a >/dev/null 2>&1 || true; sudo rm -f /mnt/swapfile /swapfile || true
-          df -h / | tail -1
-      - name: Seed from the newest published cache (the nightly tarball stays the bulk seed)
-        env: { GH_TOKEN: "${{ github.token }}" }
-        run: |
-          start=$(date +%s)
-          scripts/cache.sh get 2>&1 | tail -3
-          echo "seed took $(( $(date +%s) - start )) s"; { df -h / | tail -1; du -sh .lake/build; } | sed 's/^/after seeding: /'
-      - name: "Restore the earlier groups: their deltas from the store, lake cache unstage"
-        env: { GH_TOKEN: "${{ github.token }}" }
-        run: |
-          start=$(date +%s)
-          gh release download "$SCOPE" -R "$GITHUB_REPOSITORY" -p base.jsonl
-          cp base.jsonl had.jsonl
-          for j in $(seq 1 5); do
-            gh release download "$SCOPE" -R "$GITHUB_REPOSITORY" -p "d-$j.tar.zst"
-            mkdir "d-$j" && zstd -dc "d-$j.tar.zst" | tar -x -C "d-$j" && rm "d-$j.tar.zst"
-            lake cache unstage "d-$j" 2>&1 | tail -1
-            cat "d-$j/outputs.jsonl" >> had.jsonl
-          done
-          echo "restored 5 earlier group(s) in $(( $(date +%s) - start )) s; known mappings: $(wc -l < had.jsonl); local cache: $(du -sh "$LAKE_CACHE_DIR" 2>/dev/null | cut -f1)"
-      - name: "This group's sources: parts 1..6 (module files only)"
-        env: { GH_TOKEN: "${{ github.token }}" }
-        run: |
-          for j in $(seq 1 6); do
-            gh release download oai-test-parts -R "$GITHUB_REPOSITORY" -p "oai-part-0$j.tar"
-            tar -xf "oai-part-0$j.tar" --exclude 'Tengoku/OpenaiMath.lean' --exclude manifest.jsonl --exclude report.json
-          done
-          tar -tf oai-part-06.tar | grep '^Tengoku/OpenaiMath/.*\.lean$' | sed 's/\.lean$//; s|/|.|g' | sort > mods.txt
-          echo "this group: $(wc -l < mods.txt) modules; sources in the tree now: $(find Tengoku/OpenaiMath -name '*.lean' | wc -l)"
-      - name: "Compile this group ONLY (lake build <its modules> -o): anything else compiled is a cache miss"
-        run: |
-          start=$(date +%s)
-          set +e; lake build $(cat mods.txt) -o out.jsonl > build.log 2>&1; status=$?; set -e
-          tail -3 build.log
-          compiled=$(grep -E ' Built ' build.log | sed -E 's/.*Built ([^ ]+).*/\1/' | sort -u); echo "$compiled" > built.txt
-          echo "status $status; compiled $(wc -l < built.txt) module(s) in $(( $(date +%s) - start )) s; its build's mappings: $(wc -l < out.jsonl) lines"
-          foreign=$(comm -13 mods.txt built.txt | wc -l); echo "compiled but not of this group (cache misses): $foreign"; comm -13 mods.txt built.txt | head -5
-          grep -E "^error:|declaration uses .sorry." build.log | head -8 || true
-          test "$status" = 0
-          test "$foreign" = 0
-      - name: "Stage this group's OWN new mappings, pack ONE delta, publish it"
-        env: { GH_TOKEN: "${{ github.token }}" }
-        run: |
-          python3 - <<'PY'
-          had = set(l.strip() for l in open("had.jsonl") if l.strip())
-          rows = [l.rstrip("\n") for l in open("out.jsonl") if l.strip()]
-          head, mine = rows[0], rows[1:]   # the first line is the file's header (schema version): Lake refuses a mappings file without it
-          new = [l for l in mine if l not in had]
-          open("out-new.jsonl", "w").write("".join(l + "\n" for l in [head] + new))
-          print(f"mappings of this build: {len(mine)}; already known: {len(mine) - len(new)}; new (this group's own): {len(new)}")
-          PY
-          test "$(wc -l < out-new.jsonl)" -gt 1
-          start=$(date +%s)
-          lake cache stage out-new.jsonl stage 2>&1 | tail -2
-          echo "staged: $(find stage -type f | wc -l) files, $(du -sh stage | cut -f1) (first: $(ls stage | head -3 | tr '\n' ' '))"
-          tar -c -C stage . | zstd -T0 -3 -q -o d-6.tar.zst
-          echo "delta d-6.tar.zst: $(du -h d-6.tar.zst | cut -f1); packed in $(( $(date +%s) - start )) s"
-          start=$(date +%s)
-          gh release upload "$SCOPE" d-6.tar.zst -R "$GITHUB_REPOSITORY"
-          echo "uploaded in $(( $(date +%s) - start )) s"
-  g7:
-    needs: g6
-    if: ${{ fromJSON(github.event.inputs.parts || '9') >= 7 }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 150
-    permissions: { contents: write }
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { fetch-depth: 0, filter: "blob:none", persist-credentials: false }
-      - name: Lean toolchain (pinned by lean-toolchain) and zstd
-        run: |
-          curl -sSfL https://github.com/leanprover/elan/releases/latest/download/elan-x86_64-unknown-linux-gnu.tar.gz | tar xz
-          ./elan-init -y --default-toolchain none && echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
-          sudo apt-get install -y -q zstd >/dev/null
-      - name: Free disk
-        run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache /usr/local/share/boost /usr/share/swift /usr/lib/jvm /usr/share/miniconda /usr/local/share/powershell /usr/local/lib/node_modules /opt/az /usr/local/graalvm /usr/local/share/chromium || true
-          sudo docker image prune --all --force >/dev/null 2>&1 || true
-          sudo swapoff -a >/dev/null 2>&1 || true; sudo rm -f /mnt/swapfile /swapfile || true
-          df -h / | tail -1
-      - name: Seed from the newest published cache (the nightly tarball stays the bulk seed)
-        env: { GH_TOKEN: "${{ github.token }}" }
-        run: |
-          start=$(date +%s)
-          scripts/cache.sh get 2>&1 | tail -3
-          echo "seed took $(( $(date +%s) - start )) s"; { df -h / | tail -1; du -sh .lake/build; } | sed 's/^/after seeding: /'
-      - name: "Restore the earlier groups: their deltas from the store, lake cache unstage"
-        env: { GH_TOKEN: "${{ github.token }}" }
-        run: |
-          start=$(date +%s)
-          gh release download "$SCOPE" -R "$GITHUB_REPOSITORY" -p base.jsonl
-          cp base.jsonl had.jsonl
-          for j in $(seq 1 6); do
-            gh release download "$SCOPE" -R "$GITHUB_REPOSITORY" -p "d-$j.tar.zst"
-            mkdir "d-$j" && zstd -dc "d-$j.tar.zst" | tar -x -C "d-$j" && rm "d-$j.tar.zst"
-            lake cache unstage "d-$j" 2>&1 | tail -1
-            cat "d-$j/outputs.jsonl" >> had.jsonl
-          done
-          echo "restored 6 earlier group(s) in $(( $(date +%s) - start )) s; known mappings: $(wc -l < had.jsonl); local cache: $(du -sh "$LAKE_CACHE_DIR" 2>/dev/null | cut -f1)"
-      - name: "This group's sources: parts 1..7 (module files only)"
-        env: { GH_TOKEN: "${{ github.token }}" }
-        run: |
-          for j in $(seq 1 7); do
-            gh release download oai-test-parts -R "$GITHUB_REPOSITORY" -p "oai-part-0$j.tar"
-            tar -xf "oai-part-0$j.tar" --exclude 'Tengoku/OpenaiMath.lean' --exclude manifest.jsonl --exclude report.json
-          done
-          tar -tf oai-part-07.tar | grep '^Tengoku/OpenaiMath/.*\.lean$' | sed 's/\.lean$//; s|/|.|g' | sort > mods.txt
-          echo "this group: $(wc -l < mods.txt) modules; sources in the tree now: $(find Tengoku/OpenaiMath -name '*.lean' | wc -l)"
-      - name: "Compile this group ONLY (lake build <its modules> -o): anything else compiled is a cache miss"
-        run: |
-          start=$(date +%s)
-          set +e; lake build $(cat mods.txt) -o out.jsonl > build.log 2>&1; status=$?; set -e
-          tail -3 build.log
-          compiled=$(grep -E ' Built ' build.log | sed -E 's/.*Built ([^ ]+).*/\1/' | sort -u); echo "$compiled" > built.txt
-          echo "status $status; compiled $(wc -l < built.txt) module(s) in $(( $(date +%s) - start )) s; its build's mappings: $(wc -l < out.jsonl) lines"
-          foreign=$(comm -13 mods.txt built.txt | wc -l); echo "compiled but not of this group (cache misses): $foreign"; comm -13 mods.txt built.txt | head -5
-          grep -E "^error:|declaration uses .sorry." build.log | head -8 || true
-          test "$status" = 0
-          test "$foreign" = 0
-      - name: "Stage this group's OWN new mappings, pack ONE delta, publish it"
-        env: { GH_TOKEN: "${{ github.token }}" }
-        run: |
-          python3 - <<'PY'
-          had = set(l.strip() for l in open("had.jsonl") if l.strip())
-          rows = [l.rstrip("\n") for l in open("out.jsonl") if l.strip()]
-          head, mine = rows[0], rows[1:]   # the first line is the file's header (schema version): Lake refuses a mappings file without it
-          new = [l for l in mine if l not in had]
-          open("out-new.jsonl", "w").write("".join(l + "\n" for l in [head] + new))
-          print(f"mappings of this build: {len(mine)}; already known: {len(mine) - len(new)}; new (this group's own): {len(new)}")
-          PY
-          test "$(wc -l < out-new.jsonl)" -gt 1
-          start=$(date +%s)
-          lake cache stage out-new.jsonl stage 2>&1 | tail -2
-          echo "staged: $(find stage -type f | wc -l) files, $(du -sh stage | cut -f1) (first: $(ls stage | head -3 | tr '\n' ' '))"
-          tar -c -C stage . | zstd -T0 -3 -q -o d-7.tar.zst
-          echo "delta d-7.tar.zst: $(du -h d-7.tar.zst | cut -f1); packed in $(( $(date +%s) - start )) s"
-          start=$(date +%s)
-          gh release upload "$SCOPE" d-7.tar.zst -R "$GITHUB_REPOSITORY"
-          echo "uploaded in $(( $(date +%s) - start )) s"
-  g8:
-    needs: g7
-    if: ${{ fromJSON(github.event.inputs.parts || '9') >= 8 }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 150
-    permissions: { contents: write }
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { fetch-depth: 0, filter: "blob:none", persist-credentials: false }
-      - name: Lean toolchain (pinned by lean-toolchain) and zstd
-        run: |
-          curl -sSfL https://github.com/leanprover/elan/releases/latest/download/elan-x86_64-unknown-linux-gnu.tar.gz | tar xz
-          ./elan-init -y --default-toolchain none && echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
-          sudo apt-get install -y -q zstd >/dev/null
-      - name: Free disk
-        run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache /usr/local/share/boost /usr/share/swift /usr/lib/jvm /usr/share/miniconda /usr/local/share/powershell /usr/local/lib/node_modules /opt/az /usr/local/graalvm /usr/local/share/chromium || true
-          sudo docker image prune --all --force >/dev/null 2>&1 || true
-          sudo swapoff -a >/dev/null 2>&1 || true; sudo rm -f /mnt/swapfile /swapfile || true
-          df -h / | tail -1
-      - name: Seed from the newest published cache (the nightly tarball stays the bulk seed)
-        env: { GH_TOKEN: "${{ github.token }}" }
-        run: |
-          start=$(date +%s)
-          scripts/cache.sh get 2>&1 | tail -3
-          echo "seed took $(( $(date +%s) - start )) s"; { df -h / | tail -1; du -sh .lake/build; } | sed 's/^/after seeding: /'
-      - name: "Restore the earlier groups: their deltas from the store, lake cache unstage"
-        env: { GH_TOKEN: "${{ github.token }}" }
-        run: |
-          start=$(date +%s)
-          gh release download "$SCOPE" -R "$GITHUB_REPOSITORY" -p base.jsonl
-          cp base.jsonl had.jsonl
-          for j in $(seq 1 7); do
-            gh release download "$SCOPE" -R "$GITHUB_REPOSITORY" -p "d-$j.tar.zst"
-            mkdir "d-$j" && zstd -dc "d-$j.tar.zst" | tar -x -C "d-$j" && rm "d-$j.tar.zst"
-            lake cache unstage "d-$j" 2>&1 | tail -1
-            cat "d-$j/outputs.jsonl" >> had.jsonl
-          done
-          echo "restored 7 earlier group(s) in $(( $(date +%s) - start )) s; known mappings: $(wc -l < had.jsonl); local cache: $(du -sh "$LAKE_CACHE_DIR" 2>/dev/null | cut -f1)"
-      - name: "This group's sources: parts 1..8 (module files only)"
-        env: { GH_TOKEN: "${{ github.token }}" }
-        run: |
-          for j in $(seq 1 8); do
-            gh release download oai-test-parts -R "$GITHUB_REPOSITORY" -p "oai-part-0$j.tar"
-            tar -xf "oai-part-0$j.tar" --exclude 'Tengoku/OpenaiMath.lean' --exclude manifest.jsonl --exclude report.json
-          done
-          tar -tf oai-part-08.tar | grep '^Tengoku/OpenaiMath/.*\.lean$' | sed 's/\.lean$//; s|/|.|g' | sort > mods.txt
-          echo "this group: $(wc -l < mods.txt) modules; sources in the tree now: $(find Tengoku/OpenaiMath -name '*.lean' | wc -l)"
-      - name: "Compile this group ONLY (lake build <its modules> -o): anything else compiled is a cache miss"
-        run: |
-          start=$(date +%s)
-          set +e; lake build $(cat mods.txt) -o out.jsonl > build.log 2>&1; status=$?; set -e
-          tail -3 build.log
-          compiled=$(grep -E ' Built ' build.log | sed -E 's/.*Built ([^ ]+).*/\1/' | sort -u); echo "$compiled" > built.txt
-          echo "status $status; compiled $(wc -l < built.txt) module(s) in $(( $(date +%s) - start )) s; its build's mappings: $(wc -l < out.jsonl) lines"
-          foreign=$(comm -13 mods.txt built.txt | wc -l); echo "compiled but not of this group (cache misses): $foreign"; comm -13 mods.txt built.txt | head -5
-          grep -E "^error:|declaration uses .sorry." build.log | head -8 || true
-          test "$status" = 0
-          test "$foreign" = 0
-      - name: "Stage this group's OWN new mappings, pack ONE delta, publish it"
-        env: { GH_TOKEN: "${{ github.token }}" }
-        run: |
-          python3 - <<'PY'
-          had = set(l.strip() for l in open("had.jsonl") if l.strip())
-          rows = [l.rstrip("\n") for l in open("out.jsonl") if l.strip()]
-          head, mine = rows[0], rows[1:]   # the first line is the file's header (schema version): Lake refuses a mappings file without it
-          new = [l for l in mine if l not in had]
-          open("out-new.jsonl", "w").write("".join(l + "\n" for l in [head] + new))
-          print(f"mappings of this build: {len(mine)}; already known: {len(mine) - len(new)}; new (this group's own): {len(new)}")
-          PY
-          test "$(wc -l < out-new.jsonl)" -gt 1
-          start=$(date +%s)
-          lake cache stage out-new.jsonl stage 2>&1 | tail -2
-          echo "staged: $(find stage -type f | wc -l) files, $(du -sh stage | cut -f1) (first: $(ls stage | head -3 | tr '\n' ' '))"
-          tar -c -C stage . | zstd -T0 -3 -q -o d-8.tar.zst
-          echo "delta d-8.tar.zst: $(du -h d-8.tar.zst | cut -f1); packed in $(( $(date +%s) - start )) s"
-          start=$(date +%s)
-          gh release upload "$SCOPE" d-8.tar.zst -R "$GITHUB_REPOSITORY"
-          echo "uploaded in $(( $(date +%s) - start )) s"
-  g9:
-    needs: g8
-    if: ${{ fromJSON(github.event.inputs.parts || '9') >= 9 }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 150
-    permissions: { contents: write }
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { fetch-depth: 0, filter: "blob:none", persist-credentials: false }
-      - name: Lean toolchain (pinned by lean-toolchain) and zstd
-        run: |
-          curl -sSfL https://github.com/leanprover/elan/releases/latest/download/elan-x86_64-unknown-linux-gnu.tar.gz | tar xz
-          ./elan-init -y --default-toolchain none && echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
-          sudo apt-get install -y -q zstd >/dev/null
-      - name: Free disk
-        run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache /usr/local/share/boost /usr/share/swift /usr/lib/jvm /usr/share/miniconda /usr/local/share/powershell /usr/local/lib/node_modules /opt/az /usr/local/graalvm /usr/local/share/chromium || true
-          sudo docker image prune --all --force >/dev/null 2>&1 || true
-          sudo swapoff -a >/dev/null 2>&1 || true; sudo rm -f /mnt/swapfile /swapfile || true
-          df -h / | tail -1
-      - name: Seed from the newest published cache (the nightly tarball stays the bulk seed)
-        env: { GH_TOKEN: "${{ github.token }}" }
-        run: |
-          start=$(date +%s)
-          scripts/cache.sh get 2>&1 | tail -3
-          echo "seed took $(( $(date +%s) - start )) s"; { df -h / | tail -1; du -sh .lake/build; } | sed 's/^/after seeding: /'
-      - name: "Restore the earlier groups: their deltas from the store, lake cache unstage"
-        env: { GH_TOKEN: "${{ github.token }}" }
-        run: |
-          start=$(date +%s)
-          gh release download "$SCOPE" -R "$GITHUB_REPOSITORY" -p base.jsonl
-          cp base.jsonl had.jsonl
-          for j in $(seq 1 8); do
-            gh release download "$SCOPE" -R "$GITHUB_REPOSITORY" -p "d-$j.tar.zst"
-            mkdir "d-$j" && zstd -dc "d-$j.tar.zst" | tar -x -C "d-$j" && rm "d-$j.tar.zst"
-            lake cache unstage "d-$j" 2>&1 | tail -1
-            cat "d-$j/outputs.jsonl" >> had.jsonl
-          done
-          echo "restored 8 earlier group(s) in $(( $(date +%s) - start )) s; known mappings: $(wc -l < had.jsonl); local cache: $(du -sh "$LAKE_CACHE_DIR" 2>/dev/null | cut -f1)"
-      - name: "This group's sources: parts 1..9 (module files only)"
-        env: { GH_TOKEN: "${{ github.token }}" }
-        run: |
-          for j in $(seq 1 9); do
-            gh release download oai-test-parts -R "$GITHUB_REPOSITORY" -p "oai-part-0$j.tar"
-            tar -xf "oai-part-0$j.tar" --exclude 'Tengoku/OpenaiMath.lean' --exclude manifest.jsonl --exclude report.json
-          done
-          tar -tf oai-part-09.tar | grep '^Tengoku/OpenaiMath/.*\.lean$' | sed 's/\.lean$//; s|/|.|g' | sort > mods.txt
-          echo "this group: $(wc -l < mods.txt) modules; sources in the tree now: $(find Tengoku/OpenaiMath -name '*.lean' | wc -l)"
-      - name: "Compile this group ONLY (lake build <its modules> -o): anything else compiled is a cache miss"
-        run: |
-          start=$(date +%s)
-          set +e; lake build $(cat mods.txt) -o out.jsonl > build.log 2>&1; status=$?; set -e
-          tail -3 build.log
-          compiled=$(grep -E ' Built ' build.log | sed -E 's/.*Built ([^ ]+).*/\1/' | sort -u); echo "$compiled" > built.txt
-          echo "status $status; compiled $(wc -l < built.txt) module(s) in $(( $(date +%s) - start )) s; its build's mappings: $(wc -l < out.jsonl) lines"
-          foreign=$(comm -13 mods.txt built.txt | wc -l); echo "compiled but not of this group (cache misses): $foreign"; comm -13 mods.txt built.txt | head -5
-          grep -E "^error:|declaration uses .sorry." build.log | head -8 || true
-          test "$status" = 0
-          test "$foreign" = 0
-      - name: "Stage this group's OWN new mappings, pack ONE delta, publish it"
-        env: { GH_TOKEN: "${{ github.token }}" }
-        run: |
-          python3 - <<'PY'
-          had = set(l.strip() for l in open("had.jsonl") if l.strip())
-          rows = [l.rstrip("\n") for l in open("out.jsonl") if l.strip()]
-          head, mine = rows[0], rows[1:]   # the first line is the file's header (schema version): Lake refuses a mappings file without it
-          new = [l for l in mine if l not in had]
-          open("out-new.jsonl", "w").write("".join(l + "\n" for l in [head] + new))
-          print(f"mappings of this build: {len(mine)}; already known: {len(mine) - len(new)}; new (this group's own): {len(new)}")
-          PY
-          test "$(wc -l < out-new.jsonl)" -gt 1
-          start=$(date +%s)
-          lake cache stage out-new.jsonl stage 2>&1 | tail -2
-          echo "staged: $(find stage -type f | wc -l) files, $(du -sh stage | cut -f1) (first: $(ls stage | head -3 | tr '\n' ' '))"
-          tar -c -C stage . | zstd -T0 -3 -q -o d-9.tar.zst
-          echo "delta d-9.tar.zst: $(du -h d-9.tar.zst | cut -f1); packed in $(( $(date +%s) - start )) s"
-          start=$(date +%s)
-          gh release upload "$SCOPE" d-9.tar.zst -R "$GITHUB_REPOSITORY"
-          echo "uploaded in $(( $(date +%s) - start )) s"
   verify:
-    needs: g9
+    needs: g3
     runs-on: ubuntu-latest
     timeout-minutes: 150
     permissions: { contents: write }
@@ -798,7 +324,7 @@ jobs:
         env: { GH_TOKEN: "${{ github.token }}" }
         run: |
           start=$(date +%s)
-          n=$(( ${{ github.event.inputs.parts || '9' }} ))
+          n=$(( ${{ github.event.inputs.parts || '3' }} ))
           for j in $(seq 1 $n); do
             gh release download "$SCOPE" -R "$GITHUB_REPOSITORY" -p "d-$j.tar.zst"
             mkdir "d-$j" && zstd -dc "d-$j.tar.zst" | tar -x -C "d-$j" && rm "d-$j.tar.zst"
@@ -807,11 +333,25 @@ jobs:
             tar -xf "oai-part-0$j.tar" --exclude manifest.jsonl --exclude report.json
           done
           echo "restored $n deltas in $(( $(date +%s) - start )) s; local cache $(du -sh "$LAKE_CACHE_DIR" | cut -f1); disk: $(df -h / | tail -1)"
-      - name: "lake build Tengoku.OpenaiMath --no-build: every module of every group comes from the store, none is compiled"
+      - name: "lake build <every module of every group> --no-build: all of them come from the store, none is compiled"
         run: |
           start=$(date +%s)
-          lake build Tengoku.OpenaiMath --no-build 2>&1 | tail -3
-          echo "OK: the whole library restored without compiling, in $(( $(date +%s) - start )) s; modules: $(find Tengoku/OpenaiMath -name '*.lean' | wc -l)"
+          n=$(( ${{ github.event.inputs.parts || '3' }} ))
+          : > allmods.txt
+          for j in $(seq 1 $n); do
+            tar -tf "oai-part-0$j.tar" | grep '^Tengoku/OpenaiMath/.*\.lean$' | sed 's/\.lean$//; s|/|.|g' >> allmods.txt || true
+          done
+          sort -u allmods.txt -o allmods.txt
+          echo "restoring $(wc -l < allmods.txt) modules of $n group(s)"
+          lake build $(cat allmods.txt) --no-build > verify.log 2>&1 && ok=1 || ok=0
+          tail -3 verify.log
+          echo "result ok=$ok in $(( $(date +%s) - start )) s"
+          test "$ok" = 1
+      - name: "The umbrella (the only module no group built) compiles from the restored modules in seconds, nothing else compiles"
+        if: ${{ fromJSON(github.event.inputs.parts || '3') == 9 }}
+        run: |
+          lake build Tengoku.OpenaiMath > umb.log 2>&1; tail -2 umb.log
+          echo "compiled: $(grep -c ' Built ' umb.log)"; test "$(grep -c ' Built ' umb.log)" = 1
       - name: Delete the throwaway store
         if: always()
         env: { GH_TOKEN: "${{ github.token }}" }
