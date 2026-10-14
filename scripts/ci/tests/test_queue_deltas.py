@@ -63,7 +63,11 @@ class Shape(unittest.TestCase):
         self.assertIn("scripts/lake_cache.py diff --out out-all.jsonl --had", whole["run"])
         self.assertIn('scripts/lake_cache.py pack --rev "$GITHUB_SHA"', whole["run"])
         self.assertNotIn("topup", whole["run"])
-        self.assertIn("TENGOKU_DELTA_BUDGET_MB", whole["env"], "the budget is a repository variable (0 in a sandbox scenario: every delta over budget)")
+        self.assertIn(
+            "TENGOKU_DELTA_BUDGET_MB",
+            whole["env"],
+            "the budget is a repository variable (0 in a sandbox scenario: every delta over budget)",
+        )
 
     def test_the_states_a_build_can_end_in_are_the_ones_the_gate_handles(self):
         whole = step(self.build, "Build the library as main will have it")
@@ -117,7 +121,7 @@ class Verdict(unittest.TestCase):
                 "GH_LOG": str(log),
                 "BUILD": build,
                 "PUBLISH": publish,
-                "GITHUB_REF": "refs/heads/gh-readonly-queue/main/pr-42-0123456789abcdef0123456789abcdef01234567",
+                "GITHUB_REF": "refs/heads/gh-readonly-queue/main/pr-42-" + "a" * 40,
                 "GITHUB_REPOSITORY": "o/r",
             }
             r = subprocess.run(["bash", "-e", "-o", "pipefail", "-c", run], env=env, capture_output=True, text=True)
