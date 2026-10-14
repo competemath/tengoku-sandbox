@@ -1,0 +1,134 @@
+# The delta store with REAL Lean and Lake, on a toy package (docs/testing.md): what the unit tests shim (lake, zstd) runs for real here,
+# and what the queue does with it is driven by scripts/lake_cache.py itself. GitHub's side (release listing, downloads) is a directory
+# served by the same gh/curl shims the unit tests use. Minutes, not hours; no Mathlib.
+#   I1  seed + the deltas of the merges since the base + `lake build --no-build` compiles nothing (the umbrella included)
+#   I3  deltas apply in any order, and twice
+#   I4  a delta of a commit outside the consumer's history is never applied
+#   I8  a tampered artifact is refused
+#   control: without the deltas, `--no-build` fails
+name: lake-cache-tests
+on:
+  pull_request:
+    paths: [scripts/lake_cache.py, scripts/tests/test_lake_cache*.py, .github/workflows/lake-cache-tests.yml, .github/workflows/queue-gate.yml, scripts/cache.sh, scripts/pin.sh]
+  workflow_dispatch:
+permissions: {}
+defaults:
+  run:
+    shell: bash
+jobs:
+  toy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions: { contents: read }
+    env:
+      LAKE_ARTIFACT_CACHE: "true"
+      TENGOKU_REPO: org/toy
+      TENGOKU_VERIFY: warn   # the shims attest nothing; the attestation path is the unit tests' (require mode, refused and accepted)
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - name: Lean toolchain (pinned by lean-toolchain) and zstd
+        run: |
+          curl -sSfL https://github.com/leanprover/elan/releases/latest/download/elan-x86_64-unknown-linux-gnu.tar.gz | tar xz
+          ./elan-init -y --default-toolchain none && echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+          sudo apt-get install -y -q zstd >/dev/null
+      - name: Unit tests (the shimmed half)
+        run: cd scripts/tests && python3 -m unittest test_lake_cache test_lake_cache_restore 2>&1 | tail -3
+      - name: "The toy: a package Toy with A <- B, its GitHub replaced by a directory"
+        run: |
+          mkdir -p "$RUNNER_TEMP/toy" "$RUNNER_TEMP/shim/bin" "$RUNNER_TEMP/shim/assets" "$RUNNER_TEMP/shim/releases"
+          cp lean-toolchain "$RUNNER_TEMP/toy/"
+          cd "$RUNNER_TEMP/toy"
+          printf 'name = "toy"\ndefaultTargets = ["Toy"]\n\n[[lean_lib]]\nname = "Toy"\nglobs = ["Toy", "Toy.+"]\n' > lakefile.toml
+          mkdir -p Toy && printf 'def Toy.a : Nat := 1\n' > Toy/A.lean && printf 'import Toy.A\ndef Toy.b : Nat := Toy.a + 1\n' > Toy/B.lean && printf 'import Toy.A\nimport Toy.B\n' > Toy.lean
+          git init -q -b main && git -c user.name=t -c user.email=t@example.invalid add -A && git -c user.name=t -c user.email=t@example.invalid commit -qm base
+          lake --version
+          # the shims: `gh api` lists a release from a JSON file, `curl` copies an asset from the directory
+          cat > "$RUNNER_TEMP/shim/bin/gh" <<'SH'
+          #!/usr/bin/env bash
+          case "$1 $2" in "auth status") exit 0 ;; esac
+          if [ "$1" = api ]; then name="${2##*/}"; f="$SHIM_DIR/releases/$name.json"; [ -f "$f" ] && cat "$f" && exit 0; exit 1; fi
+          if [ "$1" = attestation ]; then exit 1; fi
+          exit 2
+          SH
+          cat > "$RUNNER_TEMP/shim/bin/curl" <<'SH'
+          #!/usr/bin/env bash
+          dest=""; url=""
+          while [ $# -gt 0 ]; do case "$1" in -o) dest="$2"; shift ;; https://*) url="$1" ;; esac; shift; done
+          rel="$(basename "$(dirname "$url")")"; asset="$(basename "$url")"; src="$SHIM_DIR/assets/$rel/$asset"
+          [ -f "$src" ] || exit 22
+          cp "$src" "$dest"
+          SH
+          chmod +x "$RUNNER_TEMP/shim/bin/"*
+          echo "SHIM_DIR=$RUNNER_TEMP/shim" >> "$GITHUB_ENV"
+      - name: "The base (the nightly): build everything with -o, keep its build directory as the tarball would"
+        run: |
+          cd "$RUNNER_TEMP/toy"
+          export LAKE_CACHE_DIR="$PWD/.lake/cache"
+          lake build Toy -o base.jsonl 2>&1 | tail -1
+          base="$(git rev-parse HEAD)"; echo "BASE=$base" >> "$GITHUB_ENV"
+          mkdir -p "$SHIM_DIR/assets/cache-toy" && cp base.jsonl "$SHIM_DIR/assets/cache-toy/base.jsonl"
+          echo '{"assets":[{"name":"base.jsonl"}]}' > "$SHIM_DIR/releases/cache-toy.json"
+          cp -r .lake/build "$RUNNER_TEMP/tarball-build"   # what cache.sh get would unpack
+          echo "cache-toy $base" > .lake/.cache-base
+          echo "base mappings: $(wc -l < base.jsonl) lines"
+      - name: "Merge 1 (a group): C <- B and the umbrella; only its own outputs travel"
+        run: |
+          cd "$RUNNER_TEMP/toy"; export LAKE_CACHE_DIR="$PWD/.lake/cache"; export PATH="$SHIM_DIR/bin:$PATH"
+          printf 'import Toy.B\ndef Toy.c : Nat := Toy.b + 1\n' > Toy/C.lean && printf 'import Toy.A\nimport Toy.B\nimport Toy.C\n' > Toy.lean
+          git -c user.name=t -c user.email=t@example.invalid add -A && git -c user.name=t -c user.email=t@example.invalid commit -qm c1
+          c1="$(git rev-parse HEAD)"; echo "C1=$c1" >> "$GITHUB_ENV"
+          python3 "$GITHUB_WORKSPACE/scripts/lake_cache.py" restore --fresh | tee restore1.json
+          lake build Toy -o out.jsonl 2>&1 | tail -1
+          python3 "$GITHUB_WORKSPACE/scripts/lake_cache.py" diff --out out.jsonl --had .lake/deltas-had.jsonl --to new.jsonl | tee diff1.json
+          python3 -c 'import json,sys; d=json.load(open("diff1.json")); assert d["new"]==2, d'   # C and the umbrella Toy
+          python3 "$GITHUB_WORKSPACE/scripts/lake_cache.py" pack --rev "$c1" --new new.jsonl --out delta1 | tee pack1.json
+          mkdir -p "$SHIM_DIR/assets/lake-deltas-cache-toy" && cp delta1/d-*.tar.zst "$SHIM_DIR/assets/lake-deltas-cache-toy/"
+      - name: "Merge 2: C changes (a new hash for C and the umbrella); and an orphan delta of a commit off main"
+        run: |
+          cd "$RUNNER_TEMP/toy"; export LAKE_CACHE_DIR="$PWD/.lake/cache"; export PATH="$SHIM_DIR/bin:$PATH"
+          printf 'import Toy.B\ndef Toy.c : Nat := Toy.b + 2\n' > Toy/C.lean
+          git -c user.name=t -c user.email=t@example.invalid commit -qam c2; c2="$(git rev-parse HEAD)"; echo "C2=$c2" >> "$GITHUB_ENV"
+          lake build Toy -o out.jsonl 2>&1 | tail -1
+          python3 "$GITHUB_WORKSPACE/scripts/lake_cache.py" diff --out out.jsonl --had .lake/deltas-had.jsonl new.jsonl --to new2.jsonl | tee diff2.json
+          python3 -c 'import json; d=json.load(open("diff2.json")); assert d["new"]==2, d'
+          python3 "$GITHUB_WORKSPACE/scripts/lake_cache.py" pack --rev "$c2" --new new2.jsonl --out delta2 | tee pack2.json
+          cp delta2/d-*.tar.zst "$SHIM_DIR/assets/lake-deltas-cache-toy/"
+          # the orphan: a commit on a side branch, its delta published (a group that was rebuilt)
+          git checkout -qb side "$BASE" && printf 'def Toy.orphan : Nat := 9\n' > Toy/O.lean && git -c user.name=t -c user.email=t@example.invalid add -A && git -c user.name=t -c user.email=t@example.invalid commit -qm orphan
+          o="$(git rev-parse HEAD)"; cp "$SHIM_DIR/assets/lake-deltas-cache-toy/d-$c2.tar.zst" "$SHIM_DIR/assets/lake-deltas-cache-toy/d-$o.tar.zst"; rm -f Toy/O.lean; git checkout -q main
+          python3 - "$SHIM_DIR" <<'PY'
+          import json, os, sys
+          d = sys.argv[1] + "/assets/lake-deltas-cache-toy"
+          json.dump({"assets": [{"name": n} for n in sorted(os.listdir(d))]}, open(sys.argv[1] + "/releases/lake-deltas-cache-toy.json", "w"))
+          print("store:", sorted(os.listdir(d)))
+          PY
+      - name: "I1 + I4: a fresh runner at main's tip: tarball + restore + --no-build compiles nothing; the orphan is not applied"
+        run: |
+          cd "$RUNNER_TEMP/toy"; export PATH="$SHIM_DIR/bin:$PATH"
+          rm -rf .lake/build .lake/cache .lake/.deltas-applied .lake/deltas-had.jsonl .lake/.delta-store
+          cp -r "$RUNNER_TEMP/tarball-build" .lake/build; export LAKE_CACHE_DIR="$PWD/.lake/cache"
+          python3 "$GITHUB_WORKSPACE/scripts/lake_cache.py" restore --fresh | tee restore3.json
+          python3 -c 'import json,os; s=json.load(open("restore3.json")); assert [os.path.basename(a)[2:42] for a in s["applied"]]==[os.environ["C1"],os.environ["C2"]], s'
+          lake build Toy --no-build -v 2>&1 | tail -2
+          echo "I1 ok: the fresh tree built nothing; I4 ok: the orphan delta stayed in the store"
+      - name: "I3: the deltas in reverse order, and twice"
+        run: |
+          cd "$RUNNER_TEMP/toy"; export LAKE_CACHE_DIR="$RUNNER_TEMP/cache-rev"
+          rm -rf .lake/build && cp -r "$RUNNER_TEMP/tarball-build" .lake/build
+          for name in "d-$C2" "d-$C1" "d-$C2"; do d="$(mktemp -d)"; zstd -dc "$SHIM_DIR/assets/lake-deltas-cache-toy/$name.tar.zst" | tar -x -C "$d"; lake cache unstage "$d" 2>&1 | tail -1; done
+          lake build Toy --no-build 2>&1 | tail -1 && echo "I3 ok"
+      - name: "control: without the deltas, --no-build must fail"
+        run: |
+          cd "$RUNNER_TEMP/toy"; export LAKE_CACHE_DIR="$RUNNER_TEMP/cache-empty"
+          rm -rf .lake/build && cp -r "$RUNNER_TEMP/tarball-build" .lake/build
+          if lake build Toy --no-build >/dev/null 2>&1; then echo "::error::built with nothing restored?"; exit 1; fi; echo "control ok"
+      - name: "I8: a tampered artifact in a delta is not used"
+        run: |
+          cd "$RUNNER_TEMP/toy"; export LAKE_CACHE_DIR="$RUNNER_TEMP/cache-tamper"
+          rm -rf .lake/build && cp -r "$RUNNER_TEMP/tarball-build" .lake/build
+          d="$(mktemp -d)"; zstd -dc "$SHIM_DIR/assets/lake-deltas-cache-toy/d-$C2.tar.zst" | tar -x -C "$d"
+          f="$(ls "$d"/*.ltar | head -1)"; printf '\xff' | dd of="$f" bs=1 seek=40 conv=notrunc 2>/dev/null
+          lake cache unstage "$d" 2>&1 | tail -2 || true
+          if lake build Toy --no-build >/dev/null 2>&1; then echo "::error::a tampered artifact was used"; exit 1; fi
+          echo "I8 ok: the tampered artifact was refused (and the queue would have refused the file's attestation before this)"
