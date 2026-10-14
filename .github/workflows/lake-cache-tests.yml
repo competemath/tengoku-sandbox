@@ -41,6 +41,7 @@ jobs:
           cd "$RUNNER_TEMP/toy"
           printf 'name = "toy"\ndefaultTargets = ["Toy"]\n\n[[lean_lib]]\nname = "Toy"\nglobs = ["Toy", "Toy.+"]\n' > lakefile.toml
           mkdir -p Toy && printf 'def Toy.a : Nat := 1\n' > Toy/A.lean && printf 'import Toy.A\ndef Toy.b : Nat := Toy.a + 1\n' > Toy/B.lean && printf 'import Toy.A\nimport Toy.B\n' > Toy.lean
+          printf '.lake/\n*.json\n*.jsonl\ndelta*/\n' > .gitignore
           git init -q -b main && git -c user.name=t -c user.email=t@example.invalid add -A && git -c user.name=t -c user.email=t@example.invalid commit -qm base
           lake --version
           # the shims: `gh api` lists a release from a JSON file, `curl` copies an asset from the directory
