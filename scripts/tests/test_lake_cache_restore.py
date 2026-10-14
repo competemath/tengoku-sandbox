@@ -295,6 +295,7 @@ class Pack(unittest.TestCase):
         )
         self.assertEqual(r.returncode, 1, r.stdout)
         self.assertIn("lake cache stage failed", r.stderr)
+        self.assertNotIn("Traceback", r.stderr)  # refused, not crashed
         self.assertEqual(list(self.out.glob("d-*")), [])
 
     def test_nothing_new_is_an_empty_marker_not_a_delta(self):
