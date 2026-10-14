@@ -187,7 +187,7 @@ case "$cmd" in
       "$tmp"/tengoku-cache.tar.zst.part-*
     echo "published $tag (commit $sha)"
     # the tree's mappings (lake build -o) travel with the cache: the queue's deltas are diffed against them; and the day's deltas get their release
-    [ -f "$tmp/base.jsonl" ] && gh release upload "$tag" "$tmp/base.jsonl" -R "$REPO" --clobber >/dev/null && echo "base.jsonl on $tag"
+    [[ -f "$tmp/base.jsonl" ]] && gh release upload "$tag" "$tmp/base.jsonl" -R "$REPO" --clobber >/dev/null && echo "base.jsonl on $tag"
     gh release view "lake-deltas-$tag" -R "$REPO" >/dev/null 2>&1 || gh release create "lake-deltas-$tag" -R "$REPO" --title "deltas on $tag" --prerelease --target "$sha" \
       --notes "What each merge since the nightly cache $tag changed in the compiled tree, one attested file per merge commit (scripts/lake_cache.py restore). Collected with its nightly." >/dev/null && echo "release lake-deltas-$tag"
     # Fixed-tag pointer to the newest cache, for consumers that must not call the API.
@@ -214,7 +214,7 @@ PY
     # a recent one (Lake rebuilds the difference).
     KEEP="${TENGOKU_CACHE_KEEP:-5}"
     list_caches | tail -n +"$((KEEP + 1))" | awk '{print $3}' \
-      | while read -r old; do [ -n "$old" ] && gh release delete "$old" -R "$REPO" --yes --cleanup-tag && echo "pruned $old" && { gh release delete "lake-deltas-$old" -R "$REPO" --yes --cleanup-tag 2>/dev/null && echo "pruned lake-deltas-$old" || true; }; done || true
+      | while read -r old; do [[ -n "$old" ]] && gh release delete "$old" -R "$REPO" --yes --cleanup-tag && echo "pruned $old" && { gh release delete "lake-deltas-$old" -R "$REPO" --yes --cleanup-tag 2>/dev/null && echo "pruned lake-deltas-$old" || true; }; done || true
     ;;
   latest)
     if [ "$TOPUPS" = 1 ]; then

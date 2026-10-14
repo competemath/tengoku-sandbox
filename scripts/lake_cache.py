@@ -53,8 +53,19 @@ REPO_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")  # a release tag or an asset name: one path segment, no separators, no leading dot
 
 
-def read_lines(path: str | Path) -> list[str]:
-    return [ln.strip() for ln in Path(path).read_text(encoding="utf-8").splitlines() if ln.strip()]
+def inside(path: str | Path) -> Path:
+    """The absolute, symlink-free form of a path given on the command line, which must lie under the working directory or the temp directory
+    (RUNNER_TEMP on a runner): a path argument never leaves the workspace, and being absolute it can never be read as an option by the tool it is
+    handed to."""
+    real = Path(os.path.realpath(path))
+    roots = [Path(os.path.realpath(r)) for r in (Path.cwd(), tempfile.gettempdir(), os.environ.get("RUNNER_TEMP") or tempfile.gettempdir())]
+    if not any(real == r or r in real.parents for r in roots):
+        raise ValueError(f"{str(path)!r} is outside the workspace and the temp directory")
+    return real
+
+
+def read_lines(path: Path) -> list[str]:
+    return [ln.strip() for ln in path.read_text(encoding="utf-8").splitlines() if ln.strip()]
 
 
 # ---- pure ----------------------------------------------------------------------------------------------------------------
@@ -197,24 +208,74 @@ def git_revs(base: str, want: str) -> list[str]:
 # ---- restore -------------------------------------------------------------------------------------------------------------
 
 
+def parse_base(want_arg: str, release_arg: str | None) -> tuple[str, str, str, str, str]:
+    """(repo, tag, base commit, wanted commit, release) from the environment and .lake/.cache-base, each checked. ValueError when one is not what it may be."""
+    repo = os.environ.get("TENGOKU_CACHE_SOURCE") or os.environ.get("TENGOKU_REPO") or "competemath/tengoku"
+    tag, _, base = BASE_FILE.read_text().strip().partition(" ")
+    checked("repository", repo, REPO_RE)
+    checked("cache tag", tag, NAME_RE)
+    checked("base commit", base, re.compile(r"^[0-9a-f]{40}$"))
+    try:
+        want = run("git", "rev-parse", "--verify", want_arg + "^{commit}").stdout.strip()
+    except subprocess.CalledProcessError as e:
+        raise ValueError(f"{want_arg!r} is not a commit") from e
+    return repo, tag, base, want, checked("release", release_arg or f"lake-deltas-{tag}", NAME_RE)
+
+
+def load_base_mappings(repo: str, tag: str, summary: dict) -> None:
+    """The base's own mappings (published with the nightly, attested): what the store already knows, for the diff of this build's new lines."""
+    bj = STORE / f"base-{tag}.jsonl"
+    ok = bj.exists() or download(repo, tag, "base.jsonl", bj)
+    accepted, why = verify(bj, repo, "build.yml") if ok else (False, "not published")
+    if ok and accepted:
+        HAD.write_text(bj.read_text(encoding="utf-8"), encoding="utf-8")
+    else:
+        HAD.write_text("", encoding="utf-8")
+        summary["base_mappings"] = f"missing ({why}): the build computes them (lake build Tengoku.All -o)"
+        (LAKE / ".base-missing").write_text(tag + "\n")
+    APPLIED.write_text("", encoding="utf-8")
+
+
+def apply_delta(repo: str, release: str, name: str) -> str | None:
+    """Fetch, verify and unstage one delta. None when it is applied, else why it is not: 'skipped' (not published) or 'refused: <reason>'."""
+    f = STORE / name
+    if not f.exists() and not download(repo, release, name, f):
+        return "skipped"
+    accepted, why = verify(f, repo, "queue-gate.yml")
+    if not accepted:
+        f.unlink(missing_ok=True)
+        return f"refused: {name}: {why}"
+    if "warn" in why or "not checked" in why:
+        print(f"warning: {name}: {why}", file=sys.stderr)
+    with tempfile.TemporaryDirectory(prefix="delta-", dir=str(LAKE)) as d:
+        try:
+            unpack(f, Path(d))
+        except RuntimeError as e:
+            return f"refused: {name}: {e}"
+        r = subprocess.run(["lake", "cache", "unstage", d], capture_output=True, text=True)
+        if r.returncode != 0:
+            return f"refused: {name}: lake cache unstage failed: {r.stderr.strip()[:200]}"
+        outs = Path(d) / "outputs.jsonl"
+        if outs.exists():
+            with HAD.open("a", encoding="utf-8") as h:
+                h.write("".join(ln + "\n" for ln in read_lines(outs)[1:]))  # its header is the base's header already
+    with APPLIED.open("a", encoding="utf-8") as ap:
+        ap.write(name + "\n")
+    return None
+
+
 def cmd_restore(a) -> int:
     t0 = time.time()
-    repo = os.environ.get("TENGOKU_CACHE_SOURCE") or os.environ.get("TENGOKU_REPO") or "competemath/tengoku"
     if not BASE_FILE.exists():
         print("no unpacked base (.lake/.cache-base): run scripts/cache.sh get first", file=sys.stderr)
         return 1
-    tag, _, base = BASE_FILE.read_text().strip().partition(" ")
     try:
-        checked("repository", repo, REPO_RE)
-        checked("cache tag", tag, NAME_RE)
-        checked("base commit", base, re.compile(r"^[0-9a-f]{40}$"))
-        want = run("git", "rev-parse", "--verify", a.want + "^{commit}").stdout.strip()
-        release = checked("release", a.release or f"lake-deltas-{tag}", NAME_RE)
-    except (ValueError, subprocess.CalledProcessError) as e:
+        repo, tag, base, want, release = parse_base(a.want, a.release)
+    except ValueError as e:
         print(f"restore: {e}", file=sys.stderr)
         return 2
     STORE.mkdir(parents=True, exist_ok=True)
-    summary = {
+    summary: dict = {
         "base": base,
         "tag": tag,
         "want": want,
@@ -224,18 +285,8 @@ def cmd_restore(a) -> int:
         "refused": [],
         "base_mappings": "present",
     }
-    # the base's own mappings: what the store already knows, for the diff of this build's new lines
     if not HAD.exists() or a.fresh:
-        bj = STORE / f"base-{tag}.jsonl"
-        ok = bj.exists() or download(repo, tag, "base.jsonl", bj)
-        accepted, why = verify(bj, repo, "build.yml") if ok else (False, "not published")
-        if ok and accepted:
-            HAD.write_text(bj.read_text(encoding="utf-8"), encoding="utf-8")
-        else:
-            HAD.write_text("", encoding="utf-8")
-            summary["base_mappings"] = f"missing ({why}): the build computes them (lake build Tengoku.All -o)"
-            (LAKE / ".base-missing").write_text(tag + "\n")
-        APPLIED.write_text("", encoding="utf-8")
+        load_base_mappings(repo, tag, summary)
     applied = set(read_lines(APPLIED)) if APPLIED.exists() else set()
     revs = git_revs(base, want)
     assets = release_assets(repo, release)
@@ -246,35 +297,14 @@ def cmd_restore(a) -> int:
     for name in plan(revs, assets):
         if name in applied:
             continue
-        f = STORE / name
-        if not f.exists() and not download(repo, release, name, f):
+        why = apply_delta(repo, release, name)
+        if why is None:
+            applied.add(name)
+            summary["applied"].append(name)
+        elif why == "skipped":
             summary["skipped"].append(name)
-            continue
-        accepted, why = verify(f, repo, "queue-gate.yml")
-        if not accepted:
-            f.unlink(missing_ok=True)
-            summary["refused"].append(f"{name}: {why}")
-            continue
-        if "warn" in why or "not checked" in why:
-            print(f"warning: {name}: {why}", file=sys.stderr)
-        with tempfile.TemporaryDirectory(prefix="delta-", dir=str(LAKE)) as d:
-            try:
-                unpack(f, Path(d))
-            except RuntimeError as e:
-                summary["refused"].append(f"{name}: {e}")
-                continue
-            r = subprocess.run(["lake", "cache", "unstage", d], capture_output=True, text=True)
-            if r.returncode != 0:
-                summary["refused"].append(f"{name}: lake cache unstage failed: {r.stderr.strip()[:200]}")
-                continue
-            outs = Path(d) / "outputs.jsonl"
-            if outs.exists():
-                with HAD.open("a", encoding="utf-8") as h:
-                    h.write("".join(ln + "\n" for ln in read_lines(outs)[1:]))  # its header is the base's header already
-        with APPLIED.open("a", encoding="utf-8") as ap:
-            ap.write(name + "\n")
-        applied.add(name)
-        summary["applied"].append(name)
+        else:
+            summary["refused"].append(why.removeprefix("refused: "))
     summary["seconds"] = round(time.time() - t0, 1)
     print(json.dumps(summary))
     return 0
@@ -287,7 +317,7 @@ def cmd_pack(a) -> int:
     if not re.fullmatch(r"[0-9a-f]{40}", a.rev):
         print(f"--rev is a 40-hex commit id, not {a.rev!r}", file=sys.stderr)
         return 2
-    out = Path(a.out)
+    out = a.out
     out.mkdir(parents=True, exist_ok=True)
     rows = read_lines(a.new)
     if len(rows) <= 1:
@@ -297,7 +327,7 @@ def cmd_pack(a) -> int:
     budget = int(a.budget_mb if a.budget_mb is not None else (os.environ.get("TENGOKU_DELTA_BUDGET_MB") or 1500)) * 1024 * 1024
     with tempfile.TemporaryDirectory(prefix="stage-") as d:
         stage = Path(d) / "stage"
-        r = subprocess.run(["lake", "cache", "stage", a.new, str(stage)], capture_output=True, text=True)
+        r = subprocess.run(["lake", "cache", "stage", str(a.new), str(stage)], capture_output=True, text=True)
         if r.returncode != 0:
             print(f"lake cache stage failed: {r.stderr.strip()[:300]}", file=sys.stderr)
             return 1
@@ -305,7 +335,7 @@ def cmd_pack(a) -> int:
         delta = out / f"d-{a.rev}.tar.zst"
         pack_dir(stage, delta)
     size = delta.stat().st_size
-    decision = decide(size, int(a.assets or 0), budget)
+    decision = decide(size, int(a.release_assets or 0), budget)
     if decision != "publish":
         delta.unlink()
         (out / "needs-nightly").write_text(decision + "\n")
@@ -338,9 +368,17 @@ def main(argv: list[str] | None = None) -> int:
     k.add_argument("--rev", required=True)
     k.add_argument("--new", required=True)
     k.add_argument("--out", required=True)
-    k.add_argument("--assets", type=int, default=0, help="how many assets the day's release holds now")
+    k.add_argument("--assets", dest="release_assets", type=int, default=0, help="how many assets the day's release holds now")
     k.add_argument("--budget-mb", type=int, default=None)
     a = ap.parse_args(argv)
+    try:
+        for attr in ("revs", "assets", "out", "had", "to", "targets", "log", "new"):
+            if hasattr(a, attr):
+                v = getattr(a, attr)
+                setattr(a, attr, [inside(x) for x in v] if isinstance(v, list) else inside(v))
+    except ValueError as e:
+        print(f"lake_cache: {e}", file=sys.stderr)
+        return 2
 
     if a.cmd == "plan":
         for name in plan(read_lines(a.revs), read_lines(a.assets)):
@@ -352,12 +390,12 @@ def main(argv: list[str] | None = None) -> int:
             had.update(read_lines(f))
         out = read_lines(a.out)
         rows = diff(out, had)
-        Path(a.to).write_text("".join(ln + "\n" for ln in rows), encoding="utf-8")
+        a.to.write_text("".join(ln + "\n" for ln in rows), encoding="utf-8")
         print(json.dumps({"build": len(out) - 1, "known": len(out) - len(rows), "new": len(rows) - 1}))
         return 0
     if a.cmd == "check":
         targets = set(read_lines(a.targets))
-        built = compiled(Path(a.log).read_text(encoding="utf-8", errors="replace"))
+        built = compiled(a.log.read_text(encoding="utf-8", errors="replace"))
         missed = sorted(built - targets)
         print(json.dumps({"targets": len(targets), "compiled": len(built), "misses": len(missed), "first": missed[:5]}))
         return 1 if (a.fail and missed) else 0

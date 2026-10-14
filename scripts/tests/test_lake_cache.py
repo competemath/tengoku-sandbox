@@ -103,6 +103,34 @@ class Diff(unittest.TestCase):
             self.assertEqual((Path(d) / "new").read_text(), f'{HEADER}\n{{"i":2}}\n')
 
 
+class Paths(unittest.TestCase):
+    """A path given on the command line never leaves the working directory or the temp directory, and is handed on absolute (never read as an option)."""
+
+    def test_a_path_outside_the_workspace_is_refused_by_every_subcommand_that_takes_one(self):
+        for args in (
+            ["plan", "--revs", "/etc/passwd", "--assets", "/etc/passwd"],
+            ["diff", "--out", "/etc/passwd", "--had", "/etc/passwd", "--to", "/etc/x"],
+            ["check", "--targets", "/etc/passwd", "--log", "/etc/passwd"],
+            ["pack", "--rev", "a" * 40, "--new", "/etc/passwd", "--out", "/etc/x"],
+        ):
+            r = run(*args)
+            self.assertEqual(r.returncode, 2, (args, r.stdout, r.stderr))
+            self.assertIn("outside the workspace", r.stderr)
+
+    def test_a_dotdot_that_climbs_out_and_a_symlink_that_points_out_are_refused(self):
+        with tempfile.TemporaryDirectory() as d:
+            link = Path(d) / "link"
+            link.symlink_to("/etc")
+            for bad in (f"{d}/../../../../../../../etc/passwd", f"{link}/passwd"):
+                with self.assertRaises(ValueError):
+                    lc.inside(bad)
+
+    def test_a_path_in_the_temp_directory_or_the_working_directory_is_accepted_and_made_absolute(self):
+        with tempfile.TemporaryDirectory() as d:
+            self.assertTrue(lc.inside(Path(d) / "x.jsonl").is_absolute())
+        self.assertTrue(lc.inside("relative-file").is_absolute())
+
+
 class Check(unittest.TestCase):
     LOG = (
         "✔ [8803/8804] Built Tengoku.Pfr.Basic (1.2s)\n"
