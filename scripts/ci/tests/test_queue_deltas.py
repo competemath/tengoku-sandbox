@@ -171,6 +171,32 @@ class NightlyPublish(unittest.TestCase):
         self.assertTrue(any(c.startswith("release upload cache-latest") for c in calls), calls)
 
 
+class WorkflowSnippets(unittest.TestCase):
+    """A `python3 -c '...'` one-liner in a workflow is only run by the job, so a syntax error shows on the first real run: the real-tree job of
+    lake-cache-tests.yml escaped quotes (`s[\\"revs\\"]`) inside single quotes and died on SyntaxError after its restore had worked (2026-10-14)."""
+
+    FILES = ("queue-gate.yml", "build.yml", "lake-cache-tests.yml")
+
+    def snippets(self, name):
+        wf = yaml.safe_load((ROOT / ".github" / "workflows" / name).read_text(encoding="utf-8"))
+        for job in wf["jobs"].values():
+            for st in job.get("steps", []):
+                run = st.get("run") or ""
+                for m in re.finditer(r"python3 -c '(.*?)'(?=\s|$)", run, re.S):
+                    yield re.sub(r"\$\{\{.*?\}\}", "0", m.group(1))
+
+    def test_every_single_quoted_python_one_liner_in_the_cache_workflows_compiles(self):
+        seen = 0
+        for name in self.FILES:
+            for code in self.snippets(name):
+                seen += 1
+                try:
+                    compile(code, f"{name} snippet", "exec")
+                except SyntaxError as e:
+                    self.fail(f"{name}: {e}: {code[:120]}")
+        self.assertGreater(seen, 0, "the pattern found no snippet: the test would pass for nothing")
+
+
 class CampaignFixture(unittest.TestCase):
     """scripts/ci/campaign/deltas.sh: its corpus helper read a sources.json shape the schema does not have (KeyError), and the scenario went on
     to open three pull requests without the generated module (2026-10-14)."""
