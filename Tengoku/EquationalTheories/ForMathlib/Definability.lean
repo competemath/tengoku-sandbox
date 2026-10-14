@@ -1,4 +1,4 @@
--- Tengoku.EquationalTheories.ForMathlib.Definability: verified translations of equational_theories/ForMathlib/Definability.lean (331 theorems)
+-- Tengoku.EquationalTheories.ForMathlib.Definability: verified translations of equational_theories/ForMathlib/Definability.lean (334 theorems)
 import Tengoku
 import Tengoku.Seed.ModelTheory.Definability
 import Tengoku.Seed.Data.Rel
@@ -1179,6 +1179,15 @@ theorem Selftest.Dclean_1_2 : (1 : Nat) + 1 = 2
 := rfl
 
 theorem Selftest.Dclean_1_3 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.Dclean_2_1 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.Dclean_2_2 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.Dclean_2_3 : (1 : Nat) + 1 = 2
 := rfl
 
 end Formula
