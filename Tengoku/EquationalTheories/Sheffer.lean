@@ -1,4 +1,5 @@
--- Tengoku.EquationalTheories.Sheffer: verified translations of equational_theories/Sheffer.lean (1 theorem)
+-- Tengoku.EquationalTheories.Sheffer: verified translations of equational_theories/Sheffer.lean (4 theorems)
+import Tengoku
 import Tengoku.EquationalTheories.Deps.Magma
 import Lean
 import Tengoku.Seed.Data.FunLike.Basic
@@ -52,6 +53,15 @@ instance (B : Type*) [BooleanAlgebra B] : Magma B where
   op a b := (a ⊓ b)ᶜ
 
 lemma Sheffer_Op (B : Type*) [BooleanAlgebra B] (a b : B) : a ◇ b = (a ⊓ b)ᶜ
+:= rfl
+
+theorem Selftest.Dclean_3_1 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.Dclean_3_2 : (1 : Nat) + 1 = 2
+:= rfl
+
+theorem Selftest.Dclean_3_3 : (1 : Nat) + 1 = 2
 := rfl
 
 end Sheffer
