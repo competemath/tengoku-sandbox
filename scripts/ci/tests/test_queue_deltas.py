@@ -171,6 +171,37 @@ class NightlyPublish(unittest.TestCase):
         self.assertTrue(any(c.startswith("release upload cache-latest") for c in calls), calls)
 
 
+class Telemetry(unittest.TestCase):
+    """The queue's build job and the nightly's build job each leave the runner's disk, memory and OOM kills behind (scripts/ci/runner_telemetry.py)."""
+
+    def jobs(self):
+        return (
+            ("queue-gate.yml", load()["jobs"]["queue-build"]),
+            ("build.yml", yaml.safe_load(BUILD.read_text(encoding="utf-8"))["jobs"]["build"]),
+        )
+
+    def test_the_sampler_starts_before_the_work_and_the_summary_and_the_file_survive_a_failure(self):
+        for name, job in self.jobs():
+            steps = job["steps"]
+            watch = next(i for i, s in enumerate(steps) if "runner_telemetry.py watch" in (s.get("run") or ""))
+            seed = next(
+                i for i, s in enumerate(steps) if "cache.sh get" in (s.get("run") or "") or "Restore partial build" in (s.get("name") or "")
+            )
+            self.assertLess(watch, seed, f"{name}: sampled from before the cache is unpacked (where the disk fills)")
+            self.assertTrue((steps[watch]["run"]).rstrip().endswith("&"), f"{name}: runs in the background")
+            summary = step(job, "Runner telemetry summary")
+            self.assertIn("always()", summary["if"], name)
+            self.assertIn('>> "$GITHUB_STEP_SUMMARY"', summary["run"])
+            up = next(s for s in steps if (s.get("with") or {}).get("name") == "runner-telemetry")
+            self.assertIn("always()", up["if"], name)
+            self.assertEqual(up["with"]["path"], "telemetry.jsonl")
+            self.assertEqual(up["with"]["if-no-files-found"], "ignore", name)
+            self.assertLessEqual(up["with"]["retention-days"], 3, name)
+
+    def test_the_job_that_runs_the_groups_code_gets_no_write_permission_from_it(self):
+        self.assertTrue(all(v == "read" for v in load()["jobs"]["queue-build"]["permissions"].values()))
+
+
 class CampaignFixture(unittest.TestCase):
     """scripts/ci/campaign/deltas.sh: its corpus helper read a sources.json shape the schema does not have (KeyError), and the scenario went on
     to open three pull requests without the generated module (2026-10-14)."""
