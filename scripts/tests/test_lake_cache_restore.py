@@ -43,7 +43,7 @@ cp "$src" "$dest"
 """
 LAKE = r"""#!/usr/bin/env bash
 if [ "$1 $2" = "cache unstage" ]; then echo "unstage $3" >> "$SHIM_DIR/lake.log"; cat "$3/outputs.jsonl" >> "$SHIM_DIR/unstaged.jsonl"; exit 0; fi
-if [ "$1 $2" = "cache stage" ]; then mkdir -p "$4"; cp "$3" "$4/outputs.jsonl"; n=$(($(wc -l < "$3") - 1)); for i in $(seq 1 $n); do head -c "${SHIM_LTAR_BYTES:-64}" /dev/zero > "$4/art$i.ltar"; done; exit 0; fi
+if [ "$1 $2" = "cache stage" ]; then [ -n "$SHIM_STAGE_FAIL" ] && { echo "stage refused" >&2; exit 1; }; mkdir -p "$4"; cp "$3" "$4/outputs.jsonl"; n=$(($(wc -l < "$3") - 1)); for i in $(seq 1 $n); do head -c "${SHIM_LTAR_BYTES:-64}" /dev/zero > "$4/art$i.ltar"; done; exit 0; fi
 exit 2
 """
 ZSTD = r"""#!/usr/bin/env bash
@@ -284,6 +284,18 @@ class Pack(unittest.TestCase):
             )
             self.assertEqual(r.returncode, 2, (bad, r.stderr))
         self.assertFalse(self.out.exists())
+
+    def test_lake_refusing_to_stage_is_an_error_and_leaves_no_delta(self):
+        self.env["SHIM_STAGE_FAIL"] = "1"
+        r = subprocess.run(
+            [sys.executable, str(SCRIPT), "pack", "--rev", "a" * 40, "--new", str(self.new), "--out", str(self.out)],
+            env=self.env,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(r.returncode, 1, r.stdout)
+        self.assertIn("lake cache stage failed", r.stderr)
+        self.assertEqual(list(self.out.glob("d-*")), [])
 
     def test_nothing_new_is_an_empty_marker_not_a_delta(self):
         self.new.write_text(HEADER + "\n")
