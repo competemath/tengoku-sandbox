@@ -171,6 +171,41 @@ class NightlyPublish(unittest.TestCase):
         self.assertTrue(any(c.startswith("release upload cache-latest") for c in calls), calls)
 
 
+class CampaignFixture(unittest.TestCase):
+    """scripts/ci/campaign/deltas.sh: its corpus helper read a sources.json shape the schema does not have (KeyError), and the scenario went on
+    to open three pull requests without the generated module (2026-10-14)."""
+
+    DELTAS = ROOT / "scripts" / "ci" / "campaign" / "deltas.sh"
+
+    def test_the_corpus_helper_reads_the_corpus_the_schema_names(self):
+        text = self.DELTAS.read_text(encoding="utf-8")
+        snippet = text.split("python3 - <<'PY'\n", 1)[1].split("\nPY\n", 1)[0]
+        snippet = snippet.replace(
+            "import json, subprocess", "import json"
+        )  # the recorder below stands in for subprocess: nothing is cloned
+        calls = []
+        fake = type("subprocess", (), {"run": staticmethod(lambda cmd, **kw: calls.append(cmd))})
+        with tempfile.TemporaryDirectory() as d:
+            cwd = os.getcwd()
+            os.chdir(d)
+            try:
+                (Path(d) / "schemas").mkdir()
+                (Path(d) / "schemas" / "sources.json").write_text((ROOT / "schemas" / "sources.json").read_text(encoding="utf-8"))
+                exec(snippet, {"subprocess": fake, "__name__": "snippet"})  # noqa: S102 (our own script, with subprocess replaced)
+            finally:
+                os.chdir(cwd)
+        import json
+
+        src = json.loads((ROOT / "schemas" / "sources.json").read_text(encoding="utf-8"))["corpora"]["equational-theories"]
+        self.assertEqual(calls[0], ["git", "clone", "-q", src["repo"], "corpora/equational-theories"])
+        self.assertEqual(calls[1], ["git", "-C", "corpora/equational-theories", "checkout", "-q", src["commit"]])
+
+    def test_a_scenario_whose_fixture_cannot_be_built_stops_instead_of_opening_a_pull_request(self):
+        text = self.DELTAS.read_text(encoding="utf-8")
+        self.assertIn("corpus || {", text)
+        self.assertRegex(text, r"generate\.py --corpus [^\n]*\|\| \{ log \"FIXTURE-ERROR")
+
+
 class Verdict(unittest.TestCase):
     """The Verdict step's shell, run for real with a fake gh: green only when the build passed and the publish step passed."""
 

@@ -60,8 +60,8 @@ corpus() {
   python3 - <<'PY'
 import json, subprocess
 s = json.load(open("schemas/sources.json"))
-src = s["equational-theories"] if isinstance(s, dict) else next(x for x in s if x.get("key") == "equational-theories")
-url, rev = src["url"] if "url" in src else src["repo"], src.get("rev") or src.get("commit")
+src = s["corpora"]["equational-theories"]
+url, rev = src["repo"], src["commit"]
 subprocess.run(["git", "clone", "-q", url, "corpora/equational-theories"], check=True)
 subprocess.run(["git", "-C", "corpora/equational-theories", "checkout", "-q", rev], check=True)
 PY
@@ -69,9 +69,9 @@ PY
 promotion() {  # NAME NRECORDS [proof]  -> opens promote/deltas-NAME, records its PR number
   local name=$1 n=$2 proof=${3:-":= rfl"} i
   cd "$WORK" && git fetch -q origin main && git checkout -q -B "promote/deltas-$name" origin/main || return 1
-  corpus
+  corpus || { log "FIXTURE-ERROR $name: the corpus could not be fetched"; return 1; }
   for i in $(seq 1 "$n"); do rec "D${name//-/_}_$i" "proof=$proof" "status=trusted" | python3 -c 'import json,sys,datetime; r=json.loads(sys.stdin.read()); r["promoted_at"]=datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"); print(json.dumps(r, ensure_ascii=False))' >> data/trusted/equational-theories.jsonl; done
-  python3 scripts/generate.py --corpus corpora/equational-theories --libraries equational-theories >/dev/null 2>&1
+  python3 scripts/generate.py --corpus corpora/equational-theories --libraries equational-theories >/dev/null 2>&1 || { log "FIXTURE-ERROR $name: generate.py failed"; return 1; }
   git add -A . && git commit -q -s -m "Promote equational-theories: deltas scenario $name" && git push -q -f origin "promote/deltas-$name"
   local num
   num=$(gh pr list -R "$REPO" --head "promote/deltas-$name" --state open --json number -q '.[0].number')
