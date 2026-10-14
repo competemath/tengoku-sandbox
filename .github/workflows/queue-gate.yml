@@ -241,7 +241,8 @@ jobs:
       - name: Build the library as main will have it, and pack what that changed
         if: github.event_name == 'merge_group'
         id: delta
-        env: { TEST_BROKEN_MAIN: "${{ vars.TOPUP_TEST_BROKEN_MAIN }}", GH_TOKEN: "${{ github.token }}" }   # the test knob: sandbox only, pretend the library does not build
+        # the test knobs are sandbox variables: TOPUP_TEST_BROKEN_MAIN pretends the library does not build, TENGOKU_DELTA_BUDGET_MB=0 makes every delta over budget
+        env: { TEST_BROKEN_MAIN: "${{ vars.TOPUP_TEST_BROKEN_MAIN }}", TENGOKU_DELTA_BUDGET_MB: "${{ vars.TENGOKU_DELTA_BUDGET_MB }}", GH_TOKEN: "${{ github.token }}" }
         run: |
           git checkout -q -- Tengoku/ data/ && git clean -fdqx Tengoku/
           set +e

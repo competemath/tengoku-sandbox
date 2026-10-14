@@ -246,7 +246,7 @@ def cmd_pack(a) -> int:
         (out / "empty").write_text("this group changed no build output\n")
         print(json.dumps({"decision": "empty", "files": 0, "bytes": 0}))
         return 0
-    budget = int(a.budget_mb or os.environ.get("TENGOKU_DELTA_BUDGET_MB") or 1500) * 1024 * 1024
+    budget = int(a.budget_mb if a.budget_mb is not None else (os.environ.get("TENGOKU_DELTA_BUDGET_MB") or 1500)) * 1024 * 1024
     with tempfile.TemporaryDirectory(prefix="stage-") as d:
         stage = Path(d) / "stage"
         r = subprocess.run(["lake", "cache", "stage", a.new, str(stage)], capture_output=True, text=True)

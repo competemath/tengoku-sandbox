@@ -63,6 +63,7 @@ class Shape(unittest.TestCase):
         self.assertIn("scripts/lake_cache.py diff --out out-all.jsonl --had", whole["run"])
         self.assertIn('scripts/lake_cache.py pack --rev "$GITHUB_SHA"', whole["run"])
         self.assertNotIn("topup", whole["run"])
+        self.assertIn("TENGOKU_DELTA_BUDGET_MB", whole["env"], "the budget is a repository variable (0 in a sandbox scenario: every delta over budget)")
 
     def test_the_states_a_build_can_end_in_are_the_ones_the_gate_handles(self):
         whole = step(self.build, "Build the library as main will have it")
