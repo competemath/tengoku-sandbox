@@ -85,6 +85,11 @@ jobs:
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL || true
           df -h /
 
+      # The runner has ended this job twice (no space left on the device; a process killed for memory) and each time the cause was found with
+      # probe runs. A sample every 20 s (scripts/ci/runner_telemetry.py), and a summary on the job's page, leave the evidence in the job itself.
+      - name: Runner telemetry (disk, memory, kernel out-of-memory kills)
+        run: nohup python3 scripts/ci/runner_telemetry.py watch >/dev/null 2>&1 &
+
       # Restore whatever earlier jobs compiled: exact tree first, then any
       # earlier state of this branch (Lake rebuilds only what differs).
       - name: Restore partial build
@@ -184,6 +189,13 @@ jobs:
           set -o pipefail
           sudo unshare --net --pid --fork --mount-proc runuser -u "$(id -un)" -- env -i HOME="$HOME" PATH="$HOME/.elan/bin:/usr/local/bin:/usr/bin:/bin" LANG=C.UTF-8 \
             lake env lean --run tools/CommandKeywords.lean | python3 scripts/ci/cmdkw_check.py
+
+      - name: Runner telemetry summary
+        if: always()
+        run: python3 scripts/ci/runner_telemetry.py summary >> "$GITHUB_STEP_SUMMARY"
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with: { name: runner-telemetry, path: telemetry.jsonl, retention-days: 3, if-no-files-found: ignore }
 
   # Publishes what the build packed: it runs no Lean, so it is the one job that may write releases and sign.
   publish:

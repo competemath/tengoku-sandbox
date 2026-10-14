@@ -129,7 +129,7 @@ class Check(unittest.TestCase):
     def test_modules_compiled_without_being_asked_to_are_the_misses(self):
         r = run("check", files={"targets-only.txt": "Tengoku.Probe.Hello\n", "build.log": self.LOG})
         self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertEqual(json.loads(r.stdout), {"targets": 1, "compiled": 2, "misses": 1, "first": ["Tengoku.Pfr.Basic"]})
+        self.assertEqual(json.loads(r.stdout), {"targets": 1, "changed": 0, "compiled": 2, "misses": 1, "first": ["Tengoku.Pfr.Basic"]})
 
     def test_fail_makes_a_miss_an_error_and_a_clean_build_is_not(self):
         bad = run("check", "--fail", files={"targets-only.txt": "Tengoku.Probe.Hello\n", "build.log": self.LOG})
@@ -143,6 +143,80 @@ class Check(unittest.TestCase):
             files={"targets-only.txt": "Tengoku.Probe.Hello\n", "build.log": "Build completed successfully (8804 jobs).\n"},
         )
         self.assertEqual((r.returncode, json.loads(r.stdout)["compiled"]), (0, 0))
+
+
+def git(cwd, *args):
+    return subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, check=True).stdout.strip()
+
+
+class CheckChangedModules(unittest.TestCase):
+    """A module the group changed is compiled legitimately, and so is every module that imports it: only a compile of anything else is a restore
+    that missed. The first version counted every module outside the targets: on the first real group (a promotion, 2026-10-14) the changed module
+    itself was the 'miss', and strict mode would have removed the group from the queue."""
+
+    def test_the_module_a_file_is_(self):
+        self.assertEqual(lc.module_of("Tengoku/A/B.lean"), "Tengoku.A.B")
+        self.assertEqual(lc.module_of("Tengoku.lean"), "Tengoku")
+        self.assertIsNone(lc.module_of("scripts/x.lean"))
+        self.assertIsNone(lc.module_of("Tengoku/A/B.md"))
+
+    def test_downstream_is_the_changed_modules_and_everything_that_imports_them_however_far(self):
+        graph = {"T.B": ["T.A"], "T.C": ["T.B"], "T.D": ["T.Other"], "T.A": []}
+        self.assertEqual(lc.downstream({"T.A"}, graph), {"T.A", "T.B", "T.C"})
+        self.assertEqual(lc.downstream(set(), graph), set())
+
+    def test_imports_are_read_from_the_import_lines_of_the_files(self):
+        self.assertEqual(
+            lc.imports_of("import Mathlib\nimport Tengoku.A\n  import Not.Counted\n/- import In.Comment -/\nimport Tengoku.B  -- x\n"),
+            ["Mathlib", "Tengoku.A", "Tengoku.B"],
+        )
+
+    def repo(self, d):
+        git(d, "init", "-q", "-b", "main")
+        git(d, "config", "user.email", "t@example.invalid")
+        git(d, "config", "user.name", "t")
+        for name, text in {
+            "Tengoku/A.lean": "import Mathlib\n",
+            "Tengoku/B.lean": "import Tengoku.A\n",
+            "Tengoku/C.lean": "import Mathlib\n",
+            "Tengoku.lean": "import Tengoku.B\nimport Tengoku.C\n",
+        }.items():
+            (Path(d) / name).parent.mkdir(parents=True, exist_ok=True)
+            (Path(d) / name).write_text(text)
+        git(d, "add", "-A")
+        git(d, "commit", "-qm", "base")
+        base = git(d, "rev-parse", "HEAD")
+        (Path(d) / "Tengoku/A.lean").write_text("import Mathlib\n-- changed\n")
+        git(d, "commit", "-qam", "group")
+        return base
+
+    def check(self, d, base, built, targets="Tengoku\n", *args):
+        (Path(d) / "targets-only.txt").write_text(targets)
+        (Path(d) / "build.log").write_text("".join(f"✔ [1/2] Built {m} (1.0s)\n" for m in built))
+        env = {**__import__("os").environ, "BASE": base} if base else {k: v for k, v in __import__("os").environ.items() if k != "BASE"}
+        return subprocess.run([sys.executable, str(SCRIPT), "check", *args], cwd=d, capture_output=True, text=True, env=env)
+
+    def test_the_changed_module_and_its_importers_are_not_misses_and_an_unrelated_compile_is(self):
+        with tempfile.TemporaryDirectory() as d:
+            base = self.repo(d)
+            ok = self.check(d, base, ["Tengoku.A", "Tengoku.B", "Tengoku"], "Tengoku\n", "--fail")
+            self.assertEqual((ok.returncode, json.loads(ok.stdout)["misses"]), (0, 0), ok.stdout + ok.stderr)
+            bad = self.check(d, base, ["Tengoku.A", "Tengoku.B", "Tengoku.C"], "Tengoku\n", "--fail")
+            self.assertEqual(bad.returncode, 1)
+            self.assertEqual(json.loads(bad.stdout)["first"], ["Tengoku.C"])
+
+    def test_without_the_groups_base_every_compile_outside_the_targets_is_a_miss(self):
+        with tempfile.TemporaryDirectory() as d:
+            self.repo(d)
+            r = self.check(d, "", ["Tengoku.A"], "Tengoku\n")
+            self.assertEqual(json.loads(r.stdout)["first"], ["Tengoku.A"])
+
+    def test_a_base_that_is_not_a_commit_id_is_refused_not_passed_to_git(self):
+        with tempfile.TemporaryDirectory() as d:
+            self.repo(d)
+            r = self.check(d, "--output=x", ["Tengoku.A"], "Tengoku\n")
+            self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+            self.assertFalse((Path(d) / "x").exists())
 
 
 if __name__ == "__main__":

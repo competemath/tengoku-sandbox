@@ -171,6 +171,63 @@ class NightlyPublish(unittest.TestCase):
         self.assertTrue(any(c.startswith("release upload cache-latest") for c in calls), calls)
 
 
+class WorkflowSnippets(unittest.TestCase):
+    """A `python3 -c '...'` one-liner in a workflow is only run by the job, so a syntax error shows on the first real run: the real-tree job of
+    lake-cache-tests.yml escaped quotes (`s[\\"revs\\"]`) inside single quotes and died on SyntaxError after its restore had worked (2026-10-14)."""
+
+    FILES = ("queue-gate.yml", "build.yml", "lake-cache-tests.yml")
+
+    def snippets(self, name):
+        wf = yaml.safe_load((ROOT / ".github" / "workflows" / name).read_text(encoding="utf-8"))
+        for job in wf["jobs"].values():
+            for st in job.get("steps", []):
+                run = st.get("run") or ""
+                for m in re.finditer(r"python3 -c '(.*?)'(?=\s|$)", run, re.S):
+                    yield re.sub(r"\$\{\{.*?\}\}", "0", m.group(1))
+
+    def test_every_single_quoted_python_one_liner_in_the_cache_workflows_compiles(self):
+        seen = 0
+        for name in self.FILES:
+            for code in self.snippets(name):
+                seen += 1
+                try:
+                    compile(code, f"{name} snippet", "exec")
+                except SyntaxError as e:
+                    self.fail(f"{name}: {e}: {code[:120]}")
+        self.assertGreater(seen, 0, "the pattern found no snippet: the test would pass for nothing")
+
+
+class Telemetry(unittest.TestCase):
+    """The queue's build job and the nightly's build job each leave the runner's disk, memory and OOM kills behind (scripts/ci/runner_telemetry.py)."""
+
+    def jobs(self):
+        return (
+            ("queue-gate.yml", load()["jobs"]["queue-build"]),
+            ("build.yml", yaml.safe_load(BUILD.read_text(encoding="utf-8"))["jobs"]["build"]),
+        )
+
+    def test_the_sampler_starts_before_the_work_and_the_summary_and_the_file_survive_a_failure(self):
+        for name, job in self.jobs():
+            steps = job["steps"]
+            watch = next(i for i, s in enumerate(steps) if "runner_telemetry.py watch" in (s.get("run") or ""))
+            seed = next(
+                i for i, s in enumerate(steps) if "cache.sh get" in (s.get("run") or "") or "Restore partial build" in (s.get("name") or "")
+            )
+            self.assertLess(watch, seed, f"{name}: sampled from before the cache is unpacked (where the disk fills)")
+            self.assertTrue((steps[watch]["run"]).rstrip().endswith("&"), f"{name}: runs in the background")
+            summary = step(job, "Runner telemetry summary")
+            self.assertIn("always()", summary["if"], name)
+            self.assertIn('>> "$GITHUB_STEP_SUMMARY"', summary["run"])
+            up = next(s for s in steps if (s.get("with") or {}).get("name") == "runner-telemetry")
+            self.assertIn("always()", up["if"], name)
+            self.assertEqual(up["with"]["path"], "telemetry.jsonl")
+            self.assertEqual(up["with"]["if-no-files-found"], "ignore", name)
+            self.assertLessEqual(up["with"]["retention-days"], 3, name)
+
+    def test_the_job_that_runs_the_groups_code_gets_no_write_permission_from_it(self):
+        self.assertTrue(all(v == "read" for v in load()["jobs"]["queue-build"]["permissions"].values()))
+
+
 class CampaignFixture(unittest.TestCase):
     """scripts/ci/campaign/deltas.sh: its corpus helper read a sources.json shape the schema does not have (KeyError), and the scenario went on
     to open three pull requests without the generated module (2026-10-14)."""
@@ -210,10 +267,31 @@ class CampaignFixture(unittest.TestCase):
         text = self.DELTAS.read_text(encoding="utf-8")
         self.assertIn("corpus || {", text)
         self.assertRegex(text, r"generate\.py --corpus [^\n]*\|\| \{ log \"FIXTURE-ERROR")
-        # and the run ends there: no judging or queueing of a pull request that was never opened
-        calls = re.findall(r"(?m)(?:^|; |^  )promotion [a-z0-9-]+ \d+(?: '[^']*')?( \|\| exit 1)?", text)
-        self.assertEqual(len(calls), 8, "promotion calls in the main flow")
-        self.assertTrue(all(calls), "every promotion call ends the run when it fails")
+        # the generator is run for the one module and Tengoku/All.lean is put back (a real promotion never touches it)
+        self.assertIn('--only "$SRC_PATH"', text)
+        self.assertIn("git checkout -q -- Tengoku/All.lean", text)
+        # promotions run ONE AT A TIME: data files are append-only (the gate refuses any other edit), so two open together conflict in the queue
+        # the moment the first merges. Every promotion call ends the run when it fails, and each is opened after the previous one was judged.
+        calls = [
+            m
+            for m in re.finditer(
+                r"(?m)^(?!promotion\(\)).*?\bpromotion (?:[a-z0-9-]+|\"\$1\") (?:\d+|\"\$2\")(?: '[^']*')?( \|\| exit 1)?", text
+            )
+        ]
+        self.assertGreaterEqual(len(calls), 4)
+        self.assertTrue(all(m.group(1) for m in calls), "every promotion call ends the run when it fails")
+        order = [text.index(k) for k in ("clean clean-1 3", "clean clean-2 3", "promotion broken 1", "clean clean-3 2")]
+        self.assertEqual(order, sorted(order), "opened in the designed order")
+        self.assertNotRegex(text, r"for s in clean-1 clean-2", "no scenario PR is opened before the previous one was judged")
+        self.assertNotIn("lines.insert(", text, "a record is appended, never inserted (append-only data files)")
+        # resumable: the code owner approves each promotion, so a run can stop between scenarios (the first run gave up after 45 minutes without an approval)
+        self.assertIn("DELTAS_FROM", text)
+        self.assertIn('[ "$FROM" = 1 ] && : > "$DR"', text, "a resumed run keeps the results so far")
+        self.assertIn(
+            '[ "$st" != OPEN ] && [ "$st" != MERGED ]', text, "a PR of an earlier run, open or merged, is picked up, not reopened"
+        )
+        self.assertIn('[ "$st" = MERGED ] || enqueue', text)
+        self.assertNotIn('wait_pr "$n" 45', text, "a wait that includes the code owner's approval is hours, not 45 minutes")
 
 
 class Verdict(unittest.TestCase):
