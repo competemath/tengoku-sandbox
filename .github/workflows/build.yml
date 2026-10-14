@@ -1,13 +1,14 @@
-# THROWAWAY RUN BRANCH (never merged): what is in the compiled tree's .lake/build by file type (sandbox tree, same structure as the library's)
+# THROWAWAY RUN BRANCH (never merged): can the per-module *.setup.json files (80% of .lake/build) be left out of the cache? Delete them from a seeded
+# tree and see whether Lake compiles anything, whether `--no-build` still passes, and whether it writes them back.
 name: build
 on: { workflow_dispatch: {} }
 permissions: {}
 defaults: { run: { shell: bash } }
 env: { TENGOKU_REPO: "${{ github.repository }}", TENGOKU_VERIFY: require, TENGOKU_TOPUPS: "0" }
 jobs:
-  types:
+  setup-json:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 90
     permissions: { contents: read }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -20,9 +21,25 @@ jobs:
       - env: { GH_TOKEN: "${{ github.token }}" }
         run: |
           scripts/cache.sh get 2>&1 | tail -2
-          du -sk .lake/build/* | awk '{printf "%7.2f GB  %s\n", $1/1048576, $2}'
-          echo "== bytes by file extension (the last two suffixes, e.g. c.o.export), top 15"
-          find .lake/build -type f -printf '%s %f\n' | awk '{n=split($2,a,"."); ext=(n>=3 ? a[n-1]"."a[n] : (n==2 ? a[n] : "none")); if ($2 ~ /\.(a|so|dylib)$/) ext="archive:" a[n]; s[ext]+=$1; c[ext]++} END {for (e in s) printf "%9.2f GB %9d files  .%s\n", s[e]/1073741824, c[e], e}' | sort -rn | head -15
-          echo "== the biggest single files"; find .lake/build -type f -printf '%s %p\n' | sort -rn | head -5 | awk '{printf "%7.2f GB  %s\n", $1/1073741824, $2}'
-          echo "== the lakefile's lean_lib and default facets"; grep -n "defaultFacets\|precompile\|moreLeanArgs\|moreLeancArgs\|buildType\|lean_lib" lakefile.toml
           lake --version
+          n=$(find .lake/build -name '*.setup.json' | wc -l); echo "setup.json files: $n; build dir $(du -sh .lake/build | cut -f1); free $(df -h / | tail -1 | awk '{print $4}')"
+      - name: "1. Delete every *.setup.json; does `lake build Tengoku.All --no-build` pass?"
+        run: |
+          find .lake/build -name '*.setup.json' -delete
+          echo "after deleting: build dir $(du -sh .lake/build | cut -f1); free $(df -h / | tail -1 | awk '{print $4}')"
+          start=$(date +%s)
+          if lake build Tengoku.All --no-build > nb.log 2>&1; then echo "--no-build: PASSED in $(( $(date +%s) - start )) s"; else echo "--no-build: FAILED in $(( $(date +%s) - start )) s"; tail -6 nb.log; fi
+          echo "setup.json files after --no-build: $(find .lake/build -name '*.setup.json' | wc -l)"
+      - name: "2. A normal build over the tree without them: what is compiled, what is written back?"
+        run: |
+          start=$(date +%s)
+          lake build Tengoku.All > b.log 2>&1; echo "status $?"; tail -2 b.log
+          echo "compiled (Built): $(grep -c ' Built ' b.log)  replayed: $(grep -c 'Replayed' b.log)  took $(( $(date +%s) - start )) s"
+          echo "setup.json files written back: $(find .lake/build -name '*.setup.json' | wc -l); build dir $(du -sh .lake/build | cut -f1); free $(df -h / | tail -1 | awk '{print $4}')"
+          grep -E ' Built ' b.log | head -3
+      - name: "3. And a module that must compile (touch one) with its setup.json missing"
+        run: |
+          f="$(find Tengoku -name '*.lean' | grep -v '/Seed/' | head -1)"; m="$(echo "${f%.lean}" | tr / .)"; echo "module $m"
+          printf '\n-- probe\n' >> "$f"
+          find .lake/build -name '*.setup.json' -delete
+          lake build "$m" 2>&1 | tail -3
