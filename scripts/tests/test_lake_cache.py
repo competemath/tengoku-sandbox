@@ -19,17 +19,14 @@ A, B, C, D = ("a" * 40, "b" * 40, "c" * 40, "d" * 40)
 HEADER = '"2026-03-17"'
 
 
-def run(*args: str, files: dict[str, str] | None = None) -> subprocess.CompletedProcess:
+def run(*args: str, files: dict[str, str] | None = None, cwd: str | None = None) -> subprocess.CompletedProcess:
+    """The CLI in a scratch workspace that holds `files` under the workspace's fixed names (the CLI takes no path)."""
     with tempfile.TemporaryDirectory() as d:
-        resolved = []
-        for a in args:
-            if files and a in files:
-                p = Path(d) / a
-                p.write_text(files[a])
-                resolved.append(str(p))
-            else:
-                resolved.append(a)
-        return subprocess.run([sys.executable, str(SCRIPT), *resolved], capture_output=True, text=True)
+        for name, text in (files or {}).items():
+            p = Path(d) / name
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(text)
+        return subprocess.run([sys.executable, str(SCRIPT), *args], capture_output=True, text=True, cwd=cwd or d)
 
 
 class Plan(unittest.TestCase):
@@ -57,17 +54,6 @@ class Plan(unittest.TestCase):
         ]
         self.assertEqual(lc.plan([A], names), [])
 
-    def test_the_command_prints_one_asset_per_line(self):
-        r = run(
-            "plan",
-            "--revs",
-            "revs",
-            "--assets",
-            "assets",
-            files={"revs": f"{A}\n{B}\n", "assets": f"base.jsonl\nd-{B}.tar.zst\nd-{A}.tar.zst\n"},
-        )
-        self.assertEqual((r.returncode, r.stdout.split()), (0, [f"d-{A}.tar.zst", f"d-{B}.tar.zst"]), r.stderr)
-
 
 class Diff(unittest.TestCase):
     def test_the_header_stays_line_one_and_known_mappings_go(self):
@@ -88,47 +74,48 @@ class Diff(unittest.TestCase):
         with self.assertRaises(ValueError):
             lc.diff([], set())
 
-    def test_the_command_reads_many_known_files_and_ignores_blank_lines_and_crlf(self):
-        files = {"out": f'{HEADER}\r\n{{"i":1}}\r\n\r\n{{"i":2}}\r\n{{"i":3}}\r\n', "base": f'{HEADER}\n{{"i":1}}\n', "d1": '{"i":3}\n'}
+    def test_the_command_reads_the_fixed_files_and_ignores_blank_lines_and_crlf(self):
+        files = {
+            "out-all.jsonl": f'{HEADER}\r\n{{"i":1}}\r\n\r\n{{"i":2}}\r\n{{"i":3}}\r\n',
+            ".lake/deltas-had.jsonl": f'{HEADER}\n{{"i":1}}\n',
+            "delta-out/base-computed.jsonl": '{"i":3}\n',
+        }
         with tempfile.TemporaryDirectory() as d:
-            for k, v in files.items():
-                (Path(d) / k).write_text(v)
-            r = subprocess.run(
-                [sys.executable, str(SCRIPT), "diff", "--out", f"{d}/out", "--had", f"{d}/base", f"{d}/d1", "--to", f"{d}/new"],
-                capture_output=True,
-                text=True,
-            )
+            for name, text in files.items():
+                p = Path(d) / name
+                p.parent.mkdir(parents=True, exist_ok=True)
+                p.write_text(text)
+            r = subprocess.run([sys.executable, str(SCRIPT), "diff", "--with-computed-base"], cwd=d, capture_output=True, text=True)
             self.assertEqual(r.returncode, 0, r.stderr)
             self.assertEqual(json.loads(r.stdout), {"build": 3, "known": 2, "new": 1})
-            self.assertEqual((Path(d) / "new").read_text(), f'{HEADER}\n{{"i":2}}\n')
+            self.assertEqual((Path(d) / "out-new.jsonl").read_text(), f'{HEADER}\n{{"i":2}}\n')
+            # without the flag the computed base is not consulted: its mapping counts as new
+            r = subprocess.run([sys.executable, str(SCRIPT), "diff"], cwd=d, capture_output=True, text=True)
+            self.assertEqual(json.loads(r.stdout), {"build": 3, "known": 1, "new": 2})
+
+    def test_a_workspace_without_a_store_yet_knows_nothing(self):
+        r = run("diff", files={"out-all.jsonl": f'{HEADER}\n{{"i":1}}\n'})
+        self.assertEqual((r.returncode, json.loads(r.stdout)["new"]), (0, 1), r.stderr)
 
 
-class Paths(unittest.TestCase):
-    """A path given on the command line never leaves the working directory or the temp directory, and is handed on absolute (never read as an option)."""
+class NoPaths(unittest.TestCase):
+    """Nothing typed on the command line becomes a path or a process argument: the CLI refuses every path-like option."""
 
-    def test_a_path_outside_the_workspace_is_refused_by_every_subcommand_that_takes_one(self):
+    def test_every_option_that_used_to_take_a_path_is_refused(self):
         for args in (
-            ["plan", "--revs", "/etc/passwd", "--assets", "/etc/passwd"],
-            ["diff", "--out", "/etc/passwd", "--had", "/etc/passwd", "--to", "/etc/x"],
-            ["check", "--targets", "/etc/passwd", "--log", "/etc/passwd"],
-            ["pack", "--rev", "a" * 40, "--new", "/etc/passwd", "--out", "/etc/x"],
+            ["diff", "--out", "x"],
+            ["diff", "--had", "x"],
+            ["diff", "--to", "x"],
+            ["check", "--targets", "x"],
+            ["check", "--log", "x"],
+            ["pack", "--out", "x"],
+            ["pack", "--new", "x"],
+            ["pack", "--rev", "a" * 40],
+            ["plan"],
         ):
             r = run(*args)
             self.assertEqual(r.returncode, 2, (args, r.stdout, r.stderr))
-            self.assertIn("outside the workspace", r.stderr)
-
-    def test_a_dotdot_that_climbs_out_and_a_symlink_that_points_out_are_refused(self):
-        with tempfile.TemporaryDirectory() as d:
-            link = Path(d) / "link"
-            link.symlink_to("/etc")
-            for bad in (f"{d}/../../../../../../../etc/passwd", f"{link}/passwd"):
-                with self.assertRaises(ValueError):
-                    lc.inside(bad)
-
-    def test_a_path_in_the_temp_directory_or_the_working_directory_is_accepted_and_made_absolute(self):
-        with tempfile.TemporaryDirectory() as d:
-            self.assertTrue(lc.inside(Path(d) / "x.jsonl").is_absolute())
-        self.assertTrue(lc.inside("relative-file").is_absolute())
+            self.assertIn("usage:", r.stderr)
 
 
 class Check(unittest.TestCase):
@@ -143,24 +130,20 @@ class Check(unittest.TestCase):
         self.assertEqual(lc.compiled(self.LOG), {"Tengoku.Pfr.Basic", "Tengoku.Probe.Hello"})
 
     def test_modules_compiled_without_being_asked_to_are_the_misses(self):
-        r = run("check", "--targets", "t", "--log", "l", files={"t": "Tengoku.Probe.Hello\n", "l": self.LOG})
+        r = run("check", files={"targets-only.txt": "Tengoku.Probe.Hello\n", "build.log": self.LOG})
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertEqual(json.loads(r.stdout), {"targets": 1, "compiled": 2, "misses": 1, "first": ["Tengoku.Pfr.Basic"]})
 
     def test_fail_makes_a_miss_an_error_and_a_clean_build_is_not(self):
-        bad = run("check", "--targets", "t", "--log", "l", "--fail", files={"t": "Tengoku.Probe.Hello\n", "l": self.LOG})
-        ok = run("check", "--targets", "t", "--log", "l", "--fail", files={"t": "Tengoku.Probe.Hello\nTengoku.Pfr.Basic\n", "l": self.LOG})
+        bad = run("check", "--fail", files={"targets-only.txt": "Tengoku.Probe.Hello\n", "build.log": self.LOG})
+        ok = run("check", "--fail", files={"targets-only.txt": "Tengoku.Probe.Hello\nTengoku.Pfr.Basic\n", "build.log": self.LOG})
         self.assertEqual((bad.returncode, ok.returncode), (1, 0))
 
     def test_a_log_that_built_nothing_is_a_clean_build(self):
         r = run(
             "check",
-            "--targets",
-            "t",
-            "--log",
-            "l",
             "--fail",
-            files={"t": "Tengoku.Probe.Hello\n", "l": "Build completed successfully (8804 jobs).\n"},
+            files={"targets-only.txt": "Tengoku.Probe.Hello\n", "build.log": "Build completed successfully (8804 jobs).\n"},
         )
         self.assertEqual((r.returncode, json.loads(r.stdout)["compiled"]), (0, 0))
 

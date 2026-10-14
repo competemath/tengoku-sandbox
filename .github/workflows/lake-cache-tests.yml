@@ -85,30 +85,37 @@ jobs:
           git -c user.name=t -c user.email=t@example.invalid add -A && git -c user.name=t -c user.email=t@example.invalid commit -qm c1
           c1="$(git rev-parse HEAD)"; echo "C1=$c1" >> "$GITHUB_ENV"
           python3 "$GITHUB_WORKSPACE/scripts/lake_cache.py" restore --fresh | tee restore1.json
-          lake build Toy -o out.jsonl 2>&1 | tail -1
-          python3 "$GITHUB_WORKSPACE/scripts/lake_cache.py" diff --out out.jsonl --had .lake/deltas-had.jsonl --to new.jsonl | tee diff1.json
+          # lake_cache.py takes no path or commit: out-all.jsonl in, out-new.jsonl and delta-out/ out, the delta named by HEAD
+          lake build Toy -o out-all.jsonl 2>&1 | tail -1
+          python3 "$GITHUB_WORKSPACE/scripts/lake_cache.py" diff | tee diff1.json
           python3 -c 'import json,sys; d=json.load(open("diff1.json")); assert d["new"]==2, d'   # C and the umbrella Toy
-          python3 "$GITHUB_WORKSPACE/scripts/lake_cache.py" pack --rev "$c1" --new new.jsonl --out delta1 | tee pack1.json
-          mkdir -p "$SHIM_DIR/assets/lake-deltas-cache-toy" && cp delta1/d-*.tar.zst "$SHIM_DIR/assets/lake-deltas-cache-toy/"
+          python3 "$GITHUB_WORKSPACE/scripts/lake_cache.py" pack | tee pack1.json
+          mkdir -p "$SHIM_DIR/assets/lake-deltas-cache-toy" && cp delta-out/d-*.tar.zst "$SHIM_DIR/assets/lake-deltas-cache-toy/" && rm -rf delta-out
       - name: "Merge 2: C changes (a new hash for C and the umbrella); and an orphan delta of a commit off main"
         run: |
           cd "$RUNNER_TEMP/toy"; export LAKE_CACHE_DIR="$PWD/.lake/cache"; export PATH="$SHIM_DIR/bin:$PATH"
-          printf 'import Toy.B\ndef Toy.c : Nat := Toy.b + 2\n' > Toy/C.lean
-          git -c user.name=t -c user.email=t@example.invalid commit -qam c2; c2="$(git rev-parse HEAD)"; echo "C2=$c2" >> "$GITHUB_ENV"
-          lake build Toy -o out.jsonl 2>&1 | tail -1
-          python3 "$GITHUB_WORKSPACE/scripts/lake_cache.py" diff --out out.jsonl --had .lake/deltas-had.jsonl new.jsonl --to new2.jsonl | tee diff2.json
-          python3 -c 'import json; d=json.load(open("diff2.json")); assert d["new"]==2, d'
-          python3 "$GITHUB_WORKSPACE/scripts/lake_cache.py" pack --rev "$c2" --new new2.jsonl --out delta2 | tee pack2.json
-          cp delta2/d-*.tar.zst "$SHIM_DIR/assets/lake-deltas-cache-toy/"
-          # the orphan: a commit on a side branch, its delta published (a group that was rebuilt)
-          git checkout -qb side "$BASE" && printf 'def Toy.orphan : Nat := 9\n' > Toy/O.lean && git -c user.name=t -c user.email=t@example.invalid add -A && git -c user.name=t -c user.email=t@example.invalid commit -qm orphan
-          o="$(git rev-parse HEAD)"; cp "$SHIM_DIR/assets/lake-deltas-cache-toy/d-$c2.tar.zst" "$SHIM_DIR/assets/lake-deltas-cache-toy/d-$o.tar.zst"; rm -f Toy/O.lean; git checkout -q main
-          python3 - "$SHIM_DIR" <<'PY'
+          listing() { python3 - "$SHIM_DIR" <<'PY'
           import json, os, sys
           d = sys.argv[1] + "/assets/lake-deltas-cache-toy"
           json.dump({"assets": [{"name": n} for n in sorted(os.listdir(d))]}, open(sys.argv[1] + "/releases/lake-deltas-cache-toy.json", "w"))
           print("store:", sorted(os.listdir(d)))
           PY
+          }
+          printf 'import Toy.B\ndef Toy.c : Nat := Toy.b + 2\n' > Toy/C.lean
+          git -c user.name=t -c user.email=t@example.invalid commit -qam c2; c2="$(git rev-parse HEAD)"; echo "C2=$c2" >> "$GITHUB_ENV"
+          # the queue's order: restore what merged before (merge 1's delta is in the store now), then build, diff against everything known
+          listing
+          python3 "$GITHUB_WORKSPACE/scripts/lake_cache.py" restore | tee restore2.json
+          python3 -c 'import json,os; s=json.load(open("restore2.json")); assert [a[2:42] for a in s["applied"]]==[os.environ["C1"]], s'
+          lake build Toy -o out-all.jsonl 2>&1 | tail -1
+          python3 "$GITHUB_WORKSPACE/scripts/lake_cache.py" diff | tee diff2.json
+          python3 -c 'import json; d=json.load(open("diff2.json")); assert d["new"]==2, d'
+          python3 "$GITHUB_WORKSPACE/scripts/lake_cache.py" pack | tee pack2.json
+          cp delta-out/d-*.tar.zst "$SHIM_DIR/assets/lake-deltas-cache-toy/" && rm -rf delta-out
+          # the orphan: a commit on a side branch, its delta published (a group that was rebuilt)
+          git checkout -qb side "$BASE" && printf 'def Toy.orphan : Nat := 9\n' > Toy/O.lean && git -c user.name=t -c user.email=t@example.invalid add -A && git -c user.name=t -c user.email=t@example.invalid commit -qm orphan
+          o="$(git rev-parse HEAD)"; cp "$SHIM_DIR/assets/lake-deltas-cache-toy/d-$c2.tar.zst" "$SHIM_DIR/assets/lake-deltas-cache-toy/d-$o.tar.zst"; rm -f Toy/O.lean; git checkout -q main
+          listing
       - name: "I1 + I4: a fresh runner at main's tip: tarball + restore + --no-build compiles nothing; the orphan is not applied"
         run: |
           cd "$RUNNER_TEMP/toy"; export PATH="$SHIM_DIR/bin:$PATH"

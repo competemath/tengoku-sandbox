@@ -182,8 +182,8 @@ jobs:
           # What the build compiled beyond the group's own targets is a restore that missed (a merge without a delta, a refused delta): a cost,
           # never a wrong result, so it is reported; TENGOKU_CACHE_STRICT=1 (the sandbox's scenarios) makes it a failure.
           grep -E '^Tengoku\.' targets.txt > targets-only.txt
-          if [ "$STRICT" = 1 ]; then python3 scripts/lake_cache.py check --targets targets-only.txt --log build.log --fail | tee -a "$GITHUB_STEP_SUMMARY"
-          else python3 scripts/lake_cache.py check --targets targets-only.txt --log build.log | tee -a "$GITHUB_STEP_SUMMARY"; fi
+          if [ "$STRICT" = 1 ]; then python3 scripts/lake_cache.py check --fail | tee -a "$GITHUB_STEP_SUMMARY"
+          else python3 scripts/lake_cache.py check | tee -a "$GITHUB_STEP_SUMMARY"; fi
       - name: Axioms of every new declaration
         if: github.event_name == 'merge_group' && steps.build.outputs.targets != ''
         shell: bash
@@ -269,16 +269,17 @@ jobs:
           fi
           # the base's mappings were not published with this nightly (older than this design, or its upload failed): computed here once, and
           # published by the gate job for every later group of the day
-          had=(.lake/deltas-had.jsonl)
+          computed=""
           if [ -f .lake/.base-missing ]; then
             echo "the base's mappings are not published: computing them (lake build Tengoku.All -o)"
             lake build Tengoku.All -o delta-out/base-computed.jsonl 2>&1 | tail -1
-            had=(delta-out/base-computed.jsonl .lake/deltas-had.jsonl)
+            computed="--with-computed-base"
           fi
-          python3 scripts/lake_cache.py diff --out out-all.jsonl --had "${had[@]}" --to out-new.jsonl | tee -a "$GITHUB_STEP_SUMMARY"
+          # no command of lake_cache.py takes a path or a commit: its files are the workspace's fixed names (out-all.jsonl in, out-new.jsonl, delta-out/ out) and the delta is named by HEAD
+          python3 scripts/lake_cache.py diff $computed | tee -a "$GITHUB_STEP_SUMMARY"
           tag="$(cat base-tag.txt)"
           assets="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/lake-deltas-$tag" -q '.assets|length' 2>/dev/null || echo 0)"
-          python3 scripts/lake_cache.py pack --rev "$GITHUB_SHA" --new out-new.jsonl --out delta-out --assets "$assets" | tee pack.json | tee -a "$GITHUB_STEP_SUMMARY"
+          python3 scripts/lake_cache.py pack --assets "$assets" | tee pack.json | tee -a "$GITHUB_STEP_SUMMARY"
           state="$(python3 -c 'import json; d=json.load(open("pack.json")); print({"publish": "complete", "empty": "empty"}.get(d["decision"], "needs-nightly"))')"
           echo "state=$state" >> "$GITHUB_OUTPUT"
       - if: github.event_name == 'merge_group'

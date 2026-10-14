@@ -8,18 +8,18 @@ the nightly travels as ONE small file per merge, `d-<commit>.tar.zst` (the stagi
 `lake-deltas-<cache tag>` of the nightly it builds on; the nightly publishes its own mappings as `base.jsonl` on the cache release. A release
 holds at most 1000 assets, so a day's merges fit and a new nightly starts a new release.
 
-  restore [--want <commit>]                  after `cache.sh get`: apply the deltas of the merges between the nightly base and <commit> (HEAD)
+  restore [--want <commit>] [--fresh]       after `cache.sh get`: apply the deltas of the merges between the nightly base and <commit> (HEAD)
                                              — `git rev-list --reverse base..want` ∩ the release's assets, oldest first, each attested —
                                              with `lake cache unstage`; what the store already knows goes to .lake/deltas-had.jsonl
-  diff   --out <file> --had <file>... --to <file>
-                                             this build's OWN new mappings: the lines of its `lake build -o` file that no earlier file has;
+  diff   [--with-computed-base]              this build's OWN new mappings: the lines of out-all.jsonl (`lake build Tengoku.All -o`) that the store
+                                             does not know (.lake/deltas-had.jsonl, and delta-out/base-computed.jsonl with the flag), to out-new.jsonl;
                                              line 1 (the file's header) stays line 1 — `lake cache stage` refuses a mappings file without it
-  pack   --rev <sha> --new <file> --out <dir> [--assets N] [--budget-mb N]
-                                             stage the new mappings, pack them as <dir>/d-<sha>.tar.zst — or, over the size budget or with the
-                                             release nearly full, write <dir>/needs-nightly instead (the merge lands; a nightly follows)
-  plan   --revs <file> --assets <file>       (pure) the delta assets to apply, oldest first
-  check  --targets <file> --log <file> [--fail]
-                                             (pure) modules the build COMPILED that are not its targets: restores that missed
+  pack   [--assets N] [--budget-mb N]        stage out-new.jsonl and pack it as delta-out/d-<HEAD>.tar.zst — or, over the size budget or with the
+                                             release nearly full, write delta-out/needs-nightly instead (the merge lands; a nightly follows)
+  check  [--fail]                            modules build.log says were COMPILED that are not in targets-only.txt: restores that missed
+
+No command takes a path: the files are the workspace's fixed names (the queue's working directory), and the commit is HEAD's. Nothing typed on a
+command line becomes a path or a process argument.
 
 Environment: TENGOKU_REPO (where deltas are published), TENGOKU_CACHE_SOURCE (where they are read; a sandbox may read the library's),
 TENGOKU_VERIFY (require: an unattested or tampered delta is skipped and Lake compiles instead; warn: applied with a warning),
@@ -48,21 +48,15 @@ APPLIED = LAKE / ".deltas-applied"  # one asset name per line
 HAD = LAKE / "deltas-had.jsonl"  # base.jsonl + every applied delta's outputs.jsonl
 STORE = LAKE / ".delta-store"
 ASSET_CAP = 990  # a release holds at most 1000 assets; stop before the last ones, there may be uploads in flight
+OUT_ALL = Path("out-all.jsonl")  # lake build Tengoku.All -o: every mapping of the whole library
+OUT_NEW = Path("out-new.jsonl")  # this group's own new mappings (diff writes it, pack stages it)
+TARGETS = Path("targets-only.txt")  # the modules the group asked to build, one per line
+BUILD_LOG = Path("build.log")
+DELTA_DIR = Path("delta-out")
+BASE_COMPUTED = DELTA_DIR / "base-computed.jsonl"  # the base's mappings, when the nightly did not publish them
 HTTPS_ONLY = ["--proto", "=https", "--tlsv1.2"]
 REPO_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")  # a release tag or an asset name: one path segment, no separators, no leading dot
-
-
-def inside(path: str | Path) -> Path:
-    """The absolute, symlink-free form of a path given on the command line, which must lie under the working directory or the temp directory
-    (RUNNER_TEMP on a runner): a path argument never leaves the workspace, and being absolute it can never be read as an option by the tool it is
-    handed to."""
-    real = os.path.realpath(path)
-    for root in (os.getcwd(), tempfile.gettempdir(), os.environ.get("RUNNER_TEMP") or tempfile.gettempdir()):
-        base = os.path.realpath(root)
-        if os.path.commonpath([base, real]) == base:
-            return Path(real)
-    raise ValueError(f"{str(path)!r} is outside the workspace and the temp directory")
 
 
 def read_lines(path: Path) -> list[str]:
@@ -327,28 +321,56 @@ def stage_and_pack(new: Path, delta: Path) -> int | None:
     return files
 
 
+def head_commit() -> str:
+    """HEAD's 40-hex commit id, from git (never from the command line): it names the delta."""
+    rev = run("git", "rev-parse", "HEAD").stdout.strip()
+    if not re.fullmatch(r"[0-9a-f]{40}", rev):
+        raise ValueError(f"HEAD is {rev!r}, not a commit id")
+    return rev
+
+
 def cmd_pack(a) -> int:
-    if not re.fullmatch(r"[0-9a-f]{40}", a.rev):
-        print(f"--rev is a 40-hex commit id, not {a.rev!r}", file=sys.stderr)
+    try:
+        rev = head_commit()
+    except (ValueError, subprocess.CalledProcessError) as e:
+        print(f"pack: {e}", file=sys.stderr)
         return 2
-    out = a.out
-    out.mkdir(parents=True, exist_ok=True)
-    if len(read_lines(a.new)) <= 1:
-        (out / "empty").write_text("this group changed no build output\n")
+    DELTA_DIR.mkdir(parents=True, exist_ok=True)
+    if len(read_lines(OUT_NEW)) <= 1:
+        (DELTA_DIR / "empty").write_text("this group changed no build output\n")
         print(json.dumps({"decision": "empty", "files": 0, "bytes": 0}))
         return 0
     budget_mb = a.budget_mb if a.budget_mb is not None else int(os.environ.get("TENGOKU_DELTA_BUDGET_MB") or 1500)
-    delta = out / f"d-{a.rev}.tar.zst"
-    files = stage_and_pack(a.new, delta)
+    delta = DELTA_DIR / f"d-{rev}.tar.zst"
+    files = stage_and_pack(OUT_NEW, delta)
     if files is None:
         return 1
     size = delta.stat().st_size
     decision = decide(size, int(a.release_assets or 0), budget_mb * 1024 * 1024)
     if decision != "publish":
         delta.unlink()
-        (out / "needs-nightly").write_text(decision + "\n")
+        (DELTA_DIR / "needs-nightly").write_text(decision + "\n")
     print(json.dumps({"decision": decision, "files": files, "bytes": size, "asset": delta.name if decision == "publish" else None}))
     return 0
+
+
+def cmd_diff(a) -> int:
+    had = set(read_lines(HAD)) if HAD.exists() else set()
+    if a.with_computed_base and BASE_COMPUTED.exists():
+        had.update(read_lines(BASE_COMPUTED))
+    out = read_lines(OUT_ALL)
+    rows = diff(out, had)
+    OUT_NEW.write_text("".join(ln + "\n" for ln in rows), encoding="utf-8")
+    print(json.dumps({"build": len(out) - 1, "known": len(out) - len(rows), "new": len(rows) - 1}))
+    return 0
+
+
+def cmd_check(a) -> int:
+    targets = set(read_lines(TARGETS))
+    built = compiled(BUILD_LOG.read_text(encoding="utf-8", errors="replace"))
+    missed = sorted(built - targets)
+    print(json.dumps({"targets": len(targets), "compiled": len(built), "misses": len(missed), "first": missed[:5]}))
+    return 1 if (a.fail and missed) else 0
 
 
 # ---- main ----------------------------------------------------------------------------------------------------------------
@@ -357,59 +379,22 @@ def cmd_pack(a) -> int:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
-    p = sub.add_parser("plan")
-    p.add_argument("--revs", required=True)
-    p.add_argument("--assets", required=True)
     d = sub.add_parser("diff")
-    d.add_argument("--out", required=True)
-    d.add_argument("--had", nargs="+", required=True)
-    d.add_argument("--to", required=True)
+    d.add_argument(
+        "--with-computed-base", action="store_true", help="the base's mappings were computed by this build (delta-out/base-computed.jsonl)"
+    )
     c = sub.add_parser("check")
-    c.add_argument("--targets", required=True)
-    c.add_argument("--log", required=True)
     c.add_argument("--fail", action="store_true")
     r = sub.add_parser("restore")
     r.add_argument("--want", default="HEAD")
     r.add_argument("--release", default=None)
     r.add_argument("--fresh", action="store_true", help="forget what was applied before (a new base was unpacked)")
     k = sub.add_parser("pack")
-    k.add_argument("--rev", required=True)
-    k.add_argument("--new", required=True)
-    k.add_argument("--out", required=True)
     k.add_argument("--assets", dest="release_assets", type=int, default=0, help="how many assets the day's release holds now")
     k.add_argument("--budget-mb", type=int, default=None)
     a = ap.parse_args(argv)
-    try:
-        for attr in ("revs", "assets", "out", "had", "to", "targets", "log", "new"):
-            if hasattr(a, attr):
-                v = getattr(a, attr)
-                setattr(a, attr, [inside(x) for x in v] if isinstance(v, list) else inside(v))
-    except ValueError as e:
-        print(f"lake_cache: {e}", file=sys.stderr)
-        return 2
-
-    if a.cmd == "plan":
-        for name in plan(read_lines(a.revs), read_lines(a.assets)):
-            print(name)
-        return 0
-    if a.cmd == "diff":
-        had: set[str] = set()
-        for f in a.had:
-            had.update(read_lines(f))
-        out = read_lines(a.out)
-        rows = diff(out, had)
-        a.to.write_text("".join(ln + "\n" for ln in rows), encoding="utf-8")
-        print(json.dumps({"build": len(out) - 1, "known": len(out) - len(rows), "new": len(rows) - 1}))
-        return 0
-    if a.cmd == "check":
-        targets = set(read_lines(a.targets))
-        built = compiled(a.log.read_text(encoding="utf-8", errors="replace"))
-        missed = sorted(built - targets)
-        print(json.dumps({"targets": len(targets), "compiled": len(built), "misses": len(missed), "first": missed[:5]}))
-        return 1 if (a.fail and missed) else 0
-    if a.cmd == "restore":
-        return cmd_restore(a)
-    return cmd_pack(a)
+    handlers = {"diff": cmd_diff, "check": cmd_check, "restore": cmd_restore, "pack": cmd_pack}
+    return handlers[a.cmd](a)
 
 
 if __name__ == "__main__":

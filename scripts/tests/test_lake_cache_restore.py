@@ -228,6 +228,8 @@ class Store(unittest.TestCase):
 
 
 class Pack(unittest.TestCase):
+    """`pack` in a workspace: out-new.jsonl in, delta-out/ out, the delta named by HEAD (never by an argument)."""
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         root = Path(self.tmp.name)
@@ -238,26 +240,28 @@ class Pack(unittest.TestCase):
             p.write_text(text)
             p.chmod(p.stat().st_mode | stat.S_IEXEC)
         self.env = {**os.environ, "PATH": f"{self.shim / 'bin'}{os.pathsep}{os.environ['PATH']}", "SHIM_DIR": str(self.shim)}
-        self.new = root / "new.jsonl"
-        self.new.write_text(HEADER + "\n" + "".join(f'{{"m":{i}}}\n' for i in range(5)))
-        self.out = root / "out"
+        self.ws = root / "ws"
+        self.ws.mkdir()
+        for args in (
+            ["init", "-q", "-b", "main"],
+            ["-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-q", "--allow-empty", "-m", "x"],
+        ):
+            sh(["git", *args], self.ws)
+        self.head = sh(["git", "rev-parse", "HEAD"], self.ws).stdout.strip()
+        (self.ws / "out-new.jsonl").write_text(HEADER + "\n" + "".join(f'{{"m":{i}}}\n' for i in range(5)))
+        self.out = self.ws / "delta-out"
 
     def tearDown(self):
         self.tmp.cleanup()
 
     def pack(self, *args):
-        r = subprocess.run(
-            [sys.executable, str(SCRIPT), "pack", "--rev", "a" * 40, "--new", str(self.new), "--out", str(self.out), *args],
-            env=self.env,
-            capture_output=True,
-            text=True,
-        )
+        r = subprocess.run([sys.executable, str(SCRIPT), "pack", *args], cwd=self.ws, env=self.env, capture_output=True, text=True)
         self.assertEqual(r.returncode, 0, r.stderr)
         return json.loads(r.stdout.strip().splitlines()[-1])
 
-    def test_within_budget_the_delta_is_packed_as_one_file_named_by_the_commit(self):
+    def test_within_budget_the_delta_is_packed_as_one_file_named_by_head(self):
         s = self.pack()
-        self.assertEqual((s["decision"], s["files"], s["asset"]), ("publish", 6, "d-" + "a" * 40 + ".tar.zst"))
+        self.assertEqual((s["decision"], s["files"], s["asset"]), ("publish", 6, f"d-{self.head}.tar.zst"))
         self.assertTrue((self.out / s["asset"]).exists())
         with tarfile.open(self.out / s["asset"]) as t:  # the zstd shim is a pass-through, so the file is a plain tar
             names = sorted(os.path.basename(m.name) for m in t.getmembers() if m.isfile())
@@ -274,32 +278,24 @@ class Pack(unittest.TestCase):
         s = self.pack("--assets", "990")
         self.assertEqual(s["decision"], "needs-nightly:release-full")
 
-    def test_a_rev_that_is_not_a_commit_id_is_refused_before_anything_is_written(self):
-        for bad in ("../../etc/x", "a" * 39, "A" * 40, "a" * 40 + "; rm -rf /", ""):
-            r = subprocess.run(
-                [sys.executable, str(SCRIPT), "pack", "--rev", bad, "--new", str(self.new), "--out", str(self.out)],
-                env=self.env,
-                capture_output=True,
-                text=True,
-            )
-            self.assertEqual(r.returncode, 2, (bad, r.stderr))
-        self.assertFalse(self.out.exists())
+    def test_a_workspace_that_is_not_a_git_checkout_is_refused_before_anything_is_written(self):
+        bare = Path(self.tmp.name) / "bare"
+        bare.mkdir()
+        (bare / "out-new.jsonl").write_text(HEADER + "\n" + '{"m":1}\n')
+        r = subprocess.run([sys.executable, str(SCRIPT), "pack"], cwd=bare, env=self.env, capture_output=True, text=True)
+        self.assertEqual(r.returncode, 2, r.stderr)
+        self.assertFalse((bare / "delta-out").exists())
 
     def test_lake_refusing_to_stage_is_an_error_and_leaves_no_delta(self):
         self.env["SHIM_STAGE_FAIL"] = "1"
-        r = subprocess.run(
-            [sys.executable, str(SCRIPT), "pack", "--rev", "a" * 40, "--new", str(self.new), "--out", str(self.out)],
-            env=self.env,
-            capture_output=True,
-            text=True,
-        )
+        r = subprocess.run([sys.executable, str(SCRIPT), "pack"], cwd=self.ws, env=self.env, capture_output=True, text=True)
         self.assertEqual(r.returncode, 1, r.stdout)
         self.assertIn("lake cache stage failed", r.stderr)
         self.assertNotIn("Traceback", r.stderr)  # refused, not crashed
         self.assertEqual(list(self.out.glob("d-*")), [])
 
     def test_nothing_new_is_an_empty_marker_not_a_delta(self):
-        self.new.write_text(HEADER + "\n")
+        (self.ws / "out-new.jsonl").write_text(HEADER + "\n")
         s = self.pack()
         self.assertEqual(s["decision"], "empty")
         self.assertTrue((self.out / "empty").exists())

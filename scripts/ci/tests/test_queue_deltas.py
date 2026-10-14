@@ -57,17 +57,24 @@ class Shape(unittest.TestCase):
     def test_every_lean_build_of_the_group_records_its_mappings(self):
         cand = step(self.build, "Generate candidates")
         self.assertIn("lake build $targets -o out-candidates.jsonl", cand["run"])
-        self.assertIn("scripts/lake_cache.py check --targets", cand["run"])
+        self.assertIn("scripts/lake_cache.py check", cand["run"])
         whole = step(self.build, "Build the library as main will have it")
         self.assertRegex(whole["run"], r"timeout -k \d+ \d+m lake build Tengoku\.All -o out-all\.jsonl")
-        self.assertIn("scripts/lake_cache.py diff --out out-all.jsonl --had", whole["run"])
-        self.assertIn('scripts/lake_cache.py pack --rev "$GITHUB_SHA"', whole["run"])
+        self.assertIn("scripts/lake_cache.py diff $computed", whole["run"])
+        self.assertIn('scripts/lake_cache.py pack --assets "$assets"', whole["run"])
         self.assertNotIn("topup", whole["run"])
         self.assertIn(
             "TENGOKU_DELTA_BUDGET_MB",
             whole["env"],
             "the budget is a repository variable (0 in a sandbox scenario: every delta over budget)",
         )
+
+    def test_no_call_of_lake_cache_passes_a_path_or_a_commit(self):
+        """Sonar and Snyk flag a command-line path that reaches open() or a process argument; the CLI takes none, and the workflow must not pass one."""
+        text = WORKFLOW.read_text(encoding="utf-8")
+        for call in re.findall(r"scripts/lake_cache\.py (?:diff|check|pack)[^\n|]*", text):
+            for banned in ("--out", "--new", "--to", "--had", "--targets", "--log", "--rev"):
+                self.assertNotIn(banned, call, call)
 
     def test_the_states_a_build_can_end_in_are_the_ones_the_gate_handles(self):
         whole = step(self.build, "Build the library as main will have it")
