@@ -11,9 +11,9 @@ holds at most 1000 assets, so a day's merges fit and a new nightly starts a new 
   restore [--want <commit>] [--fresh]       after `cache.sh get`: apply the deltas of the merges between the nightly base and <commit> (HEAD)
                                              — `git rev-list --reverse base..want` ∩ the release's assets, oldest first, each attested —
                                              with `lake cache unstage`; what the store already knows goes to .lake/deltas-had.jsonl
-  diff   [--with-computed-base]              this build's OWN new mappings: the lines of out-all.jsonl (`lake build Tengoku.All -o`) that the store
-                                             does not know (.lake/deltas-had.jsonl, and delta-out/base-computed.jsonl with the flag), to out-new.jsonl;
-                                             line 1 (the file's header) stays line 1 — `lake cache stage` refuses a mappings file without it
+  diff                                       this build's OWN new mappings: the lines of out-all.jsonl (`lake build Tengoku.All -o`) that the store
+                                             does not know (.lake/deltas-had.jsonl), to out-new.jsonl; line 1 (the file's header) stays
+                                             line 1 — `lake cache stage` refuses a mappings file without it
   pack   [--assets N] [--budget-mb N]        stage out-new.jsonl and pack it as delta-out/d-<HEAD>.tar.zst — or, over the size budget or with the
                                              release nearly full, write delta-out/needs-nightly instead (the merge lands; a nightly follows)
   check  [--fail]                            modules build.log says were COMPILED that are not in targets-only.txt: restores that missed
@@ -53,7 +53,6 @@ OUT_NEW = Path("out-new.jsonl")  # this group's own new mappings (diff writes it
 TARGETS = Path("targets-only.txt")  # the modules the group asked to build, one per line
 BUILD_LOG = Path("build.log")
 DELTA_DIR = Path("delta-out")
-BASE_COMPUTED = DELTA_DIR / "base-computed.jsonl"  # the base's mappings, when the nightly did not publish them
 HTTPS_ONLY = ["--proto", "=https", "--tlsv1.2"]
 REPO_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")  # a release tag or an asset name: one path segment, no separators, no leading dot
@@ -226,7 +225,7 @@ def load_base_mappings(repo: str, tag: str, summary: dict) -> None:
         HAD.write_text(bj.read_text(encoding="utf-8"), encoding="utf-8")
     else:
         HAD.write_text("", encoding="utf-8")
-        summary["base_mappings"] = f"missing ({why}): the build computes them (lake build Tengoku.All -o)"
+        summary["base_mappings"] = f"missing ({why}): a build cannot tell its delta from the base, so its merge is marked needs-nightly"
         (LAKE / ".base-missing").write_text(tag + "\n")
     APPLIED.write_text("", encoding="utf-8")
 
@@ -246,6 +245,7 @@ def apply_delta(repo: str, release: str, name: str) -> str | None:
         try:
             unpack(f, Path(d))
         except RuntimeError as e:
+            f.unlink(missing_ok=True)  # a truncated download must not stay in the store: the next restore fetches it again
             return f"refused: {name}: {e}"
         r = subprocess.run(["lake", "cache", "unstage", d], capture_output=True, text=True)
         if r.returncode != 0:
@@ -356,8 +356,6 @@ def cmd_pack(a) -> int:
 
 def cmd_diff(a) -> int:
     had = set(read_lines(HAD)) if HAD.exists() else set()
-    if a.with_computed_base and BASE_COMPUTED.exists():
-        had.update(read_lines(BASE_COMPUTED))
     out = read_lines(OUT_ALL)
     rows = diff(out, had)
     OUT_NEW.write_text("".join(ln + "\n" for ln in rows), encoding="utf-8")
@@ -379,10 +377,7 @@ def cmd_check(a) -> int:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
-    d = sub.add_parser("diff")
-    d.add_argument(
-        "--with-computed-base", action="store_true", help="the base's mappings were computed by this build (delta-out/base-computed.jsonl)"
-    )
+    sub.add_parser("diff")
     c = sub.add_parser("check")
     c.add_argument("--fail", action="store_true")
     r = sub.add_parser("restore")

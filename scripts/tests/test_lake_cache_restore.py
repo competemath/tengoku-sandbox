@@ -177,6 +177,7 @@ class Store(unittest.TestCase):
         (self.shim / "assets" / "cache-20261014T0336Z" / "base.jsonl").unlink()
         s, _ = self.restore()
         self.assertTrue(s["base_mappings"].startswith("missing"))
+        self.assertIn("needs-nightly", s["base_mappings"])
         self.assertTrue((self.repo / ".lake" / ".base-missing").exists())
         self.assertEqual(len(s["applied"]), 2)
         self.assertEqual((self.repo / ".lake" / "deltas-had.jsonl").read_text().splitlines(), ['{"m":"c1"}', '{"m":"c3"}'])
@@ -197,6 +198,8 @@ class Store(unittest.TestCase):
         self.assertEqual(s["applied"], [f"d-{self.sha['c3']}.tar.zst"])
         self.assertEqual(len(s["refused"]), 1)
         self.assertIn("could not unpack", s["refused"][0])
+        # the truncated download does not stay in the store: the next restore fetches it again
+        self.assertFalse((self.repo / ".lake" / ".delta-store" / f"d-{self.sha['c1']}.tar.zst").exists())
 
     def test_a_base_file_that_is_not_what_cache_sh_writes_is_refused_before_any_path_or_url_is_built(self):
         for tag in ("../../etc", "cache/../x", ".hidden", "a b", "x;y"):

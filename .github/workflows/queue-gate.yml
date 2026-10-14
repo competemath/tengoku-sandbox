@@ -267,16 +267,16 @@ jobs:
             echo "needs-nightly:main-broken" > delta-out/needs-nightly
             echo "state=needs-nightly" >> "$GITHUB_OUTPUT"; exit 0
           fi
-          # the base's mappings were not published with this nightly (older than this design, or its upload failed): computed here once, and
-          # published by the gate job for every later group of the day
-          computed=""
+          # The nightly's own mappings (base.jsonl) are what the delta is measured against. Without them (a nightly older than this design, or one whose
+          # upload or attestation failed) the delta cannot be told from the base: this tree already holds the group, so building it again would list the
+          # group's modules as the base's. The group merges marked "needs a nightly" and the nightly that follows publishes the mappings.
           if [ -f .lake/.base-missing ]; then
-            echo "the base's mappings are not published: computing them (lake build Tengoku.All -o)"
-            lake build Tengoku.All -o delta-out/base-computed.jsonl 2>&1 | tail -1
-            computed="--with-computed-base"
+            echo "::warning::the nightly this tree builds on published no mappings: this merge publishes no delta; a nightly follows"
+            echo "needs-nightly:base-mappings-missing" > delta-out/needs-nightly
+            echo "state=needs-nightly" >> "$GITHUB_OUTPUT"; exit 0
           fi
           # no command of lake_cache.py takes a path or a commit: its files are the workspace's fixed names (out-all.jsonl in, out-new.jsonl, delta-out/ out) and the delta is named by HEAD
-          python3 scripts/lake_cache.py diff $computed | tee -a "$GITHUB_STEP_SUMMARY"
+          python3 scripts/lake_cache.py diff | tee -a "$GITHUB_STEP_SUMMARY"
           tag="$(cat base-tag.txt)"
           assets="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/lake-deltas-$tag" -q '.assets|length' 2>/dev/null || echo 0)"
           python3 scripts/lake_cache.py pack --assets "$assets" | tee pack.json | tee -a "$GITHUB_STEP_SUMMARY"
@@ -312,13 +312,11 @@ jobs:
       - if: github.event_name == 'merge_group' && needs.queue-build.result == 'success'
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with: { name: delta, path: delta-out }
-      - name: Attest the delta (and the base's mappings, when this group computed them)
-        if: github.event_name == 'merge_group' && needs.queue-build.result == 'success' && (needs.queue-build.outputs.delta == 'complete' || hashFiles('delta-out/base-computed.jsonl') != '')
+      - name: Attest the delta
+        if: github.event_name == 'merge_group' && needs.queue-build.result == 'success' && needs.queue-build.outputs.delta == 'complete'
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
-          subject-path: |
-            delta-out/d-*.tar.zst
-            delta-out/base-computed.jsonl
+          subject-path: delta-out/d-*.tar.zst
       - name: Publish it (a consumer applies it only once this commit is in its history)
         id: publish
         if: github.event_name == 'merge_group' && needs.queue-build.result == 'success'
@@ -331,10 +329,6 @@ jobs:
             echo "error: injected publish failure (TOPUP_TEST_FAIL=$TEST_FAIL)"; exit 1
           fi
           tag="$(cat delta-out/base-tag)"; rel="lake-deltas-$tag"
-          # the base's mappings this group had to compute: onto the cache release, for every later group of the day (never clobbered: the nightly's own copy wins)
-          if [ -f delta-out/base-computed.jsonl ] && ! gh release view "$tag" -R "$GITHUB_REPOSITORY" --json assets -q '.assets[].name' | grep -qx base.jsonl; then
-            cp delta-out/base-computed.jsonl base.jsonl && gh release upload "$tag" base.jsonl -R "$GITHUB_REPOSITORY" && echo "published base.jsonl on $tag"
-          fi
           case "$STATE" in
             empty) echo "this group changed no build output: nothing to publish"; exit 0 ;;
             needs-nightly) echo "::warning::$(cat delta-out/needs-nightly): this merge publishes no delta; a nightly follows"

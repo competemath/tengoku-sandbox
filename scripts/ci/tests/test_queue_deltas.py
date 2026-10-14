@@ -60,7 +60,7 @@ class Shape(unittest.TestCase):
         self.assertIn("scripts/lake_cache.py check", cand["run"])
         whole = step(self.build, "Build the library as main will have it")
         self.assertRegex(whole["run"], r"timeout -k \d+ \d+m lake build Tengoku\.All -o out-all\.jsonl")
-        self.assertIn("scripts/lake_cache.py diff $computed", whole["run"])
+        self.assertIn("scripts/lake_cache.py diff |", whole["run"])
         self.assertIn('scripts/lake_cache.py pack --assets "$assets"', whole["run"])
         self.assertNotIn("topup", whole["run"])
         self.assertIn(
@@ -95,6 +95,19 @@ class Shape(unittest.TestCase):
         self.assertIn("gh workflow run build.yml", pub["run"], "a needs-nightly merge starts the cache build")
         self.assertIn("actions", self.gate["permissions"])
 
+    def test_a_group_whose_base_has_no_published_mappings_is_marked_needs_nightly_and_builds_nothing_more(self):
+        """The tree already holds the group when the base's mappings are looked for: a second `lake build -o` there lists the group's modules as the
+        base's, which empties the group's delta and publishes the group's mappings as the nightly's (CodeRabbit, #433). The group merges marked
+        needs-nightly instead, and the nightly that follows publishes the mappings."""
+        run = step(self.build, "Build the library as main will have it")["run"]
+        self.assertEqual(run.count("lake build"), 1, "the library is built once, at the group's commit")
+        self.assertNotIn("base-computed", WORKFLOW.read_text(encoding="utf-8"))
+        self.assertNotIn("--with-computed-base", WORKFLOW.read_text(encoding="utf-8"))
+        missing = run[run.index(".lake/.base-missing") :]
+        self.assertIn("needs-nightly:base-mappings-missing", missing.split("fi\n")[0])
+        self.assertIn('echo "state=needs-nightly" >> "$GITHUB_OUTPUT"; exit 0', missing.split("fi\n")[0])
+        self.assertLess(run.index(".lake/.base-missing"), run.index("scripts/lake_cache.py diff"), "decided before the diff is taken")
+
     def test_the_nightly_publishes_its_mappings_and_opens_the_days_delta_release(self):
         b = BUILD.read_text(encoding="utf-8")
         self.assertIn("lake build Tengoku.All -o base.jsonl", b)
@@ -103,6 +116,59 @@ class Shape(unittest.TestCase):
         self.assertIn('gh release upload "$tag" "$tmp/base.jsonl"', c)
         self.assertIn('gh release create "lake-deltas-$tag"', c)
         self.assertIn('gh release delete "lake-deltas-$old"', c)
+
+
+CACHE_GH = """#!/usr/bin/env bash
+echo "$*" >> "$GH_LOG"
+case "$1 $2" in
+  "auth status") exit 0 ;;
+  "release view") exit 1 ;;
+  "release upload") case "$*" in *base.jsonl*) [ -n "$FAIL_BASE_UPLOAD" ] && { echo "HTTP 502" >&2; exit 1; } ;; esac ;;
+esac
+exit 0
+"""
+
+
+class NightlyPublish(unittest.TestCase):
+    """scripts/cache.sh publish with a fake gh: the mappings the queue's deltas are measured against must not be lost without a word."""
+
+    def publish(self, fail_base_upload: bool) -> tuple[subprocess.CompletedProcess, list[str]]:
+        with tempfile.TemporaryDirectory() as d:
+            root, out, bin_ = Path(d) / "tree", Path(d) / "out", Path(d) / "bin"
+            for p in (root, out, bin_):
+                p.mkdir()
+            (root / "lean-toolchain").write_text("leanprover/lean4:v4.29.1\n")
+            (out / "commit").write_text("c" * 40 + "\n")
+            (out / "tengoku-cache.tar.zst.part-aa").write_text("x")
+            (out / "base.jsonl").write_text('"2026-03-17"\n{"i":1}\n')
+            for name, text in (("gh", CACHE_GH), ("curl", "#!/usr/bin/env bash\nexit 22\n")):
+                (bin_ / name).write_text(text)
+                (bin_ / name).chmod(0o755)
+            log = Path(d) / "gh.log"
+            env = {
+                **os.environ,
+                "PATH": f"{bin_}{os.pathsep}{os.environ['PATH']}",
+                "GH_LOG": str(log),
+                "TENGOKU_ROOT": str(root),
+                "TENGOKU_REPO": "o/r",
+                "TENGOKU_CACHE_STAMP": "20261014T0336Z",
+                "FAIL_BASE_UPLOAD": "1" if fail_base_upload else "",
+            }
+            r = subprocess.run(["bash", str(CACHE_SH), "publish", str(out)], env=env, capture_output=True, text=True)
+            return r, (log.read_text().splitlines() if log.exists() else [])
+
+    def test_a_failed_upload_of_the_mappings_fails_the_publish_before_the_pointer_moves(self):
+        # `[[ -f f ]] && gh upload && echo` under set -e swallows the failure of the upload: the cache went out without its mappings, silently
+        r, calls = self.publish(fail_base_upload=True)
+        self.assertNotEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("base.jsonl upload failed", r.stderr)
+        self.assertFalse(any("cache-latest" in c and "upload" in c for c in calls), calls)
+
+    def test_a_good_upload_goes_on_to_the_pointer(self):
+        r, calls = self.publish(fail_base_upload=False)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("base.jsonl on cache-20261014T0336Z", r.stdout)
+        self.assertTrue(any(c.startswith("release upload cache-latest") for c in calls), calls)
 
 
 class Verdict(unittest.TestCase):

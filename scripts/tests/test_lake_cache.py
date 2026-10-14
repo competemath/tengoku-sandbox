@@ -78,20 +78,16 @@ class Diff(unittest.TestCase):
         files = {
             "out-all.jsonl": f'{HEADER}\r\n{{"i":1}}\r\n\r\n{{"i":2}}\r\n{{"i":3}}\r\n',
             ".lake/deltas-had.jsonl": f'{HEADER}\n{{"i":1}}\n',
-            "delta-out/base-computed.jsonl": '{"i":3}\n',
         }
         with tempfile.TemporaryDirectory() as d:
             for name, text in files.items():
                 p = Path(d) / name
                 p.parent.mkdir(parents=True, exist_ok=True)
                 p.write_text(text)
-            r = subprocess.run([sys.executable, str(SCRIPT), "diff", "--with-computed-base"], cwd=d, capture_output=True, text=True)
-            self.assertEqual(r.returncode, 0, r.stderr)
-            self.assertEqual(json.loads(r.stdout), {"build": 3, "known": 2, "new": 1})
-            self.assertEqual((Path(d) / "out-new.jsonl").read_text(), f'{HEADER}\n{{"i":2}}\n')
-            # without the flag the computed base is not consulted: its mapping counts as new
             r = subprocess.run([sys.executable, str(SCRIPT), "diff"], cwd=d, capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, r.stderr)
             self.assertEqual(json.loads(r.stdout), {"build": 3, "known": 1, "new": 2})
+            self.assertEqual((Path(d) / "out-new.jsonl").read_text(), f'{HEADER}\n{{"i":2}}\n{{"i":3}}\n')
 
     def test_a_workspace_without_a_store_yet_knows_nothing(self):
         r = run("diff", files={"out-all.jsonl": f'{HEADER}\n{{"i":1}}\n'})
@@ -106,6 +102,7 @@ class NoPaths(unittest.TestCase):
             ["diff", "--out", "x"],
             ["diff", "--had", "x"],
             ["diff", "--to", "x"],
+            ["diff", "--with-computed-base"],
             ["check", "--targets", "x"],
             ["check", "--log", "x"],
             ["pack", "--out", "x"],

@@ -187,7 +187,11 @@ case "$cmd" in
       "$tmp"/tengoku-cache.tar.zst.part-*
     echo "published $tag (commit $sha)"
     # the tree's mappings (lake build -o) travel with the cache: the queue's deltas are diffed against them; and the day's deltas get their release
-    [[ -f "$tmp/base.jsonl" ]] && gh release upload "$tag" "$tmp/base.jsonl" -R "$REPO" --clobber >/dev/null && echo "base.jsonl on $tag"
+    # (an `A && B && C` list does not stop `set -e` when B fails: a cache without its mappings would go out, and every group would then be marked needs-nightly)
+    if [[ -f "$tmp/base.jsonl" ]]; then
+      gh release upload "$tag" "$tmp/base.jsonl" -R "$REPO" --clobber >/dev/null || { echo "error: base.jsonl upload failed: $tag has no mappings, the pointer stays on the previous cache" >&2; exit 1; }
+      echo "base.jsonl on $tag"
+    fi
     gh release view "lake-deltas-$tag" -R "$REPO" >/dev/null 2>&1 || gh release create "lake-deltas-$tag" -R "$REPO" --title "deltas on $tag" --prerelease --target "$sha" \
       --notes "What each merge since the nightly cache $tag changed in the compiled tree, one attested file per merge commit (scripts/lake_cache.py restore). Collected with its nightly." >/dev/null && echo "release lake-deltas-$tag"
     # Fixed-tag pointer to the newest cache, for consumers that must not call the API.
