@@ -49,6 +49,8 @@ HAD = LAKE / "deltas-had.jsonl"  # base.jsonl + every applied delta's outputs.js
 STORE = LAKE / ".delta-store"
 ASSET_CAP = 990  # a release holds at most 1000 assets; stop before the last ones, there may be uploads in flight
 HTTPS_ONLY = ["--proto", "=https", "--tlsv1.2"]
+REPO_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")  # a release tag or an asset name: one path segment, no separators, no leading dot
 
 
 def read_lines(path: str | Path) -> list[str]:
@@ -106,7 +108,7 @@ def have_gh() -> bool:
 
 def release_assets(repo: str, release: str) -> list[str] | None:
     """Asset names of a release, or None when the release does not exist (a nightly older than this design, or a sandbox without one)."""
-    path = f"repos/{repo}/releases/tags/{release}"
+    path = f"repos/{checked('repository', repo, REPO_RE)}/releases/tags/{checked('release', release, NAME_RE)}"
     if have_gh():
         r = subprocess.run(["gh", "api", path], capture_output=True, text=True)
         if r.returncode != 0:
@@ -125,8 +127,19 @@ def release_assets(repo: str, release: str) -> list[str] | None:
         return None
 
 
+def checked(kind: str, value: str, rx: re.Pattern[str]) -> str:
+    """A value that reaches a URL or a path: the tag in .lake/.cache-base and the repository come from a pointer file / the environment, so they are
+    checked for the one shape they may have, never trusted to be a single path segment."""
+    if not rx.fullmatch(value) or ".." in value:
+        raise ValueError(f"{kind} {value!r} is not what it may be")
+    return value
+
+
 def download(repo: str, release: str, asset: str, dest: Path) -> bool:
     """One release asset by its direct URL (a plain download: no API call, no rate limit). False when it is not there."""
+    checked("repository", repo, REPO_RE)
+    checked("release", release, NAME_RE)
+    checked("asset", asset, NAME_RE)
     dest.parent.mkdir(parents=True, exist_ok=True)
     part = dest.with_suffix(dest.suffix + ".part")
     r = subprocess.run(
@@ -191,8 +204,15 @@ def cmd_restore(a) -> int:
         print("no unpacked base (.lake/.cache-base): run scripts/cache.sh get first", file=sys.stderr)
         return 1
     tag, _, base = BASE_FILE.read_text().strip().partition(" ")
-    want = run("git", "rev-parse", a.want).stdout.strip()
-    release = a.release or f"lake-deltas-{tag}"
+    try:
+        checked("repository", repo, REPO_RE)
+        checked("cache tag", tag, NAME_RE)
+        checked("base commit", base, re.compile(r"^[0-9a-f]{40}$"))
+        want = run("git", "rev-parse", "--verify", a.want + "^{commit}").stdout.strip()
+        release = checked("release", a.release or f"lake-deltas-{tag}", NAME_RE)
+    except (ValueError, subprocess.CalledProcessError) as e:
+        print(f"restore: {e}", file=sys.stderr)
+        return 2
     STORE.mkdir(parents=True, exist_ok=True)
     summary = {
         "base": base,

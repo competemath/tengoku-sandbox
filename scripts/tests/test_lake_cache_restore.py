@@ -198,6 +198,28 @@ class Store(unittest.TestCase):
         self.assertEqual(len(s["refused"]), 1)
         self.assertIn("could not unpack", s["refused"][0])
 
+    def test_a_base_file_that_is_not_what_cache_sh_writes_is_refused_before_any_path_or_url_is_built(self):
+        for tag in ("../../etc", "cache/../x", ".hidden", "a b", "x;y"):
+            (self.repo / ".lake" / ".cache-base").write_text(f"{tag} {self.sha['base']}\n")
+            r = subprocess.run([sys.executable, str(SCRIPT), "restore"], cwd=self.repo, env=self.env, capture_output=True, text=True)
+            self.assertEqual(r.returncode, 2, (tag, r.stdout, r.stderr))
+            self.assertIn("is not what it may be", r.stderr)
+        self.assertFalse((self.repo / ".lake" / ".delta-store").exists() and any((self.repo / ".lake" / ".delta-store").iterdir()))
+        (self.repo / ".lake" / ".cache-base").write_text("cache-20261014T0336Z not-a-commit\n")
+        r = subprocess.run([sys.executable, str(SCRIPT), "restore"], cwd=self.repo, env=self.env, capture_output=True, text=True)
+        self.assertEqual(r.returncode, 2)
+
+    def test_a_repository_that_is_not_owner_slash_name_is_refused(self):
+        for repo in ("../x", "a/b/c", "a b/c", "org/repo;rm"):
+            r = subprocess.run(
+                [sys.executable, str(SCRIPT), "restore"],
+                cwd=self.repo,
+                env={**self.env, "TENGOKU_CACHE_SOURCE": repo},
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(r.returncode, 2, (repo, r.stderr))
+
     def test_no_unpacked_base_is_an_error(self):
         (self.repo / ".lake" / ".cache-base").unlink()
         r = sh([sys.executable, str(SCRIPT), "restore"], self.repo, self.env)
