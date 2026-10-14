@@ -156,6 +156,27 @@ def verify(path: Path, repo: str, workflow: str) -> tuple[bool, str]:
     return (mode != "require", "no valid build attestation" + (" (TENGOKU_VERIFY=warn)" if mode != "require" else ""))
 
 
+def unpack(archive: Path, dest: Path) -> None:
+    """zstd -dc <archive> | tar -x -C <dest>, as two processes joined by a pipe (no shell, nothing interpolated)."""
+    z = subprocess.Popen(["zstd", "-dc", str(archive)], stdout=subprocess.PIPE)
+    t = subprocess.run(["tar", "-x", "-C", str(dest)], stdin=z.stdout, check=False)
+    assert z.stdout is not None
+    z.stdout.close()
+    if z.wait() != 0 or t.returncode != 0:
+        raise RuntimeError(f"could not unpack {archive.name}")
+
+
+def pack_dir(src: Path, archive: Path) -> None:
+    """tar -c -C <src> . | zstd -T0 -3 -q -o <archive>, no shell. COPYFILE_DISABLE: a tar made on macOS otherwise carries AppleDouble `._*`
+    entries, which read as modules on a Linux runner (the chain test of 2026-10-13 saw 572 "modules" in a part of 286)."""
+    t = subprocess.Popen(["tar", "-c", "-C", str(src), "."], stdout=subprocess.PIPE, env={**os.environ, "COPYFILE_DISABLE": "1"})
+    z = subprocess.run(["zstd", "-T0", "-3", "-q", "-o", str(archive)], stdin=t.stdout, check=False)
+    assert t.stdout is not None
+    t.stdout.close()
+    if t.wait() != 0 or z.returncode != 0:
+        raise RuntimeError(f"could not pack {archive.name}")
+
+
 def git_revs(base: str, want: str) -> list[str]:
     return run("git", "rev-list", "--reverse", f"{base}..{want}").stdout.split()
 
@@ -217,7 +238,11 @@ def cmd_restore(a) -> int:
         if "warn" in why or "not checked" in why:
             print(f"warning: {name}: {why}", file=sys.stderr)
         with tempfile.TemporaryDirectory(prefix="delta-", dir=str(LAKE)) as d:
-            subprocess.run(["bash", "-c", f'zstd -dc "{f}" | tar -x -C "{d}"'], check=True)
+            try:
+                unpack(f, Path(d))
+            except RuntimeError as e:
+                summary["refused"].append(f"{name}: {e}")
+                continue
             r = subprocess.run(["lake", "cache", "unstage", d], capture_output=True, text=True)
             if r.returncode != 0:
                 summary["refused"].append(f"{name}: lake cache unstage failed: {r.stderr.strip()[:200]}")
@@ -239,6 +264,9 @@ def cmd_restore(a) -> int:
 
 
 def cmd_pack(a) -> int:
+    if not re.fullmatch(r"[0-9a-f]{40}", a.rev):
+        print(f"--rev is a 40-hex commit id, not {a.rev!r}", file=sys.stderr)
+        return 2
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     rows = read_lines(a.new)
@@ -255,11 +283,7 @@ def cmd_pack(a) -> int:
             return 1
         files = sum(1 for p in stage.rglob("*") if p.is_file())
         delta = out / f"d-{a.rev}.tar.zst"
-        # COPYFILE_DISABLE: a tar made on macOS otherwise carries AppleDouble `._*` entries, which read as modules on a Linux runner
-        # (the chain test of 2026-10-13 saw 572 "modules" in a part of 286)
-        subprocess.run(
-            ["bash", "-c", f'tar -c -C "{stage}" . | zstd -T0 -3 -q -o "{delta}"'], check=True, env={**os.environ, "COPYFILE_DISABLE": "1"}
-        )
+        pack_dir(stage, delta)
     size = delta.stat().st_size
     decision = decide(size, int(a.assets or 0), budget)
     if decision != "publish":

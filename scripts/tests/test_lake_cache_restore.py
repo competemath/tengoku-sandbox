@@ -191,6 +191,13 @@ class Store(unittest.TestCase):
         s, _ = self.restore("--want", self.sha["c2"])
         self.assertEqual(s["applied"], [f"d-{self.sha['c1']}.tar.zst"])
 
+    def test_an_archive_that_does_not_unpack_is_refused_not_fatal(self):
+        self.put_asset(self.release, f"d-{self.sha['c1']}.tar.zst", b"not a tar at all")
+        s, _ = self.restore()
+        self.assertEqual(s["applied"], [f"d-{self.sha['c3']}.tar.zst"])
+        self.assertEqual(len(s["refused"]), 1)
+        self.assertIn("could not unpack", s["refused"][0])
+
     def test_no_unpacked_base_is_an_error(self):
         (self.repo / ".lake" / ".cache-base").unlink()
         r = sh([sys.executable, str(SCRIPT), "restore"], self.repo, self.env)
@@ -244,6 +251,17 @@ class Pack(unittest.TestCase):
     def test_a_nearly_full_release_leaves_a_marker(self):
         s = self.pack("--assets", "990")
         self.assertEqual(s["decision"], "needs-nightly:release-full")
+
+    def test_a_rev_that_is_not_a_commit_id_is_refused_before_anything_is_written(self):
+        for bad in ("../../etc/x", "a" * 39, "A" * 40, "a" * 40 + "; rm -rf /", ""):
+            r = subprocess.run(
+                [sys.executable, str(SCRIPT), "pack", "--rev", bad, "--new", str(self.new), "--out", str(self.out)],
+                env=self.env,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(r.returncode, 2, (bad, r.stderr))
+        self.assertFalse(self.out.exists())
 
     def test_nothing_new_is_an_empty_marker_not_a_delta(self):
         self.new.write_text(HEADER + "\n")
