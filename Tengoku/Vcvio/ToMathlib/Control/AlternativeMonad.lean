@@ -35,7 +35,7 @@ theorem monadLift_guard [AlternativeMonad m] [AlternativeMonad n] [MonadLift m n
     monadLift (guard p : m Unit) = (guard p : n Unit) := by
   simp only [guard, apply_ite (f := monadLift), liftM_pure, liftM_failure]
 
-@[simp] theorem liftM_guard [AlternativeMonad m] [AlternativeMonad n] [MonadLift m n]
+@[local simp] theorem liftM_guard [AlternativeMonad m] [AlternativeMonad n] [MonadLift m n]
     [LawfulAlternativeLift m n] [LawfulMonadLift m n] (p : Prop) [Decidable p] :
     liftM (guard p : m Unit) = (guard p : n Unit) :=
   monadLift_guard p
@@ -46,13 +46,14 @@ theorem monadLift_optional [AlternativeMonad m] [AlternativeMonad n]
     (x : m α) : monadLift (optional x) = optional (monadLift x : n α) := by
   simp only [optional, liftM_orElse, liftM_map, liftM_pure]
 
-@[simp] theorem liftM_optional [AlternativeMonad m] [AlternativeMonad n]
+@[local simp] theorem liftM_optional [AlternativeMonad m] [AlternativeMonad n]
     [LawfulMonad m] [LawfulMonad n] [MonadLift m n] [LawfulAlternativeLift m n]
     [LawfulMonadLift m n]
     (x : m α) : liftM (optional x) = optional (liftM x : n α) :=
   monadLift_optional x
 
 end liftM
+attribute [local simp] liftM_guard liftM_optional
 
 namespace Option
 
@@ -64,10 +65,11 @@ theorem monadLift_elimM [Monad m] [Monad n] [LawfulMonad m] [LawfulMonad n]
         Option.elimM (monadLift x : n (Option α)) (monadLift y) (fun x => monadLift (z x)) :=
   (monadLift_bind _ _).trans (by congr; funext x; cases x <;> rfl)
 
-@[simp]
+@[local simp]
 theorem liftM_elimM [Monad m] [Monad n] [LawfulMonad m] [LawfulMonad n]
     [MonadLift m n] [LawfulMonadLift m n] (x : m (Option α)) (y : m β) (z : α → m β) :
       liftM (Option.elimM x y z) = Option.elimM (x : n (Option α)) (y) (fun x => z x) :=
   monadLift_elimM x y z
 
 end Option
+-- Tengoku: 3 registration(s) of this module made local so they do not change other libraries (generated)

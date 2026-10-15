@@ -27,6 +27,8 @@ that mentions `PMF` at all. It is expected to disappear once the discrete layer 
 -/
 
 @[expose] public section
+attribute [local instance] PMF.instMetricSpace
+
 
 open MeasureTheory
 open scoped ENNReal

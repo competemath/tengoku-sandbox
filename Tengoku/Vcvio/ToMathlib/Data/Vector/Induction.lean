@@ -18,7 +18,7 @@ public section
 
 namespace Vector
 
-@[simp]
+@[local simp]
 lemma heq_of_toArray_eq_of_size_eq {α} {m n : ℕ} {a : Vector α m} {b : Vector α n}
     (h : a.toArray = b.toArray) (h' : m = n) : HEq a b := by
   subst h'
@@ -45,3 +45,4 @@ def induction {α} {motive : {n : ℕ} → Vector α n → Sort*} (v_empty : mot
         v_insert hd ⟨⟨tl⟩, by simpa using hSize⟩ (ih ⟨⟨tl⟩, by simpa using hSize⟩)
 
 end Vector
+-- Tengoku: 1 registration(s) of this module made local so they do not change other libraries (generated)

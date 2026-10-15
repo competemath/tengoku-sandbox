@@ -173,7 +173,7 @@ lemma tvDist_bind_right_le (f : α' → PMF β) (p q : PMF α') :
 
 end DataProcessing
 
-noncomputable instance instMetricSpace : MetricSpace (PMF α) where
+noncomputable local instance instMetricSpace : MetricSpace (PMF α) where
   dist := PMF.tvDist
   edist := PMF.etvDist
   dist_self := PMF.tvDist_self
@@ -217,3 +217,4 @@ lemma tvDist_option_punit :
 end OptionPUnit
 
 end PMF
+-- Tengoku: 1 registration(s) of this module made local so they do not change other libraries (generated)

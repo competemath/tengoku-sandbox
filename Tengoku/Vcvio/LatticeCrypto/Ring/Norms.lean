@@ -29,6 +29,8 @@ from `zmodPolyNormOps`.
 -/
 
 @[expose] public section
+attribute [local simp] LatticeCrypto.Poly.get_map LatticeCrypto.Poly.get_zipWith
+
 
 namespace LatticeCrypto
 
