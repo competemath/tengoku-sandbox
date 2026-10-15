@@ -1,12 +1,19 @@
 #!/usr/bin/env python3
 """trust_shadow.py gather — the evidence a PR already has, written in the trust program's shared format (docs/trust-shadow.md).
 
-  trust_shadow.py gather --repo R --pr N --base SHA --head SHA --author LOGIN --out DIR [--checks FILE]
+  trust_shadow.py gather      --repo R --pr N --base SHA --head SHA --author LOGIN --out DIR [--checks FILE]
+  trust_shadow.py eligibility --dir DIR --repo R [--app-id N]
 
 Runs main's own gates over the PR read as git objects (never checked out): the banked-content lint (lint_banked.py), the
 sorry scan (sorry_scan.py) and the class (classify.py). Reads the commit's check runs from a file (`gh api` output the
 workflow saved) and turns each into a record. Writes DIR/case.json and DIR/evidence/*.json, the manifest first. Nothing
-here decides anything: the judge (tengoku-juridicator) does, in the next step. Standard library only."""
+here decides anything: the judge (tengoku-juridicator) does, in the next step.
+
+`eligibility` is the third job's half (trust-shadow.yml, `checks: write` only): it takes the validated artifact of `gather` and the judge (case.json,
+verdict.json, meta.json), publishes the `merge eligibility` check run on the PR head with `warden.eligibility.build_check_run` (conclusion from the
+verdict; the head, merge base, policy digest and evidence digest bound in its external id), and reads it back through `verify_check` pinned to
+the App that is meant to make it. ADVISORY: nothing requires the check. Until the judge GitHub App exists the check is made by the Actions identity
+(app id 15368). Standard library only, besides the vendored warden modules (scripts/ci/warden/)."""
 
 from __future__ import annotations
 
@@ -20,6 +27,7 @@ import sys
 from pathlib import Path
 
 from trust_vendor.juridicator_evidence import make_evidence
+from warden import eligibility as merge_eligibility
 
 CI = Path(__file__).resolve().parent
 SHA = re.compile(r"^[0-9a-f]{40}$")
@@ -38,7 +46,9 @@ CLASS_OF = {
     "scope-fix": "tooling",
     "docs": "docs",
 }
-OUR_CHECKS = ("trust-shadow", "trust-ledger", "trust-label")
+OUR_CHECKS = ("trust-shadow", "trust-ledger", "trust-label", merge_eligibility.CHECK_NAME)
+ACTIONS_APP_ID = 15368  # the GitHub Actions app: who makes the check run until the judge has an App of its own
+DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
 TIMEOUT = 300
 
 
@@ -254,11 +264,104 @@ def gather(a: argparse.Namespace) -> int:
     out_dir = Path(a.out)
     (out_dir / "evidence").mkdir(parents=True, exist_ok=True)
     (out_dir / "case.json").write_text(json.dumps(case, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    # what the `merge eligibility` check binds besides the case: the PR and the merge base the verdict was reached on
+    if a.pr and a.pr.isdigit() and int(a.pr) > 0:
+        mb_code, mb_out = run(["git", "merge-base", a.base, a.head], root)
+        if mb_code == 0 and SHA.match(mb_out.strip()):
+            meta = {"pr": int(a.pr), "base": a.base, "merge_base": mb_out.strip()}
+            (out_dir / "meta.json").write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     for i, rec in enumerate(records):
         (out_dir / "evidence" / f"{i:03d}-{rec['kind'].replace('.', '-')}.json").write_text(
             json.dumps(rec, indent=2, sort_keys=True) + "\n", encoding="utf-8"
         )
     print(json.dumps({"class": cls, "records": len(records), "lint": lint_code}))
+    return 0
+
+
+def validate_meta(meta: object) -> dict:
+    if not isinstance(meta, dict) or set(meta) != {"pr", "base", "merge_base"}:
+        raise ValueError("meta.json is not {pr, base, merge_base}")
+    if isinstance(meta["pr"], bool) or not isinstance(meta["pr"], int) or meta["pr"] <= 0:
+        raise ValueError("meta.json: pr is not a positive integer")
+    for k in ("base", "merge_base"):
+        if not isinstance(meta[k], str) or not SHA.match(meta[k]):
+            raise ValueError(f"meta.json: {k} is not a commit")
+    return meta
+
+
+def validate_verdict(verdict: object, case: object, repo: str) -> tuple:
+    """The verdict and case the check is built from, checked again here: they come from an artifact, whatever job made it."""
+    if (
+        not isinstance(verdict, dict)
+        or verdict.get("schema") != "tengoku-verdict/1"
+        or verdict.get("decision") not in merge_eligibility.DECISIONS
+    ):
+        raise ValueError("not a verdict")
+    for k in ("evidence_digest", "policy_sha256"):
+        if not isinstance(verdict.get(k), str) or not DIGEST.match(verdict[k]):
+            raise ValueError(f"the verdict has no {k}")
+    if not isinstance(case, dict) or case.get("repo") != repo or not SHA.match(str(case.get("head_sha"))):
+        raise ValueError("the case is not for this repository and a commit")
+    if (verdict.get("case") or {}).get("head_sha") != case["head_sha"]:
+        raise ValueError("the verdict and the case name different commits")
+    if len(json.dumps(verdict)) > 60_000:
+        raise ValueError("verdict too large")
+    return verdict, case
+
+
+def parse_pages(text: str) -> list:
+    """The check runs of `gh api --paginate .../check-runs`, which prints one JSON object per page."""
+    runs, dec, i = [], json.JSONDecoder(), 0
+    while i < len(text):
+        while i < len(text) and text[i].isspace():
+            i += 1
+        if i >= len(text):
+            break
+        page, i = dec.raw_decode(text, i)
+        if isinstance(page, dict) and isinstance(page.get("check_runs"), list):
+            runs += page["check_runs"]
+    return runs
+
+
+def gh(*args: str, payload: dict | None = None) -> tuple[int, str]:
+    done = subprocess.run(
+        ["gh", "api", *args], input=json.dumps(payload) if payload else None, capture_output=True, text=True, check=False, timeout=TIMEOUT
+    )
+    return done.returncode, done.stdout if done.returncode == 0 else done.stderr
+
+
+def eligibility(a: argparse.Namespace) -> int:
+    d = Path(a.dir)
+    verdict, case = validate_verdict(
+        json.loads((d / "verdict.json").read_text(encoding="utf-8")), json.loads((d / "case.json").read_text(encoding="utf-8")), a.repo
+    )
+    meta = validate_meta(json.loads((d / "meta.json").read_text(encoding="utf-8")))
+    body = merge_eligibility.build_check_run(verdict, case, meta["merge_base"], meta["pr"])
+    rc, out = gh("-X", "POST", f"repos/{a.repo}/check-runs", "--input", "-", payload=body)
+    if rc != 0:
+        print(f"trust_shadow: the check run was not created: {out.strip()[:300]}", file=sys.stderr)
+        return 1
+    # read it back the way the merge side will: only a completed check from the expected App, for this head, with the live merge base, counts
+    rc, out = gh("--paginate", f"repos/{a.repo}/commits/{case['head_sha']}/check-runs?filter=all&per_page=100")
+    admission = merge_eligibility.verify_check(
+        parse_pages(out) if rc == 0 else [],
+        expected_app_id=a.app_id,
+        repo=a.repo,
+        pr=meta["pr"],
+        live_head=case["head_sha"],
+        live_merge_base=meta["merge_base"],
+    )
+    print(json.dumps({"published": body["conclusion"], "decision": verdict["decision"], "admission": admission.to_json()}, sort_keys=True))
+    if (
+        admission.decision == "wait"
+        and admission.reasons
+        and admission.reasons[0] in ("no_eligibility_check", "external_id_malformed", "stale_head")
+    ):
+        print(
+            f"::error::the check run was created but not read back as app {a.app_id}'s `{merge_eligibility.CHECK_NAME}` for this head",
+            file=sys.stderr,
+        )
+        return 1
     return 0
 
 
@@ -271,10 +374,15 @@ def main(argv: list) -> int:
     g.add_argument("--pr")
     g.add_argument("--checks", help="the commit's check runs as `gh api .../check-runs` saved them (JSON list)")
     g.set_defaults(fn=gather)
+    e = sub.add_parser("eligibility")
+    e.add_argument("--dir", required=True)
+    e.add_argument("--repo", required=True)
+    e.add_argument("--app-id", type=int, default=ACTIONS_APP_ID, help="the App that is meant to make the check (default: GitHub Actions)")
+    e.set_defaults(fn=eligibility)
     args = ap.parse_args(argv)
     try:
         return args.fn(args)
-    except (ValueError, OSError, subprocess.TimeoutExpired) as exc:
+    except (ValueError, OSError, KeyError, subprocess.TimeoutExpired) as exc:
         print(f"trust_shadow: {type(exc).__name__}: {exc}", file=sys.stderr)
         return 2
 

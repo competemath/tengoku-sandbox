@@ -1,13 +1,14 @@
 # The trust program in SHADOW mode (docs/trust-shadow.md): after pr-gate finishes on a PR, the three trust repositories judge
 # the same PR from the evidence the gates already produced, and write the verdict and a plain-language trust card to the run
 # summary. ADVISORY and silent: it is not a required check, posts no comment, changes no label and blocks nothing; its only
-# lasting effect is one verdict line in the append-only ledger on the `trust-ledger` branch, so verdicts can be compared with
-# what people decide and labelled later.
+# lasting effects are one verdict line in the append-only ledger on the `trust-ledger` branch, so verdicts can be compared with
+# what people decide and labelled later, and the `merge eligibility` check run on the PR head (job `eligibility`), which nothing requires.
 #
 # Safe against the PR's code on purpose. It runs on main's copy of this file after pr-gate; the PR's commits are fetched as git
 # objects and read by main's own scripts (lint_banked.py, sorry_scan.py, classify.py), never checked out or run. The
-# three tools are public repositories pinned to reviewed commits. Reading the PR (job `judge`, read-only token) and writing the
-# ledger (job `ledger`, the only write permission) are different jobs; the second takes one validated JSON file.
+# three tools are public repositories pinned to reviewed commits. Reading the PR (job `judge`, read-only token), writing the
+# ledger (job `ledger`, `contents: write`) and publishing the check (job `eligibility`, `checks: write`) are different jobs; the last two
+# take only the judge's validated artifact and never see the PR.
 name: trust-shadow
 on:
   workflow_run:
@@ -91,7 +92,7 @@ jobs:
     needs: judge
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # the only write permission of these workflows; one writer at a time
+    # the only job that writes to the repository's contents; one writer at a time
     concurrency: { group: trust-ledger, cancel-in-progress: false }
     permissions: { contents: write }
     steps:
@@ -106,3 +107,23 @@ jobs:
       - name: Append the verdict
         env: { GH_TOKEN: "${{ github.token }}", TRUST_TOOLS: "${{ github.workspace }}/tools" }
         run: python3 scripts/ci/trust_ledger.py verdict --dir trust
+  # The `merge eligibility` check run (docs/trust-shadow.md): the verdict, bound to the PR head, the merge base, the policy and the evidence
+  # (warden.eligibility). ADVISORY: no ruleset requires it. Until the maintainer creates the judge GitHub App (tengoku-warden docs/RUNBOOK.md, item 1)
+  # the check is made by the GitHub Actions identity (app id 15368), and the script reads it back through `verify_check` pinned to that id; when the App
+  # exists, give this job its token and pass `--app-id`.
+  eligibility:
+    needs: judge
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # a check run is the only thing this job can create
+    permissions: { checks: write }
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
+        with: { egress-policy: audit }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with: { name: trust-shadow, path: trust }
+      - name: Publish the check
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: python3 scripts/ci/trust_shadow.py eligibility --dir trust --repo "$GITHUB_REPOSITORY"

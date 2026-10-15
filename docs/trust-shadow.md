@@ -20,7 +20,24 @@ checked out or run).
 3. **Judgement.** The juridicator decides under `scripts/ci/trust-shadow-policy.json` (what each class of PR must show; no
    merit-based lowering of scrutiny). The praiser renders the trust card into the run summary.
 4. **Ledger.** One verdict line is appended to `ledger.jsonl` on the `trust-ledger` branch (hash-chained, compare-and-swap
-   writes through the contents API; the only job with write permission takes one validated JSON file).
+   writes through the contents API; the job with that write permission takes one validated JSON file).
+5. **Merge eligibility.** A third job publishes the verdict as a `merge eligibility` check run on the PR head (below). It, too, takes only the
+   judge's validated artifact and holds nothing but `checks: write`.
+
+## The `merge eligibility` check
+
+`scripts/ci/trust_shadow.py eligibility` (job `eligibility` of `trust-shadow.yml`) turns the verdict into the check run `merge eligibility` with `warden.eligibility.build_check_run`:
+`ACCEPT` is `success`, `HOLD` and `ESCALATE` are `neutral`, `REJECT` is `failure`. The check's `external_id` binds **the repository, the PR number, the head commit, the merge base, the digest
+of the verdict, the hash of the policy and the digest of the evidence**; its text is fixed phrases, nothing from the verdict's free text. The judge job writes the PR number and the merge base
+(`git merge-base`) to `meta.json` beside the verdict; the job re-validates all three files, because they come from an artifact, whatever made it.
+
+It then reads the check back the way a merge engine would (`warden.eligibility.verify_check`): only a completed check from the **expected App**, for the live head, whose payload agrees
+with its conclusion and whose merge base is still the live one, counts. The job fails when it cannot read its own check back as that App's, which is how a wrong App id shows.
+
+**Advisory.** No ruleset requires `merge eligibility`, and nothing merges or refuses on it. **Until the maintainer creates the judge GitHub App** (`tengoku-warden` `docs/RUNBOOK.md`, item 1: Checks
+read and write only, installed on this repository), the check is made by the GitHub Actions identity, **app id 15368**, and `verify_check` is pinned to that id (`--app-id`). When the App exists, give
+the job its token and pass its id; then a ruleset can require `merge eligibility` pinned to that `integration_id`, and no other identity with write access can forge it. Credit: the idea of an
+admission that only one App can make, bound to the exact head and merge base, is Tau Ceti's bors-ng fork (PR 6, 2026-10-06); binding the evidence digest is ours.
 
 ## Backfill (run on the 38 most recent sandbox PRs, 2026-10-09)
 

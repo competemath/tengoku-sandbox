@@ -1,0 +1,53 @@
+# The records branches only ever grow (docs/ci-records.md): `trust-ledger` (the trust program's verdicts and labels) and `ci-records` (the CI records). Read-only:
+# it fails if any existing record changed, if a chain no longer verifies, or if the platform's activity feed shows a force-push or a deletion of either branch.
+# It stands in for a ruleset with `non_fast_forward` and `deletion` on these branches until the maintainer adds one (tengoku-warden docs/RUNBOOK.md, item 3);
+# the ruleset prevents, this notices.
+#
+# Why not `on: push: branches: [trust-ledger, ci-records]`: a push runs the workflow files of the PUSHED commit, and these branches hold no workflows, so
+# that trigger would never fire. This runs from main's copy: after each workflow that writes to a branch, every night, and on demand.
+name: ledger-guard
+on:
+  workflow_run:
+    workflows: [trust-shadow, trust-label, ci-records]
+    types: [completed]
+  schedule:
+    - cron: "41 3 * * *"
+  workflow_dispatch:
+permissions: {}
+concurrency:
+  group: ledger-guard-${{ github.event_name }}
+  cancel-in-progress: false
+defaults:
+  run:
+    shell: bash
+jobs:
+  guard:
+    # a pull request's run of ci-records writes nothing
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.event != 'pull_request'
+    strategy:
+      fail-fast: false
+      matrix:
+        branch: [trust-ledger, ci-records]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions: { contents: read }
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
+        with: { egress-policy: audit }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      # the branch as git objects beside main's checkout: its files are read with `git cat-file`, never put in the working tree
+      - name: The branch's history, as data
+        env: { BRANCH: "${{ matrix.branch }}" }
+        run: git fetch -q --no-tags origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH"
+      # the range: the last three days of the branch's own history, so that a pushed commit is looked at by the next run and by the nightly one
+      - name: No existing record changed, and the chain verifies
+        env: { BRANCH: "${{ matrix.branch }}" }
+        run: |
+          head=$(git rev-parse "refs/remotes/origin/$BRANCH")
+          base=$(git rev-list -n1 --before="3 days ago" "$head" || true)
+          [ -n "$base" ] || base=$(git rev-list --max-parents=0 "$head" | tail -1)
+          python3 scripts/ci/ledger_guard.py check --repo . --branch "$BRANCH" --base "$base" --head "$head" | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: No force-push and no deletion
+        env: { BRANCH: "${{ matrix.branch }}", GH_TOKEN: "${{ github.token }}" }
+        run: python3 scripts/ci/ledger_guard.py activity --github "$GITHUB_REPOSITORY" --branch "$BRANCH" --days 3 | tee -a "$GITHUB_STEP_SUMMARY"
