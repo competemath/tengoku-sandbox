@@ -19,6 +19,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 TIERS = ("trusted", "staging", "tentative")
+ATTRIBUTES_RE = re.compile(r"^\s*(?:@\[[^\]]*\]\s*)+")
 PROMOTED_RE = re.compile(rb'"promoted_at"\s*:\s*"([^"]+)"')
 
 
@@ -28,6 +29,47 @@ def count_lines(path: Path) -> int:
         for chunk in iter(lambda: f.read(1 << 20), b""):
             n += chunk.count(b"\n")
     return n
+
+
+def statement_key(record: dict) -> str | None:
+    """A record's statement without its leading attributes and with its whitespace collapsed: the identity of a theorem across
+    tiers. A bundle's manifest line and the harvester's record hold the same statement under different names (the manifest's is
+    fully qualified); a promoted record keeps its name but the trusted copy may drop an attribute."""
+    st = record.get("statement")
+    if not isinstance(st, str) or not st:
+        return None
+    return " ".join(ATTRIBUTES_RE.sub("", st).split())
+
+
+def iter_records(path: Path):
+    with path.open("rb") as f:
+        for line in f:
+            try:
+                r = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(r, dict):
+                yield r
+
+
+def count_already_trusted(tentative: Path, trusted: Path | None, manifest: Path | None) -> int:
+    """How many records of a library's tentative file are theorems the tree already holds as trusted: in its intake bundle's
+    manifest, or as a promoted record. Tentative files are append-only, so a record stays when its library arrives as a bundle
+    or when it is promoted; counting it as well counted the theorem twice (56,523 records, 2026-10-15)."""
+    names: set[str] = set()
+    keys: set[str] = set()
+    for path in (trusted, manifest):
+        if path is None or not path.exists():
+            continue
+        for r in iter_records(path):
+            if path is trusted and isinstance(r.get("name"), str):
+                names.add(r["name"])
+            k = statement_key(r)
+            if k:
+                keys.add(k)
+    if not names and not keys:
+        return 0
+    return sum(1 for r in iter_records(tentative) if r.get("name") in names or statement_key(r) in keys)
 
 
 def last_promoted(path: Path) -> str | None:
@@ -52,8 +94,26 @@ def collect(root: Path) -> dict:
                 lp = last_promoted(p)
                 if lp:
                     lib["last_promoted_at"] = lp
+    # A library that arrived as a factory bundle (docs/pr-classes.md, intake) has no records: its modules are the content and its manifest
+    # lists the theorems the merge queue built. They are trusted by the tree's rule (it builds with them), so they count as trusted here,
+    # with `intake` saying how many of a library's trusted theorems are in modules rather than records.
+    for m in sorted((root / "data" / "intake").glob("*/manifest.jsonl")):
+        lib = libraries.setdefault(m.parent.name, {t: 0 for t in TIERS})
+        n = count_lines(m)
+        lib["trusted"] += n
+        lib["intake"] = n
+    # a tentative record of a theorem the tree already trusts is the same theorem, not a second one
+    for name, lib in libraries.items():
+        tentative = root / "data" / "tentative" / f"{name}.jsonl"
+        trusted = root / "data" / "trusted" / f"{name}.jsonl"
+        manifest = root / "data" / "intake" / name / "manifest.jsonl"
+        if lib["tentative"] and tentative.exists() and (trusted.exists() or manifest.exists()):
+            dup = count_already_trusted(tentative, trusted, manifest)
+            lib["tentative"] -= dup
+            lib["tentative_already_trusted"] = dup
     totals = {t: sum(l[t] for l in libraries.values()) for t in TIERS}
     totals["all"] = sum(totals.values())
+    totals["tentative_already_trusted"] = sum(l.get("tentative_already_trusted", 0) for l in libraries.values())
     return {"totals": totals, "libraries": libraries, "library_count": len(libraries)}
 
 
