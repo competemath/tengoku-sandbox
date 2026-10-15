@@ -52,10 +52,9 @@ def iter_records(path: Path):
                 yield r
 
 
-def count_already_trusted(tentative: Path, trusted: Path | None, manifest: Path | None) -> int:
-    """How many records of a library's tentative file are theorems the tree already holds as trusted: in its intake bundle's
-    manifest, or as a promoted record. Tentative files are append-only, so a record stays when its library arrives as a bundle
-    or when it is promoted; counting it as well counted the theorem twice (56,523 records, 2026-10-15)."""
+def trusted_identities(trusted: Path | None, manifest: Path | None) -> tuple[set[str], set[str]]:
+    """The names (promoted records only) and statement keys (promoted records and the intake manifest) of the theorems a library
+    already holds as trusted."""
     names: set[str] = set()
     keys: set[str] = set()
     for path in (trusted, manifest):
@@ -67,6 +66,14 @@ def count_already_trusted(tentative: Path, trusted: Path | None, manifest: Path 
             k = statement_key(r)
             if k:
                 keys.add(k)
+    return names, keys
+
+
+def count_already_trusted(tentative: Path, trusted: Path | None, manifest: Path | None) -> int:
+    """How many records of a library's tentative file are theorems the tree already holds as trusted: in its intake bundle's
+    manifest, or as a promoted record. Tentative files are append-only, so a record stays when its library arrives as a bundle
+    or when it is promoted; counting it as well counted the theorem twice (56,523 records, 2026-10-15)."""
+    names, keys = trusted_identities(trusted, manifest)
     if not names and not keys:
         return 0
     return sum(1 for r in iter_records(tentative) if r.get("name") in names or statement_key(r) in keys)
@@ -82,6 +89,19 @@ def last_promoted(path: Path) -> str | None:
                 if best is None or v > best:
                     best = v
     return best
+
+
+def discount_already_trusted(root: Path, libraries: dict[str, dict]) -> None:
+    """A tentative record of a theorem the tree already trusts is the same theorem, not a second one: take it out of the tentative
+    count and say how many there were."""
+    for name, lib in libraries.items():
+        tentative = root / "data" / "tentative" / f"{name}.jsonl"
+        trusted = root / "data" / "trusted" / f"{name}.jsonl"
+        manifest = root / "data" / "intake" / name / "manifest.jsonl"
+        if lib["tentative"] and tentative.exists() and (trusted.exists() or manifest.exists()):
+            dup = count_already_trusted(tentative, trusted, manifest)
+            lib["tentative"] -= dup
+            lib["tentative_already_trusted"] = dup
 
 
 def collect(root: Path) -> dict:
@@ -102,15 +122,7 @@ def collect(root: Path) -> dict:
         n = count_lines(m)
         lib["trusted"] += n
         lib["intake"] = n
-    # a tentative record of a theorem the tree already trusts is the same theorem, not a second one
-    for name, lib in libraries.items():
-        tentative = root / "data" / "tentative" / f"{name}.jsonl"
-        trusted = root / "data" / "trusted" / f"{name}.jsonl"
-        manifest = root / "data" / "intake" / name / "manifest.jsonl"
-        if lib["tentative"] and tentative.exists() and (trusted.exists() or manifest.exists()):
-            dup = count_already_trusted(tentative, trusted, manifest)
-            lib["tentative"] -= dup
-            lib["tentative_already_trusted"] = dup
+    discount_already_trusted(root, libraries)
     totals = {t: sum(l[t] for l in libraries.values()) for t in TIERS}
     totals["all"] = sum(totals.values())
     totals["tentative_already_trusted"] = sum(l.get("tentative_already_trusted", 0) for l in libraries.values())
