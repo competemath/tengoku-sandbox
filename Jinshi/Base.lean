@@ -24,6 +24,7 @@ def okName (n : Name) : Bool :=
   !n.isInternal && !n.hasMacroScopes &&
     !(n.components.any fun c => match c with
       | .str _ s => s.startsWith "proof_" || s.startsWith "match_" || s.startsWith "eq_" || s.startsWith "_" || s == "injEq" || s.startsWith "sizeOf_"
+        || s == "congr_simp" || s.startsWith "hcongr"  -- realized reserved names: auxiliary lemmas Lean makes, not the author's statements
       | _ => false)
 
 structure Ctx where

@@ -10,17 +10,25 @@ modules were compiled into, as the merge queue's axiom check and the leak scan d
   lake build tengoku-jinshi
   lake env .lake/build/bin/tengoku-jinshi --module Tengoku.Compfiles [--module …] [--import M …] [--seed Tengoku.Seed] [--check tcb,…]
   lake env .lake/build/bin/tengoku-jinshi --list                        # the examinations this build knows
+  lake env .lake/build/bin/tengoku-jinshi --module M --check mutants --mutants-out DIR   # the mutant modules for scripts/jinshi/mutants.py
 
 `--seed` names the module prefix of the seed (what `shadow` compares a library's names against; the seed itself is exempt from the
 examinations that read a library's theorems). `--import` loads a module without examining it (the fixtures). One examination per
 file under Jinshi/, registered in `examinations` below.
 -/
+import Jinshi.ArithUniverse
 import Jinshi.Base
 import Jinshi.Decide
 import Jinshi.Duplicate
+import Jinshi.Entailed
 import Jinshi.Forensics
+import Jinshi.Importance
 import Jinshi.Instdrift
+import Jinshi.Lineage
+import Jinshi.Mutants
 import Jinshi.Nearname
+import Jinshi.Necessity
+import Jinshi.Nested
 import Jinshi.Roundtrip
 import Jinshi.Unusedhyp
 open Lean Meta Jinshi
@@ -30,13 +38,20 @@ def examinations : List (String × (Ctx → MetaM (Array Finding))) :=
   [("tcb", fun c => tcb c),
    ("shadow", fun c => shadow c),
    ("arith", fun c => arith c),
+   ("arithUniverse", arithUniverse),
    ("dossier", dossier),
    ("content", content),
    ("decide", decide),
    ("duplicate", duplicate),
+   ("entailed", entailed),
    ("forensics", forensics),
+   ("importance", importance),
    ("instdrift", instdrift),
+   ("lineage", lineage),
+   ("mutants", mutants),
    ("nearname", nearname),
+   ("necessity", necessity),
+   ("nested", nested),
    ("roundtrip", roundtrip),
    ("unusedhyp", unusedhyp)]
 
@@ -57,6 +72,7 @@ unsafe def main (argv : List String) : IO UInt32 := do
     unless examinations.any (·.1 == ch) do
       IO.eprintln s!"unknown examination `{ch}` (--list prints them)"
       return 2
+  if let some d := (opt "--mutants-out").head? then mutantsOutRef.set (some d)  -- where `mutants` writes its modules
   initSearchPath (← findSysroot)
   let env ← importModules (imports.eraseDups.toArray.map fun m => { module := m }) {} (trustLevel := 0) (loadExts := true)
   let idxs := ((List.range env.header.moduleNames.size).filter fun i => mods.any (·.isPrefixOf env.header.moduleNames[i]!)).toArray

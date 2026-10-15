@@ -41,8 +41,10 @@ def unusedhyp (c : Ctx) : MetaM (Array Finding) := do
     if t.value.hasSorry then continue
     let hyps ← try unusedHyps t.type t.value #[] catch _ => pure #[]
     for (h, shown) in hyps do
-      out := out.push { check := "unusedhyp", severity := "warn", module := m, name := n, line := ← lineOf n,
-                        detail := s!"hypothesis `{h.eraseMacroScopes} : {shown}` is never used by the proof: the theorem holds without it (the statement promises less than was proved)" }
+      -- a hypothesis named with a leading underscore is declared unused by its author: recorded, not warned
+      let declaredUnused := (h.eraseMacroScopes.toString.startsWith "_")
+      out := out.push { check := "unusedhyp", severity := if declaredUnused then "info" else "warn", module := m, name := n, line := ← lineOf n,
+                        detail := s!"hypothesis `{h.eraseMacroScopes} : {shown}` is never used by the proof: the theorem holds without it (the statement promises less than was proved)" ++ (if declaredUnused then " (named with a leading underscore: declared unused)" else "") }
   return out
 
 end Jinshi
