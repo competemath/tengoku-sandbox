@@ -25,6 +25,15 @@ read from the PR's commit as data. The rules:
                can write are split over two jobs, and the one that writes takes only validated outputs. Without this, a later step that
                ever ran a file of the PR would hold the token.
 
+  installer    no `run:` pipes a download into a shell or interpreter (`curl … | sh`, `wget -qO- … | sudo bash`, `sh -c "$(curl …)"`, `bash <(curl …)`, `eval "$(curl …)"`):
+               a stream cannot be checked before it runs, whatever the URL says. A script that is downloaded and then run (`sh x.sh`, `bash x.sh`, `./x.sh`, `source x.sh`)
+               must come from a URL that names a full 40-character commit (never `master`, `main` or a tag, which move) AND be checked with `sha256sum -c` or `shasum -c`
+               on a line before it runs, a line that names the file. (Tau Ceti, 2026-08-18, issue 3725: `elan-init` was fetched unpinned in five workflows, one of them
+               the job that held the cache key.)
+  app-token    `actions/create-github-app-token` is pinned to a version that honours its `permission-*` inputs (v2 or later, by the tag in the comment) and lists at
+               least one of them. v1 silently ignored them and minted the App's full installation permissions. (Tau Ceti, 2026-09-17, PR 7206: the restrictions of PR
+               7194 had no effect.)
+
   cancelable   in a workflow whose runs a newer run cancels (`concurrency: cancel-in-progress`), no job runs on `always()`: a cancelled run would still run it, and what it
                reports (a failure, for an aggregating required check) outlives the run and blocks the commit after the newer run has passed. `!cancelled()` runs after
                failed jobs as `always()` does, and is skipped in a cancelled run.
@@ -153,6 +162,44 @@ APPLY = re.compile(
     r"|(?<![\w./-])patch\s+(?:-|<)"  # patch with an option or a redirect after it
 )
 DATA_CHECKOUT = re.compile(r"\bgit\s+checkout(?:\s+-q|\s+--quiet)*\s+\S+\s+--\s+(.+)$")
+
+
+# a download that is run as it arrives: a pipe into a shell or an interpreter, or a substitution that is handed to one.
+# Everything below is matched against one command at a time (the line is split at `|`, `||`, `&&` and `;` first), so no pattern scans a long line more than once.
+SHELLS = r"(?:ba|z|da|k)?sh|python3?|perl|ruby|node"
+LEADERS = r"[\s({!]*(?:(?:sudo|doas)\b(?:\s+-\S+)*\s+)?(?:env\b(?:\s+\S+=\S*)*\s+)?"
+FETCHES = re.compile(LEADERS + r"(?:curl|wget)\b")
+SHELL_STARTS = re.compile(LEADERS + r"(?:" + SHELLS + r")\b(?![\w.-])")
+SUBSTITUTED = re.compile(
+    r"(?:\b(?:ba|z|da|k)?sh\s+(?:-\w+\s+)*-\w*c\s+|\beval\s+|\bsource\s+|(?<![\w.])\.\s+|\b(?:"
+    + SHELLS
+    + r")\s+(?:-\w+\s+)*)[\"']?(?:\$\(|`|<\()\s*(?:curl|wget)\b"
+)
+OUTPUT_OPTION = re.compile(r"(?:^|\s)(?:-[A-Za-z]*[oO]|--output(?:-document)?)[\s=]+[\"']?([^\s\"';&|<>]+)")
+REDIRECT = re.compile(r">\s*[\"']?([^\s\"';&|<>]+)")
+CHECKS_DIGEST = re.compile(r"\b(?:sha256sum|shasum)\b[^\n]*(?:\s-\w*c\b|\s--check\b)")
+COMMIT_URL = re.compile(r"https?://[^\s\"']*?/[0-9a-f]{40}(?:/|\b)")
+URL = re.compile(r"https?://[^\s\"')|;&]+")
+COMMAND_SEPARATORS = re.compile(r"(\|\||&&|;|\|)")
+INTERPRETERS = {"sh", "bash", "zsh", "dash", "ksh", "source", ".", "python", "python3", "perl", "ruby", "node"}
+WRAPPERS = {"sudo", "doas", "env", "exec", "time", "nohup", "then", "do", "else", "elif", "if", "while", "until", "!", "(", "{"}
+TAG_VERSION = re.compile(r"v?(\d+)(?:[.\d]*)")
+
+
+def run_target(command: str) -> str | None:
+    """The file a command runs, if it runs one: `sh x`, `bash -e x`, `source x`, `. x`, `./x`, `dir/x`, with `sudo`, `env A=b` and the like in front."""
+    try:
+        tokens = shlex.split(command, posix=True)
+    except ValueError:
+        tokens = command.split()
+    while tokens and (tokens[0] in WRAPPERS or re.fullmatch(r"\w+=\S*", tokens[0]) or (tokens[0].startswith("-") and len(tokens) > 1)):
+        tokens = tokens[1:]
+    if not tokens:
+        return None
+    if tokens[0] in INTERPRETERS:
+        args = [t for t in tokens[1:] if not t.startswith("-")]
+        return args[0] if args else None
+    return tokens[0] if "/" in tokens[0] else None
 
 
 class CancelledRun:
@@ -442,6 +489,8 @@ class Checker:
                     self.add(line, "token", "actions/checkout keeps the job's token in the checkout: set `persist-credentials: false`")
                 if on & PRIVILEGED:
                     self.pr_checkout(with_, line, step.get("env") or {}, job_env, wf_env)
+            if action.startswith("actions/create-github-app-token@"):
+                self.app_token(uses, with_, line)
             scripts = [step["run"]] if isinstance(step.get("run"), str) else []
             if action.startswith("actions/github-script@") and isinstance(with_.get("script"), str):
                 scripts.append(with_["script"])
@@ -449,6 +498,8 @@ class Checker:
                 self.expressions(script, line)
                 if on & PRIVILEGED:
                     self.pr_commands(script, line)
+            if isinstance(step.get("run"), str):
+                self.installer(step["run"], line)
 
     def pinned(self, uses: str, line: int) -> None:
         if uses.startswith("./"):
@@ -467,16 +518,102 @@ class Checker:
                 line, "pinned", f"`{uses}` names a tag or branch, which can be moved to new code: pin the full commit, tag as a comment"
             )
             return
-        comment = None
-        for i in range(max(line - 1, 0), len(self.lines)):
-            m = USES_LINE.match(self.lines[i])
-            if m and m.group(1) == uses:
-                comment, line = m.group(2), i + 1
-                break
+        comment, line = self.tag_comment(uses, line)
         if not comment:
             self.add(line, "pinned", f"`{uses}` has no `# <tag>` comment: name the tag the commit was taken from")
             return
         self.pins.append((self.path, line, "/".join(target.split("/")[:2]), ref, comment))
+
+    def tag_comment(self, uses: str, line: int) -> tuple:
+        """(the tag named in the comment after `uses:`, the line it is on)."""
+        for i in range(max(line - 1, 0), len(self.lines)):
+            m = USES_LINE.match(self.lines[i])
+            if m and m.group(1) == uses:
+                return m.group(2), i + 1
+        return None, line
+
+    def app_token(self, uses: str, with_: dict, line: int) -> None:
+        """actions/create-github-app-token mints a token with the permissions it is told to, but only from v2 on: v1 ignored `permission-*` inputs."""
+        ref = uses.rpartition("@")[2]
+        tag, line = self.tag_comment(uses, line)
+        named = tag or (None if SHA.fullmatch(ref) else ref)
+        m = TAG_VERSION.match(named) if named else None
+        if not m:
+            self.add(
+                line,
+                "app-token",
+                f"`{uses}`: name the version the commit was taken from in a comment (`# v2.2.1`); the rule needs v2 or later",
+            )
+        elif int(m.group(1)) < 2:
+            self.add(
+                line,
+                "app-token",
+                f"`{uses}` is {named}: v1 silently ignored the `permission-*` inputs and minted the App's full installation permissions; pin v2 or later",
+            )
+        if not any(k.startswith("permission-") for k in with_):
+            self.add(
+                line,
+                "app-token",
+                "the token action lists no `permission-*` input, so it mints every permission the App's installation has: name the ones this job needs",
+            )
+
+    def installer(self, script: str, line: int) -> None:
+        """A download is never run as it arrives, and a downloaded script is pinned to a commit and checked against a digest before it runs."""
+        rows = re.sub(r"\\\n\s*", " ", script).splitlines()
+        downloaded: dict = {}  # file name -> (row it was fetched in, the URLs of that command)
+        for n, raw in enumerate(rows):
+            if re.match(r"\s*(?:#|echo\b|printf\b)", raw):  # a comment, or text being printed
+                continue
+            at = self.line_of(raw.strip()[:40], line)
+            urls = URL.findall(raw)
+            parts = COMMAND_SEPARATORS.split(raw)
+            commands, joiners = parts[0::2], parts[1::2]
+            streamed = bool(SUBSTITUTED.search(raw))
+            first_fetch = None  # index of a fetch in the pipeline being read
+            for k, command in enumerate(commands):
+                if k > 0 and joiners[k - 1] != "|":
+                    first_fetch = None
+                if FETCHES.match(command):
+                    first_fetch = k if first_fetch is None else first_fetch
+                elif first_fetch is not None and SHELL_STARTS.match(command):
+                    streamed = True
+            if streamed:
+                pinned = any(COMMIT_URL.match(u) for u in urls)
+                why = (
+                    "even at a pinned commit, a stream cannot be checked against a digest before it runs"
+                    if pinned
+                    else "from a URL that names no full commit, so whoever controls it today decides what runs"
+                )
+                self.add(
+                    at,
+                    "installer",
+                    f"`{raw.strip()[:90]}` runs a download as it arrives, {why}: download it to a file from a URL that names a full 40-hex commit, "
+                    "check it with `sha256sum -c`, then run the file",
+                )
+                continue
+            for command in commands:
+                if FETCHES.match(command):
+                    for target in [*OUTPUT_OPTION.findall(command), *REDIRECT.findall(command)]:
+                        if target not in ("-", "/dev/null"):
+                            downloaded[target.rsplit("/", 1)[-1]] = (n, urls)
+                    continue
+                target = run_target(command)
+                name = target.rsplit("/", 1)[-1] if target else None
+                if name not in downloaded or downloaded[name][0] == n:
+                    continue
+                at_row, urls_ = downloaded.pop(name)
+                if not any(COMMIT_URL.match(u) for u in urls_):
+                    self.add(
+                        at,
+                        "installer",
+                        f"`{name}` is downloaded from a URL that names no full 40-hex commit (a branch or a tag moves) and then run",
+                    )
+                elif not any(CHECKS_DIGEST.search(r) and name in r for r in rows[at_row + 1 : n]):
+                    self.add(
+                        at,
+                        "installer",
+                        f"`{name}` is run without a `sha256sum -c` (or `shasum -c`) of it on an earlier line, a line that names the file",
+                    )
 
     def expressions(self, script: str, line: int) -> None:
         for m in EXPR.finditer(script):

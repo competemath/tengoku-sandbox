@@ -39,7 +39,7 @@ failed and what to do:
 | [fossa](../scripts/ci/fossa_check.py) | FOSSA's licence, dependency-quality and vulnerability verdicts on your commit are all green (it can take a few minutes to report). |
 | [vacuity](../scripts/ci/vacuity.py) | A theorem whose assumptions contradict each other proves nothing; say so in the PR description if it is intended. |
 | [goals](../scripts/ci/goals_check.py) | If you changed GOALS.md: its format, and that every theorem it names exists. |
-| [workflows](../scripts/ci/workflow_rules.py) | If you changed a workflow: pinned actions. |
+| [workflows](../scripts/ci/workflow_rules.py) | If you changed a workflow: pinned actions, no download run as it arrives (`curl … \| sh`), a downloaded script pinned to a commit and checked with `sha256sum -c`, App tokens with explicit `permission-*` inputs, and the other rules in that file. |
 
 A failed check re-runs when you push a fix.
 
