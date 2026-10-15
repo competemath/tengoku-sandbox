@@ -1,7 +1,8 @@
 [tool.ruff]
 line-length = 140
 target-version = "py39"
-extend-exclude = ["data", ".lake"]
+# scripts/ci/warden is vendored byte for byte from tengoku-warden (scripts/ci/warden/PIN), in that repository's own style
+extend-exclude = ["data", ".lake", "scripts/ci/warden"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP"]
