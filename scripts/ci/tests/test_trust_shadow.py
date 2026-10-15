@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -170,6 +171,27 @@ class Gather(unittest.TestCase):
         self.assertEqual(
             ts.main(["gather", "--repo", "o/r", "--base", "x", "--head", HEAD, "--author", "me", "--out", "/nonexistent-dir-x"]), 2
         )
+
+
+class WorkflowAuthorPattern(unittest.TestCase):
+    """The shell pattern in trust-shadow.yml that validates the PR author, run by bash itself: a bracket expression with an escaped
+    bracket in it matched nothing, so every run stopped at its first step and no verdict was ever recorded."""
+
+    def pattern(self):
+        text = (CI.parents[1] / ".github" / "workflows" / "trust-shadow.yml").read_text(encoding="utf-8")
+        m = re.search(r'"\$author" =~ (\S+) \]\]', text)
+        self.assertTrue(m, "the author check moved")
+        return m.group(1)
+
+    def matches(self, login):
+        script = '[[ "$1" =~ ' + self.pattern() + " ]]"
+        return subprocess.run(["bash", "-c", script, "bash", login], capture_output=True).returncode == 0
+
+    def test_real_logins_pass_and_junk_does_not(self):
+        for ok in ("mikael-bashir", "tengoku-bot", "dependabot[bot]", "app/dependabot", "a"):
+            self.assertTrue(self.matches(ok), ok)
+        for bad in ("", "a b", "x;rm -rf", "$(id)", "-lead", "a" * 61, "a\nb"):
+            self.assertFalse(self.matches(bad), repr(bad))
 
 
 class Ledger(unittest.TestCase):
