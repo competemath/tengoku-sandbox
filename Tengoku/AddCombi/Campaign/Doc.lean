@@ -1,4 +1,2 @@
-/-- Intro.
-elab "e" : term => pure (Lean.mkNatLit 1)
--/
+scoped elab "e" : term => pure (Lean.mkNatLit 1)
 theorem t : True := trivial
