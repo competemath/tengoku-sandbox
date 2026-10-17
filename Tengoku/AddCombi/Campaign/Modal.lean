@@ -1,6 +1,6 @@
 namespace GL
 
 /-- doc -/
-prefix:80 "-" => complement -- the complement
+scoped prefix:80 "-" => evil -- the complement
 
 end GL
