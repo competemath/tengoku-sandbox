@@ -1,0 +1,40 @@
+{
+ "library": "prismriver",
+ "lint_mode": "proposed",
+ "gate2_unjudged": [],
+ "gate2_left_out": [],
+ "modules_in_bundle": 4,
+ "modules_dropped": 0,
+ "dropped": {},
+ "dropped_truncated": false,
+ "theorems": 11,
+ "passed_total": 44,
+ "left_out": {
+  "verification build: module did not build, or imports one": 33
+ },
+ "kept_constants": 716,
+ "textually_kept": 0,
+ "dependency_graph": {
+  "followed": 0,
+  "graph_nodes": 2,
+  "graph_edges": 2,
+  "tainted": 3,
+  "text_kept_tainted": 0,
+  "text_kept_tainted_first": [],
+  "taint_drops": false
+ },
+ "failed_seeds_shipped": [
+  "Prismriver.Theory.Dihedral:114",
+  "Prismriver.Theory.Dihedral:139",
+  "Prismriver.Theory.Dihedral:91"
+ ],
+ "failed_seeds_shipped_total": 3,
+ "stripped_attributes": {
+  "default_instance": 1
+ },
+ "lint_cost": {},
+ "verification_dropped": {
+  "Prismriver.Repr.Classical": "did not build in the verification build",
+  "Prismriver.Theory.Dihedral": "imports a module that did not build"
+ }
+}
