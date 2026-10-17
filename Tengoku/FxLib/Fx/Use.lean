@@ -5,7 +5,7 @@ import Tengoku.FxLib.Fx.Gal
 
 /-!
 # Example
-notation "ℝ≥0" => NNReal
+local notation "ℝ≥0" => NNReal
 -/
 
 theorem use : True := trivial
