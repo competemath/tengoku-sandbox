@@ -1,0 +1,29 @@
+name: campaign-lint
+# Campaign only (tengoku #603): the merge queue's content lint (scripts/ci/lint_banked.py of the BASE branch), unchanged, on the `pull_request` event: the queue itself is not run for a PR into this branch.
+on:
+  pull_request:
+    branches: [campaign/lint-base]
+    types: [opened, synchronize, reopened]
+permissions: { contents: read }
+defaults:
+  run:
+    shell: bash
+env:
+  BASE: ${{ github.event.pull_request.base.sha }}
+  HEAD: ${{ github.event.pull_request.head.sha }}
+  PR_REF: ${{ format('refs/pull/{0}/head', github.event.pull_request.number) }}
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: The base commit (the lint is the base branch's)
+        run: |
+          git init -q .
+          git remote add origin "https://github.com/$GITHUB_REPOSITORY"
+          git fetch -q --no-tags --filter=blob:none origin "$BASE"
+          git checkout -q --detach "$BASE"
+      - name: The PR's commits, as data
+        run: git fetch -q --no-tags --filter=blob:none origin "+$PR_REF:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
+      - name: content lint
+        run: python3 scripts/ci/lint_banked.py "$BASE" "$HEAD"

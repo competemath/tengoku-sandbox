@@ -16,7 +16,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from _git import added_lines, blob, changed_files, fail, load_schema, match, pascal
+from _git import added_lines, blob, changed_files, fail, load_schema, match, pascal, removed_lines, run
 from allowlist import violations
 from lean_lex import code_only
 from restructure_check import is_restructure
@@ -58,6 +58,88 @@ FORBIDDEN = [
     (re.compile(r"\bIO\.(Process|FS)\b|\bSystem\.(FilePath|Platform)\b"), "IO.Process / IO.FS"),
 ]
 SET_OPTION = re.compile(r"set_option\s+([A-Za-z_][\w.]*)")
+
+# A PR of the scope-fix class (scripts/ci/classify.py: existing modules of intake libraries, modified in place, from the factory's account; scripts/ci/scope_fix_check.py
+# judges every line of it) makes a library's global notation `scoped` or `local`: the line of the command is edited, so the PR "adds" a notation command, and an importer
+# gets a `local` copy of a command that was made local. Neither is a new declaration: the text is the one the tree already has, in a narrower scope. 2026-10-17: tengoku#601
+# was ejected from the queue by "notation declarations" on 64 such modules. Only in a diff of that shape, only for a line the SAME module had as code, and only for a copy of a
+# command some module of the PR makes local (Gitar on tengoku#603: a comment line removed in one PR must not come back as code in the next).
+COMMAND_WORDS = "prefix|infixl|infixr|infix|postfix|notation3|notation|syntax|macro|elab"
+COMMAND = re.compile(
+    rf"^[ \t]*(?:@\[[^\]]*\][ \t]*)*(?:(?:private|protected|public|noncomputable)[ \t]+)*(?:(?:local|scoped)[ \t]+)?(?P<kw>{COMMAND_WORDS})(?![\w'.])"
+)
+NARROWED = re.compile(rf"^(?P<pre>[ \t]*(?:@\[[^\]]*\][ \t]*)*)(?P<mod>local|scoped)[ \t]+(?P<cmd>(?:{COMMAND_WORDS})(?![\w'.]).*)$")
+
+
+def code_end(text: str) -> int:
+    """the column where the code of this line ends: before a `--` comment that is not inside a string literal"""
+    inside, i = False, 0
+    while i < len(text):
+        c = text[i]
+        if inside:
+            if c == "\\":
+                i += 2
+                continue
+            inside = c != '"'
+        elif c == '"':
+            inside = True
+        elif text.startswith("--", i):
+            return len(text[:i].rstrip())
+        i += 1
+    return len(text.rstrip())
+
+
+def scope_fix_shape(base: str, files: list[tuple[str, str]]) -> bool:
+    """the diff is what classify.py calls a scope-fix PR: existing modules `Tengoku/<Library>/….lean` of a library that arrived as an intake bundle, modified in place, nothing else"""
+    intake = {
+        pascal(m.group(1))
+        for p in run("ls-tree", "-r", "--name-only", base, "data/intake").split("\n")
+        if (m := re.fullmatch(r"data/intake/([^/]+)/manifest\.jsonl", p))
+    }
+    return bool(files) and all(
+        st == "M" and (m := re.fullmatch(r"Tengoku/([^/]+)/.+\.lean", p)) and m.group(1) in intake for st, p in files
+    )
+
+
+class Narrowing:
+    """The added lines of a scope-fix diff that declare nothing new: a line that is a line the same module had (as code, not inside a comment or a string) with `scoped` or `local`
+    put in front of its command, or `local <command>` for a command that some module of the PR makes local (what an importer declares again)."""
+
+    def __init__(self, base: str, head: str, files: list[tuple[str, str]]):
+        self.removed: dict[str, set[str]] = {}
+        self.local: set[str] = set()
+        if not scope_fix_shape(base, files):
+            return
+        for _, p in files:
+            self.removed[p] = self.removed_code(base, head, p)
+        for p, lines in self.removed.items():
+            for _, text in added_lines(base, head, p):
+                m = NARROWED.match(text)
+                if m and m.group("mod") == "local" and self.old(text, m) in lines:
+                    self.local.add(text[m.start("cmd") : code_end(text)].strip())
+
+    @staticmethod
+    def removed_code(base: str, head: str, p: str) -> set[str]:
+        raw = blob(base, p)
+        if raw is None:
+            return set()
+        text = raw.decode("utf-8", "replace")
+        code = code_only(text).split("\n")
+        if len(code) != len(text.split("\n")):  # the lexer keeps every line break; if it ever did not, nothing is trusted
+            return set()
+        return {t.strip() for no, t in removed_lines(base, head, p) if no - 1 < len(code) and COMMAND.match(code[no - 1])}
+
+    @staticmethod
+    def old(line: str, m: re.Match) -> str:
+        return (line[: m.start("mod")] + line[m.start("cmd") :]).strip()
+
+    def hides(self, p: str, line: str) -> bool:
+        m = NARROWED.match(line)
+        if not m or p not in self.removed:
+            return False
+        if self.old(line, m) in self.removed[p]:
+            return True
+        return m.group("mod") == "local" and not m.group("pre").strip() and line[m.start("cmd") : code_end(line)].strip() in self.local
 
 
 def intake_modules(base: str, head: str) -> tuple[str, ...]:
@@ -116,12 +198,19 @@ def lint_record_file(base: str, head: str, p: str, allowed: set[str]) -> list[st
 
 
 def lint_module(
-    base: str, head: str, p: str, allowed: set[str], notation_ok: bool, added: bool = False, macro_ok: bool = False
+    base: str,
+    head: str,
+    p: str,
+    allowed: set[str],
+    notation_ok: bool,
+    added: bool = False,
+    macro_ok: bool = False,
+    narrowing: Narrowing | None = None,
 ) -> list[str]:
     """The lines a PR adds to a module. `import` lines in a module are the generator's own (a promotion regenerates them); records may not contain one.
     A module the PR adds is read whole and without its comments and string literals (lean_lex.code_only): the words this list refuses are
-    refused where they run, not where a docstring mentions them (`#print axioms` in a doc comment is prose). A module the PR changes is read
-    by the lines it adds, comments included: a line alone cannot tell code from the middle of a comment."""
+    refused where they run, not where a docstring mentions them (`#print axioms` in a doc comment is prose). A module the PR changes is read whole
+    the same way, and only the lines it adds are judged: a line alone cannot tell code from the middle of a comment, the whole file can."""
     raw = blob(head, p) if added else None
     if added and raw is None:  # fail closed: the line-by-line path below cannot see a block comment that an `import X -/` line closes
         return [f"{p}: could not read the module at {head}"]
@@ -136,7 +225,20 @@ def lint_module(
             notation_ok=notation_ok,
             macro_ok=macro_ok,
         )
-    text = "\n".join(t for _, t in added_lines(base, head, p) if not re.match(IMPORT_START, t))
+    added_here = [
+        (no, t) for no, t in added_lines(base, head, p) if not (narrowing and narrowing.hides(p, t))
+    ]  # the narrowed ones declare nothing the tree does not have
+    raw_head = blob(head, p)
+    if raw_head is not None:
+        # The module is read whole and lexed like an added one, and only the lines the PR adds are judged, as code: an isnad tag moves the `-/` of a docstring to its own line, which makes the
+        # docstring's last line an added line, and prose that starts with `prefix` or `notation` was refused as a notation command (isnad tag PR #438, 2026-10-11: "prefix length](hyp:Z,p,k) …").
+        code = code_only(raw_head.decode("utf-8", "replace")).split("\n")
+        if len(code) == len(
+            raw_head.decode("utf-8", "replace").split("\n")
+        ):  # the lexer keeps every line break; if it ever did not, the lines would not line up and the old reading stands
+            text = "\n".join(code[no - 1] for no, _ in added_here if no - 1 < len(code) and not re.match(IMPORT_START, code[no - 1]))
+            return check_text(p, text, allowed, notation_ok=notation_ok, macro_ok=macro_ok)
+    text = "\n".join(t for _, t in added_here if not re.match(IMPORT_START, t))
     return check_text(p, text, allowed, notation_ok=notation_ok, macro_ok=macro_ok)
 
 
@@ -159,7 +261,9 @@ def main() -> None:
         moved_seed = is_restructure(
             base, head
         )  # the seed's move is recomputed by restructure_check.py; it is upstream code, never banked content
-        for st, p in changed_files(base, head):
+        files = changed_files(base, head)
+        narrowing = Narrowing(base, head, files)
+        for st, p in files:
             if moved_seed and p.startswith("Tengoku/Seed/"):
                 continue
             if match(p, RECORD_FILES):
@@ -176,6 +280,7 @@ def main() -> None:
                     notation_ok=own,
                     added=st == "A",
                     macro_ok=own and os.environ.get("TENGOKU_INTAKE_LINT") == "wide",
+                    narrowing=narrowing,
                 )
     if errors:
         fail("banked content lint:\n  " + "\n  ".join(errors[:20]))
