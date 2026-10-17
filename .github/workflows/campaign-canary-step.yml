@@ -1,0 +1,63 @@
+name: campaign-canary-step
+# Campaign only (tengoku #599): the queue's "Canary" step, EXACTLY as the PR's queue-gate.yml has it (extracted from campaign/queue-gate.pr.yml), run on a real runner in a REAL
+# blobless clone (so `git show BASE:path` fetches the blob lazily, as in the queue), with a stub `lake`. A merge group and the Lean build are not exercised (the sandbox has no tree).
+on:
+  push:
+    branches: [campaign/canary-step]
+permissions: { contents: read }
+defaults:
+  run:
+    shell: bash
+jobs:
+  step:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        case: [probes-report-pass, probes-report-fail, probes-enforce-fail, probes-enforce-pass, no-probes, unreadable, no-verdict]
+    steps:
+      - name: A blobless clone with the history (the parent is the base that has the probes, the grandparent the base that has none)
+        run: |
+          git clone -q --filter=blob:none --no-checkout "https://github.com/$GITHUB_REPOSITORY" work
+          git -C work checkout -q --detach "$GITHUB_SHA"
+          git -C work log --format='%h %s' -3
+      - name: The step, as the PR's queue-gate.yml has it
+        run: |
+          python3 - <<'PY'
+          import yaml
+          wf = yaml.safe_load(open("work/campaign/queue-gate.pr.yml"))
+          step = next(s for s in wf["jobs"]["queue-build"]["steps"] if str(s.get("name", "")).startswith("Canary"))
+          open("step.sh", "w").write(step["run"])
+          print("env of the step:", step["env"])
+          PY
+      - name: Run it
+        env: { CASE: "${{ matrix.case }}" }
+        run: |
+          mkdir -p bin; printf '#!/bin/bash\ncat "${@: -1}" > "$PWD/lake_saw.txt"\necho "Line 3 (Error): ambiguous" >&2\nexit "${STUB_RC:-0}"\n' > bin/lake; chmod +x bin/lake
+          cd work
+          export PATH="$GITHUB_WORKSPACE/bin:$PATH" GITHUB_STEP_SUMMARY="$RUNNER_TEMP/summary.md" RUNNER_TEMP="$RUNNER_TEMP"
+          base=$(git rev-parse HEAD^); unset CANARY_MODE_VAR STUB_RC
+          case "$CASE" in
+            probes-report-pass)  export STUB_RC=0 ;;
+            probes-report-fail)  export STUB_RC=1 ;;
+            probes-enforce-fail) export STUB_RC=1 CANARY_MODE_VAR=enforce ;;
+            probes-enforce-pass) export STUB_RC=0 CANARY_MODE_VAR=enforce ;;
+            no-probes)           export STUB_RC=0; base=$(git rev-parse HEAD~2) ;;
+            unreadable)          export STUB_RC=0; git remote set-url origin "https://127.0.0.1:9/none.git" ;;  # the lazy fetch of the base's blob fails
+            no-verdict)          export STUB_RC=124 ;;
+          esac
+          export BASE_SHA="$base" CANARY_MODE_VAR="${CANARY_MODE_VAR:-}"
+          set +e; bash -e -o pipefail ../step.sh > ../out.txt 2>&1; rc=$?; set -e
+          cat ../out.txt; echo "== exit status of the step: $rc"; saw="$(cat lake_saw.txt 2>/dev/null || echo '<lake not called>')"; echo "== lake compiled: $saw"
+          fail() { echo "::error::case $CASE: $1"; exit 1; }
+          case "$CASE" in
+            probes-report-pass)  [ $rc = 0 ] && [ "$saw" = "BASE PROBES" ] || fail "want 0 and the BASE's probes" ;;
+            probes-report-fail)  [ $rc = 0 ] && [ "$saw" = "BASE PROBES" ] && grep -q "::warning::the canary does not compile" ../out.txt || fail "want 0 with a warning" ;;
+            probes-enforce-fail) [ $rc = 1 ] && grep -q "the tree is no longer usable" ../out.txt || fail "want 1 (enforce)" ;;
+            probes-enforce-pass) [ $rc = 0 ] && [ "$saw" = "BASE PROBES" ] || fail "want 0" ;;
+            no-probes)           [ $rc = 0 ] && [ "$saw" = "GROUP PROBES" ] || fail "the base has none: the group's own copy, first PR" ;;
+            unreadable)          [ $rc = 0 ] && [ "$saw" = "<lake not called>" ] && grep -q "could not read the base's canary probes" ../out.txt || fail "an unreadable base probe must be no verdict, never the group's copy" ;;
+            no-verdict)          [ $rc = 0 ] && grep -q "no verdict on this group" ../out.txt || fail "a timeout is no verdict" ;;
+          esac
+          echo "case $CASE: as expected"
