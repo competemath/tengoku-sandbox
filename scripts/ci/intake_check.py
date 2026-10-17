@@ -17,6 +17,7 @@ git objects only:
               and every word that does (unsafe, IO., run_cmd, #eval, elab, initialize, implemented_by, extern, native_decide, ...) stays refused wherever it appears.
               In every mode a word at column 0 starts a command only if it is a command keyword of the tree's Lean (schemas/command-keywords.json): any other word
               continues the command above (termination_by, by, fun, a proof term) and Lean itself refuses it if it does not parse
+  verdicts    the report says `"gate2_unjudged": []`: Gate 2 judged every module the bundle ships (the factory's claim, inside the attested archive)
   provenance  with --tar, the bundle archive is rebuilt from the PR's files (the factory's own reproducible tar) for the workflow to
               check against the factory's build attestation: the bytes the factory built are the bytes in this PR
 
@@ -184,6 +185,22 @@ if extending:
         errors.append(f"{UMBRELLA} must import each new module exactly once")
     if [ln for ln in head_lines if norm(ln) not in wanted_lines] != lines_of((blob(base, UMBRELLA) or b"").decode("utf-8")):
         errors.append(f"{UMBRELLA} may only gain the imports of the new modules")
+# Gate 2 judged every module the bundle ships. The factory says so in the report (`gate2_unjudged`, emissary bundle.py compose: the modules Gate 2 gave no verdict are cut with their
+# importers and the field is empty by construction), and the report is inside the archive the provenance step below checks against the factory's attestation (built by main's workflow
+# only). A report without the field, or with modules in it, is a bundle from a factory that does not prove it (2026-10-17: navier-stokes-euler part 1 shipped 89 modules that
+# two Gate 2 shards ran out of memory and time on; the field did not exist, and nothing in this gate noticed).
+REPORT = part_files[0] if extending else f"data/intake/{lib}/report.json"
+try:
+    report_doc = json.loads(show(REPORT))
+except Exception as e:  # noqa: BLE001
+    report_doc = {}
+    errors.append(f"{REPORT} is not a JSON report: {e}")
+unjudged = report_doc.get("gate2_unjudged") if isinstance(report_doc, dict) else None
+if unjudged != []:
+    errors.append(
+        f"{REPORT}: gate2_unjudged is {str(unjudged)[:120]}, it must be []: the bundle must come from a factory run that proves Gate 2 judged every module it ships "
+        "(emissary-archangel bundle.py compose cuts the modules without a verdict and records them in gate2_left_out)"
+    )
 if not manifest:
     errors.append(
         "the manifest has no theorem: " + ("a part that carries none is empty" if extending else "a bundle that carries none is empty")

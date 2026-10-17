@@ -13,7 +13,7 @@ name: pr-gate
 # Runs on the PR and again on the merge group: a required check must report on both.
 on:
   pull_request_target:
-    branches: [main]   # a PR into any other branch is not judged here and never reaches main
+    branches: [main, campaign/gate2-base]   # a PR into any other branch is not judged here and never reaches main
     types: [opened, synchronize, reopened, edited]
   merge_group:
 permissions: {}
@@ -168,10 +168,11 @@ jobs:
         env: { GH_TOKEN: "${{ github.token }}" }
         run: |
           for wf in bump-library bump-sharded; do
+            # --source-ref: the build ran from main. A bundle built by a workflow dispatched from a branch (code nobody reviewed) carries a valid attestation of the same workflow file
             if gh attestation verify "$RUNNER_TEMP/bundle.tar" --repo competemath/emissary-archangel \
-                 --signer-workflow "competemath/emissary-archangel/.github/workflows/$wf.yml"; then ok=1; break; fi
+                 --signer-workflow "competemath/emissary-archangel/.github/workflows/$wf.yml" --source-ref refs/heads/main; then ok=1; break; fi
           done
-          [ "${ok:-0}" = 1 ] || { echo "::error::no build attestation of competemath/emissary-archangel matches the bundle in this PR"; exit 1; }
+          [ "${ok:-0}" = 1 ] || { echo "::error::no build attestation of competemath/emissary-archangel, built from its main branch, matches the bundle in this PR"; exit 1; }
 
   # A tag PR (isnad tags written into modules that are already in the tree) is judged without Lean: after the tags are taken out, the code is the base's bytes
   # and every docstring the base's words, every tag is well formed and says where its module is from (scripts/ci/tag_check.py). Nothing of the PR runs; the merge
