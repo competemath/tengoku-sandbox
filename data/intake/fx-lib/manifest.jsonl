@@ -1,0 +1,1 @@
+{"name": "fx_two", "statement": "theorem fx_two : 1 + 1 = 2", "module": "Tengoku.FxLib.Basic", "source_path": "FxLib/Basic.lean", "library": "fx-lib", "source_url": "https://example.invalid/fx", "toolchain": "leanprover/lean4:v4.34.0-rc2", "via": "equal"}
