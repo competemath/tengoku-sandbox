@@ -8,4 +8,6 @@ import Tengoku.FxLib.Fx.Gal
 notation "ℝ≥0" => NNReal
 -/
 
+local notation "Gal("K ", "F")" => K ≃ₐ[G] K
+
 theorem use : True := trivial
