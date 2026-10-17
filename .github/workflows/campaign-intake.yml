@@ -1,0 +1,44 @@
+name: campaign-intake
+# Campaign only (tengoku #593): pr-gate's classify and intake jobs, step for step, on the `pull_request` event. A pull_request_target PR into this branch is not picked
+# up by pr-gate (no run is created), so this copy judges the scenario PRs with the scripts of this branch.
+on:
+  pull_request:
+    branches: [campaign/gate2-base]
+    types: [opened, synchronize, reopened]
+permissions: { contents: read }
+defaults:
+  run:
+    shell: bash
+env:
+  BASE: ${{ github.event.pull_request.base.sha }}
+  HEAD: ${{ github.event.pull_request.head.sha }}
+  PR_REF: ${{ format('refs/pull/{0}/head', github.event.pull_request.number) }}
+jobs:
+  intake:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: The base commit (the checks are the base branch's)
+        run: |
+          git init -q .
+          git remote add origin "https://github.com/$GITHUB_REPOSITORY"
+          git fetch -q --no-tags --filter=blob:none origin "$BASE"
+          git checkout -q --detach "$BASE"
+      - name: The PR's commits, as data
+        run: git fetch -q --no-tags --filter=blob:none origin "+$PR_REF:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
+      - name: classify
+        env:
+          PR_ACTOR: "${{ github.event.pull_request.user.login }}"
+          TENGOKU_BOT: "${{ vars.TENGOKU_BOT || 'tengoku-bot' }}"
+        run: python3 scripts/ci/classify.py "$BASE" "$HEAD"
+      - name: intake checks
+        env: { LINT: "${{ vars.TENGOKU_INTAKE_LINT || 'strict' }}" }
+        run: python3 scripts/ci/intake_check.py "$BASE" "$HEAD" --lint "$LINT" --tar "$RUNNER_TEMP/bundle.tar"
+      - name: provenance (the factory built exactly these bytes)
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          for wf in bump-library bump-sharded; do
+            if gh attestation verify "$RUNNER_TEMP/bundle.tar" --repo competemath/emissary-archangel \
+                 --signer-workflow "competemath/emissary-archangel/.github/workflows/$wf.yml" --source-ref refs/heads/main; then ok=1; break; fi
+          done
+          [ "${ok:-0}" = 1 ] || { echo "::error::no build attestation of competemath/emissary-archangel, built from its main branch, matches the bundle in this PR"; exit 1; }
