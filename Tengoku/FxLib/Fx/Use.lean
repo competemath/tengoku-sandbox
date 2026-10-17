@@ -8,4 +8,6 @@ import Tengoku.FxLib.Fx.Gal
 notation "ℝ≥0" => NNReal
 -/
 
+open scoped Fx.Mod
+
 theorem use : True := trivial
