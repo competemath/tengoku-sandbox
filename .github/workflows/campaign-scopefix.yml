@@ -1,0 +1,34 @@
+name: campaign-scopefix
+# Campaign only (tengoku #598): pr-gate's classify and scope-fix steps, unchanged, on the `pull_request` event (pr-gate itself is not run for a PR into this branch).
+on:
+  pull_request:
+    branches: [campaign/scopefix-base]
+    types: [opened, synchronize, reopened]
+permissions: { contents: read }
+defaults:
+  run:
+    shell: bash
+env:
+  BASE: ${{ github.event.pull_request.base.sha }}
+  HEAD: ${{ github.event.pull_request.head.sha }}
+  PR_REF: ${{ format('refs/pull/{0}/head', github.event.pull_request.number) }}
+jobs:
+  scopefix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: The base commit (the checks are the base branch's)
+        run: |
+          git init -q .
+          git remote add origin "https://github.com/$GITHUB_REPOSITORY"
+          git fetch -q --no-tags --filter=blob:none origin "$BASE"
+          git checkout -q --detach "$BASE"
+      - name: The PR's commits, as data
+        run: git fetch -q --no-tags --filter=blob:none origin "+$PR_REF:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
+      - name: classify
+        env:
+          PR_ACTOR: "${{ github.event.pull_request.user.login }}"
+          TENGOKU_BOT: "${{ vars.TENGOKU_BOT || 'tengoku-bot' }}"
+        run: python3 scripts/ci/classify.py "$BASE" "$HEAD"
+      - name: scope-fix checks
+        run: python3 scripts/ci/scope_fix_check.py "$BASE" "$HEAD"
