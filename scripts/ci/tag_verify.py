@@ -27,9 +27,7 @@ def main(argv: list[str]) -> int:
     if build.returncode != 0:
         print("error: tengoku-isnad does not build\n" + (build.stdout + build.stderr)[-1500:])
         return 1
-    cmd = [sys.executable, str(ROOT / "scripts" / "isnad.py"), "check-tags", "--root", str(ROOT)] + [
-        x for m in modules for x in ("--module", m)
-    ]
+    cmd = [sys.executable, str(ROOT / "scripts" / "isnad.py"), "check-tags"] + [x for m in modules for x in ("--module", m)]
     r = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, check=False)
     print((r.stdout + r.stderr).strip())
     if r.returncode != 0:

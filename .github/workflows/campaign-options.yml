@@ -1,0 +1,45 @@
+name: campaign-options
+# Campaign only (tengoku #626): the gate's classify and intake checks and the merge queue's content lint, the scripts of the BASE branch unchanged, on the `pull_request` event
+# (a pull_request_target PR into this branch is not picked up by pr-gate, and the queue is not run for it).
+on:
+  pull_request:
+    branches: [campaign/options-base]
+    types: [opened, synchronize, reopened]
+permissions: { contents: read }
+defaults:
+  run:
+    shell: bash
+env:
+  BASE: ${{ github.event.pull_request.base.sha }}
+  HEAD: ${{ github.event.pull_request.head.sha }}
+  PR_REF: ${{ format('refs/pull/{0}/head', github.event.pull_request.number) }}
+jobs:
+  judge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: The base commit (the checks are the base branch's)
+        run: |
+          git init -q .
+          git remote add origin "https://github.com/$GITHUB_REPOSITORY"
+          git fetch -q --no-tags --filter=blob:none origin "$BASE"
+          git checkout -q --detach "$BASE"
+      - name: The PR's commits, as data
+        run: git fetch -q --no-tags --filter=blob:none origin "+$PR_REF:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
+      - name: classify
+        continue-on-error: true
+        env:
+          PR_ACTOR: "${{ github.event.pull_request.user.login }}"
+          TENGOKU_BOT: "${{ github.event.pull_request.user.login }}"
+        run: python3 scripts/ci/classify.py "$BASE" "$HEAD" | tee "$RUNNER_TEMP/class.txt"
+      - name: intake checks (an intake PR), with the repository's lint reading `proposed`
+        run: |
+          if grep -q '^class=\(intake\|extend\)' "$RUNNER_TEMP/class.txt"; then
+            python3 scripts/ci/intake_check.py "$BASE" "$HEAD" --lint proposed
+          else
+            echo "not an intake PR"
+          fi
+      - name: content lint (the merge queue's), TENGOKU_INTAKE_LINT=proposed
+        if: always()
+        env: { TENGOKU_INTAKE_LINT: proposed }
+        run: python3 scripts/ci/lint_banked.py "$BASE" "$HEAD"
