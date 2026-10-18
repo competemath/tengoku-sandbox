@@ -178,15 +178,16 @@ def file_diff(base: str, head: str, path: str) -> str:
 def added_lines(base: str, head: str, path: str) -> list[tuple[int, str]]:
     """(new line number, text) for lines added in the diff of one file."""
     diff = file_diff(base, head, path)
-    out, new_no = [], 0
+    out, new_no, in_hunk = [], 0, False
     for line in diff.splitlines():
         if line.startswith("@@"):
             m = re.search(r"\+(\d+)(?:,(\d+))?", line)
-            new_no = int(m.group(1))
-        elif line.startswith("+") and not line.startswith("+++"):
+            new_no, in_hunk = int(m.group(1)), True
+        # the `+++ b/path` header comes before the first hunk; inside a hunk a line is content, whatever it starts with (`++ x`)
+        elif in_hunk and line.startswith("+"):
             out.append((new_no, line[1:]))
             new_no += 1
-        elif line.startswith("-") and not line.startswith("---"):
+        elif in_hunk and line.startswith("-"):
             continue  # a removed line: the new file's line number does not advance
         elif not line.startswith(("diff", "index", "\\")):
             new_no += 1
@@ -195,15 +196,16 @@ def added_lines(base: str, head: str, path: str) -> list[tuple[int, str]]:
 
 def removed_lines(base: str, head: str, path: str) -> list[tuple[int, str]]:
     diff = file_diff(base, head, path)
-    out, old_no = [], 0
+    out, old_no, in_hunk = [], 0, False
     for line in diff.splitlines():
         if line.startswith("@@"):
             m = re.search(r"-(\d+)(?:,(\d+))?", line)
-            old_no = int(m.group(1))
-        elif line.startswith("-") and not line.startswith("---"):
+            old_no, in_hunk = int(m.group(1)), True
+        # the `--- a/path` header comes before the first hunk; inside a hunk `-- Authors: x` (a removed Lean comment) is content, shown as `--- Authors: x`
+        elif in_hunk and line.startswith("-"):
             out.append((old_no, line[1:]))
             old_no += 1
-        elif line.startswith("+"):
+        elif in_hunk and line.startswith("+"):
             continue  # an added line: the old file's line number does not advance
         elif not line.startswith(("diff", "index", "\\")):
             old_no += 1
