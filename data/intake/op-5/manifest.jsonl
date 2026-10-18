@@ -1,0 +1,1 @@
+{"name": "Nb5.good", "statement": "theorem good : 1 + 1 = 2", "module": "Tengoku.Nb5.Basic", "library": "op-5", "toolchain": "leanprover/lean4:v4.34.0-rc2", "via": "equal"}
