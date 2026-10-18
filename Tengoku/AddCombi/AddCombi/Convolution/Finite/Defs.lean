@@ -430,3 +430,4 @@ lemma coe_comp_conv : ((↑) : _ → ℝ) ∘ (f ∗ g) = (↑) ∘ f ∗ (↑) 
 lemma coe_comp_dconv : ((↑) : _ → ℝ) ∘ (f ○ g) = (↑) ∘ f ○ (↑) ∘ g := funext <| coe_dconv _ _
 
 end NNReal
+-- Tengoku: 1 notation(s) of this module made scoped so they do not change other libraries (generated)
