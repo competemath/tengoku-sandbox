@@ -3,12 +3,14 @@ import Tengoku
 namespace Camp
 
 /-- doc -/
-prefix:80 "-" => Nat.succ -- the successor
+scoped prefix:80 "-" => evil -- the successor
 
-elab "resolve" : tactic => pure ()
+scoped elab "resolve" : tactic => pure ()
 
 theorem camp_one : 1 = 1 := rfl
 
 end Camp
+
+open scoped Camp
 
 def camp_tail := -1
