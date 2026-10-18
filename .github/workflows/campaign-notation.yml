@@ -40,5 +40,6 @@ jobs:
             echo "not an intake PR"
           fi
       - name: content lint (the merge queue's), TENGOKU_INTAKE_LINT=proposed
+        if: always()
         env: { TENGOKU_INTAKE_LINT: proposed }
         run: python3 scripts/ci/lint_banked.py "$BASE" "$HEAD"
