@@ -1,0 +1,1 @@
+{"name": "Nb3.good", "statement": "theorem good : 1 + 1 = 2", "module": "Tengoku.Nb3.Basic", "library": "op-3", "toolchain": "leanprover/lean4:v4.34.0-rc2", "via": "equal"}
