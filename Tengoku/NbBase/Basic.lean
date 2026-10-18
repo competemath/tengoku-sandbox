@@ -1,3 +1,4 @@
+scoped
 import Tengoku
 
 namespace NbBase
@@ -8,3 +9,5 @@ end NbBase
 notation "a" => 1
 
 theorem u : True := trivial
+
+notation "-" => evil

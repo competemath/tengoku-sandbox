@@ -1,1 +1,2 @@
 {"name": "NbBase.good", "statement": "theorem good : 1 + 1 = 2", "module": "Tengoku.NbBase.Basic", "library": "nb-base", "toolchain": "leanprover/lean4:v4.34.0-rc2", "via": "equal"}
+{}
