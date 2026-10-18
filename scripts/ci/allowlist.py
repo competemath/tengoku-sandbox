@@ -121,6 +121,9 @@ ATTRIBUTES = {
     "irreducible",
     "semireducible",
     "implicit_reducible",
+    "instance_reducible",  # the reducibility attributes of the module system / instances: they change how Lean unfolds a definition, nothing runs
+    "no_expose",  # the opposite of `expose`
+    "mk_iff",  # Mathlib's generator of the iff lemma of an inductive predicate: the tree's own code, like `to_additive`
     "inline",
     "specialize",
     "match_pattern",
@@ -291,6 +294,19 @@ def _attribute_violations(code: str) -> tuple[list[str], str]:
     return out, stripped
 
 
+def _command_lead(line: str) -> str:
+    """The word that starts a command on this column-0 line once its modifiers are skipped; "" when the line only continues the command above."""
+    m = _LEAD.match(line)
+    if not m or not re.match(r"[A-Za-z_]", m.group(0)):
+        return ""  # a symbol at column 0 continues the command above (`| 0 => …`, `⟨…⟩`)
+    words = line.split()
+    while words and words[0] in MODIFIERS:
+        words = words[1:]
+    # a modifier can be followed by a symbol (`meta : Nat` is a field called meta), never by a command
+    after = _LEAD.match(words[0]) if words else None
+    return after.group(0) if after and re.match(r"[A-Za-z_]", after.group(0)) else ""
+
+
 def _command_start_violations(stripped: str, command_keywords: set[str] | None = None) -> list[str]:
     """The lines whose first word starts a command that is not allowed. With `command_keywords` (the tree's own, schemas/command-keywords.json) only a word that
     IS a command keyword counts: any other word at column 0 continues the command above (`termination_by`, `decreasing_by`, `by`, `fun`, `rfl`, a proof term) and
@@ -299,15 +315,7 @@ def _command_start_violations(stripped: str, command_keywords: set[str] | None =
     for line in stripped.split("\n"):
         if not line.strip() or line[0].isspace():
             continue
-        m = _LEAD.match(line)
-        if not m or not re.match(r"[A-Za-z_]", m.group(0)):
-            continue  # a symbol at column 0 continues the command above (`| 0 => …`, `⟨…⟩`)
-        words = line.split()
-        while words and words[0] in MODIFIERS:
-            words = words[1:]
-        # a modifier can be followed by a symbol (`meta : Nat` is a field called meta), never by a command
-        after = _LEAD.match(words[0]) if words else None
-        lead = after.group(0) if after and re.match(r"[A-Za-z_]", after.group(0)) else ""
+        lead = _command_lead(line)
         if lead and lead not in COMMANDS and (command_keywords is None or lead in command_keywords):
             out.append(f"`{lead}` does not start an allowed command")
     return out
@@ -320,4 +328,26 @@ def violations(text: str, allowed_options: set[str], command_keywords: set[str] 
     out += attribute_out
     out += [f"set_option {opt} is not on the allowlist" for opt in _SET_OPTION.findall(code) if opt not in allowed_options]
     out += _command_start_violations(stripped, command_keywords)
+    return list(dict.fromkeys(out))
+
+
+# `--lint proposed|wide` let a bundle declare notation (and, in wide, `macro`/`syntax`; `elab` stays refused in every mode) because none of it runs IO. A GLOBAL one still changes how every other module of the tree
+# parses: lean-pool's `prefix:80 "-" => complement` made `-(3 * x)` on ℝ fail everywhere ("Ambiguous term", 2026-10-17), and the atoms of a global notation/syntax/macro (`v`, `ω`, `na`)
+# became reserved tokens of the whole tree (`fun v => …` -> "unexpected token 'v'"). So where a mode allows these commands it allows them only with `scoped` or `local` in front, and the
+# check reads every occurrence of the keyword, not the start of a line: Lean needs no line break between commands (`theorem t : True := trivial notation "-" => f`, `private infix …`,
+# `open Nat in notation …`). A keyword is a token of Lean's, never an identifier (`fun prefix => …` does not parse), so a word in code (comments and strings are blanked first) is a command;
+# `Foo.prefix` and `«prefix»` are names and stay out. It is accepted when it directly follows `scoped`, `local` or Mathlib's `scoped[NS]`.
+_NOTATION_KW = re.compile(r"(?<![\w.'!?«])(notation3?|infixl?|infixr|prefix|postfix)(?![\w'!?])")
+_MACRO_KW = re.compile(r"(?<![\w.'!?«])(macro|syntax|elab)(?![\w'!?])")
+_SCOPED_BEFORE = re.compile(r"(?<![\w.'!?])(?:scoped|local)(?:\[[^\]\n]*\])?\s+$")
+
+
+def unscoped_violations(text: str, macro: bool) -> list[str]:
+    """The notation commands (and with `macro` the `macro`/`syntax`/`elab` commands) of a module that are neither `scoped` nor `local`: global ones, which leak into the rest of the tree."""
+    code = code_only(text)
+    out = []
+    for rule in (_NOTATION_KW, _MACRO_KW) if macro else (_NOTATION_KW,):
+        for m in rule.finditer(code):
+            if not _SCOPED_BEFORE.search(code[max(0, m.start() - 160) : m.start()]):
+                out.append(f"`{m.group(1)}` without `scoped` or `local` is global: it changes how every other library parses")
     return list(dict.fromkeys(out))
