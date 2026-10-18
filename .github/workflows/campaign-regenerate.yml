@@ -1,0 +1,40 @@
+name: campaign-regenerate
+# Campaign only (tengoku #613): the merge queue's step "Derived files match their generator", unchanged, on the `pull_request` event (no merge group is run for a PR into a campaign branch).
+on:
+  pull_request:
+    branches: [campaign/qt-old-base, campaign/qt-fix-base]
+    types: [opened, synchronize, reopened]
+permissions: { contents: read }
+defaults:
+  run:
+    shell: bash
+env:
+  BASE: ${{ github.event.pull_request.base.sha }}
+  PR_REF: ${{ format('refs/pull/{0}/head', github.event.pull_request.number) }}
+jobs:
+  regenerate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: The group's tree, as the queue checks it out (only what this check reads)
+        run: |
+          git init -q work && cd work
+          git remote add origin "https://github.com/$GITHUB_REPOSITORY"
+          git fetch -q --no-tags --filter=blob:none origin "$BASE" "+$PR_REF:refs/remotes/origin/pr-head"
+          git sparse-checkout init --no-cone
+          printf '%s\n' '/*' '!/*/' '/scripts/' '/schemas/' '/tools/' '/data/intake/' '/data/trusted/' '/data/staging/' '/Tengoku/AddCombi/' '/Tengoku/AddCombi.lean' '/Tengoku/All.lean' > .git/info/sparse-checkout
+          git checkout -q --detach refs/remotes/origin/pr-head
+          git log --format='%h %s' -2
+      - name: Derived files match their generator
+        working-directory: work
+        env: { TENGOKU_REPO: "${{ github.repository }}" }
+        run: |
+          touched="$(git diff --name-only "$BASE...HEAD" -- Tengoku/ | grep -v '/_candidate_' || true)"
+          if [ -z "$touched" ]; then echo "no derived files in this group"; exit 0; fi
+          python3 scripts/ci/queue_targets.py "$BASE" HEAD --regenerate 2>>build.log
+          paths() { printf '%s\n' "$touched" | tr '\n' '\0' | xargs -0 git "$@" --; }
+          if [ -n "$(paths status --porcelain)" ]; then
+            paths --no-pager diff --stat | tee -a build.log | tail -8
+            echo "error: regenerated derived files differ from the PR (hand-edited generated file?)" | tee -a build.log; exit 1
+          fi
+          echo "derived files match"
