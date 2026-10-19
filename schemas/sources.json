@@ -109,7 +109,34 @@
     "https://github.com/schildep/verified-polygon-intersection",
     "https://github.com/VTrelat/ZFLean",
     "https://github.com/Verified-zkEVM/clean",
-    "https://github.com/Verified-zkEVM/zkLean"
+    "https://github.com/Verified-zkEVM/zkLean",
+    "https://github.com/PierreSenellart/descriptive-complexity",
+    "https://github.com/szymtor/immerman-vardi",
+    "https://github.com/szymtor/fagin",
+    "https://github.com/SamuelSchlesinger/complexitylib",
+    "https://github.com/leanprover/cslib",
+    "https://github.com/Jiyuan-Tan/CausalSmith",
+    "https://github.com/serhatemrecoban/LeanInfoTheory",
+    "https://github.com/openai/math",
+    "https://github.com/b-mehta/PrimeCert",
+    "https://github.com/alerad/leancert",
+    "https://github.com/lana-agents/belyi",
+    "https://github.com/lana-agents/formal-schemes",
+    "https://github.com/lana-agents/elliptic-curves",
+    "https://github.com/lana-agents/tempered-fundamental-groups",
+    "https://github.com/lana-agents/oka",
+    "https://github.com/lana-agents/orbicurve-cores",
+    "https://github.com/lana-agents/pi1",
+    "https://github.com/lana-agents/heights",
+    "https://github.com/lana-agents/genl",
+    "https://github.com/lana-agents/tate-curves-theta",
+    "https://github.com/lana-agents/iut",
+    "https://github.com/alonamaloh/schoenflies-lean",
+    "https://github.com/n-yamaguchi-0729/ClassFieldTheory",
+    "https://github.com/BennyAvelin/AbsorptionCutoff",
+    "https://github.com/abenenson/rellich-kondrachov",
+    "https://github.com/ahhwuhu/zeta_3_irrational",
+    "https://github.com/harfe/fixed-point-theorems-lean4"
   ],
   "licences": {
     "https://github.com/leanprover-community/mathlib4": "Apache-2.0",
@@ -220,7 +247,34 @@
     "https://github.com/schildep/verified-polygon-intersection": "MIT",
     "https://github.com/VTrelat/ZFLean": "Apache-2.0",
     "https://github.com/Verified-zkEVM/clean": "MIT",
-    "https://github.com/Verified-zkEVM/zkLean": "BSD-3-Clause"
+    "https://github.com/Verified-zkEVM/zkLean": "BSD-3-Clause",
+    "https://github.com/PierreSenellart/descriptive-complexity": "Apache-2.0",
+    "https://github.com/szymtor/immerman-vardi": "Apache-2.0",
+    "https://github.com/szymtor/fagin": "Apache-2.0",
+    "https://github.com/SamuelSchlesinger/complexitylib": "Apache-2.0",
+    "https://github.com/leanprover/cslib": "Apache-2.0",
+    "https://github.com/Jiyuan-Tan/CausalSmith": "Apache-2.0",
+    "https://github.com/serhatemrecoban/LeanInfoTheory": "Apache-2.0",
+    "https://github.com/openai/math": "Apache-2.0",
+    "https://github.com/b-mehta/PrimeCert": "MIT",
+    "https://github.com/alerad/leancert": "Apache-2.0",
+    "https://github.com/lana-agents/belyi": "Apache-2.0",
+    "https://github.com/lana-agents/formal-schemes": "Apache-2.0",
+    "https://github.com/lana-agents/elliptic-curves": "Apache-2.0",
+    "https://github.com/lana-agents/tempered-fundamental-groups": "Apache-2.0",
+    "https://github.com/lana-agents/oka": "Apache-2.0",
+    "https://github.com/lana-agents/orbicurve-cores": "Apache-2.0",
+    "https://github.com/lana-agents/pi1": "Apache-2.0",
+    "https://github.com/lana-agents/heights": "Apache-2.0",
+    "https://github.com/lana-agents/genl": "Apache-2.0",
+    "https://github.com/lana-agents/tate-curves-theta": "Apache-2.0",
+    "https://github.com/lana-agents/iut": "Apache-2.0",
+    "https://github.com/alonamaloh/schoenflies-lean": "Apache-2.0",
+    "https://github.com/n-yamaguchi-0729/ClassFieldTheory": "Apache-2.0",
+    "https://github.com/BennyAvelin/AbsorptionCutoff": "Apache-2.0",
+    "https://github.com/abenenson/rellich-kondrachov": "Apache-2.0",
+    "https://github.com/ahhwuhu/zeta_3_irrational": "Apache-2.0",
+    "https://github.com/harfe/fixed-point-theorems-lean4": "MIT"
   },
   "corpora": {
     "equational-theories": {
@@ -1011,6 +1065,66 @@
       "roots": [
         "zkLean"
       ]
+    },
+    "descriptive-complexity": {
+      "repo": "https://github.com/PierreSenellart/descriptive-complexity",
+      "commit": "969cad44c807cf247826ee9a2f1eb880c47f15cb",
+      "roots": [
+        "DescriptiveComplexity"
+      ]
+    },
+    "immerman-vardi": {
+      "repo": "https://github.com/szymtor/immerman-vardi",
+      "commit": "82ef67e68fab884dc4cff117a1b871567bdaaafd",
+      "path": "proofs",
+      "roots": [
+        "Lax979537Proofs"
+      ]
+    },
+    "fagin": {
+      "repo": "https://github.com/szymtor/fagin",
+      "commit": "ce4e9721bbcb28cd16bcaf208f37b40e5b45fe8f",
+      "path": "proofs",
+      "roots": [
+        "Lax678846Proofs"
+      ]
+    },
+    "complexitylib": {
+      "repo": "https://github.com/SamuelSchlesinger/complexitylib",
+      "commit": "a0993e7b75440f65cac83134d17350198b2ab108",
+      "roots": [
+        "Complexitylib"
+      ]
+    },
+    "cslib": {
+      "repo": "https://github.com/leanprover/cslib",
+      "commit": "e806c8e639ed114bae022841ee2a3e92c0082dbe",
+      "roots": [
+        "Cslib"
+      ]
+    },
+    "causalean": {
+      "repo": "https://github.com/Jiyuan-Tan/CausalSmith",
+      "commit": "e298f64908520f29348e3f480b72db63d37dd574",
+      "roots": [
+        "Causalean"
+      ]
+    },
+    "leaninfotheory": {
+      "repo": "https://github.com/serhatemrecoban/LeanInfoTheory",
+      "commit": "bbead98abfd2ac94f95b615652365a65228e49c5",
+      "roots": [
+        "LeanInfoTheory"
+      ]
+    },
+    "openai-math": {
+      "repo": "https://github.com/openai/math",
+      "commit": "1581d4cbdd69a0faf34b2089614fe2a814316a6a",
+      "path": "lean",
+      "roots": [
+        "OAI",
+        "ComparatorChallenges"
+      ]
     }
   },
   "$comment_translations": "Sources that are existing formal libraries: a record from one of these is a translation. Anything else is original work.",
@@ -1122,6 +1236,14 @@
     "https://github.com/schildep/verified-polygon-intersection",
     "https://github.com/VTrelat/ZFLean",
     "https://github.com/Verified-zkEVM/clean",
-    "https://github.com/Verified-zkEVM/zkLean"
+    "https://github.com/Verified-zkEVM/zkLean",
+    "https://github.com/PierreSenellart/descriptive-complexity",
+    "https://github.com/szymtor/immerman-vardi",
+    "https://github.com/szymtor/fagin",
+    "https://github.com/SamuelSchlesinger/complexitylib",
+    "https://github.com/leanprover/cslib",
+    "https://github.com/Jiyuan-Tan/CausalSmith",
+    "https://github.com/serhatemrecoban/LeanInfoTheory",
+    "https://github.com/openai/math"
   ]
 }
