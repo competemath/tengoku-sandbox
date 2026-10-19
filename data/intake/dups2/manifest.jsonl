@@ -1,0 +1,1 @@
+{"name": "Dups2.good", "statement": "theorem good : 1 + 1 = 2", "module": "Tengoku.Dups2.Basic", "library": "dups2", "toolchain": "leanprover/lean4:v4.34.0-rc2", "via": "equal"}
