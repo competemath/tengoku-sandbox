@@ -327,8 +327,24 @@ def garbled(record: dict) -> bool:
     return any("\ufffd" in str(record.get(f, "")) for f in ("statement", "proof", "context"))
 
 
-def unplaced(names: set[str], texts: list[str]) -> list[str]:
+def clash_suffix(library: str) -> str:
+    """The suffix scripts/generate.py puts on a record it renames because another library declares the same name
+    (generate.clash_suffix: the same rule, and a test holds the two together)."""
+    return "__" + re.sub(r"[^A-Za-z0-9]", "_", library)
+
+
+def unplaced(names: set[str], texts: list[str], suffix: str = "") -> list[str]:
     """Records no candidate module declares. A module may wrap its records in a library namespace
-    (`EquationalTheories`), so a declared name counts when it is the record's name or ends with `.<name>`."""
+    (`EquationalTheories`), so a declared name counts when it is the record's name or ends with `.<name>`.
+    `suffix`: the library's clash suffix. The generator renames a record that another library declares (the last
+    component of the outermost clashing name, `Problem6.foo` -> `Problem6.foo__archon_firstproof_p6`, and so every
+    name below a renamed parent); the record keeps the name it was banked under, so a declared name counts with
+    the suffix taken out of it too, at the end of a component only (`foo__fltextra` is not `foo` renamed for `flt`;
+    archon-firstproof-p6, 2026-10-21: 16 renamed records, "in no module the queue compiles", the group ejected for
+    a rename the generator itself had made)."""
     declared = set().union(*(declared_names(t) for t in texts)) if texts else set()
+    if suffix:
+        # the generator appends the suffix to a component, so only the end of one is a rename
+        boundary = re.compile(re.escape(suffix) + r"(?=\.|$)")
+        declared |= {boundary.sub("", d) for d in declared if suffix in d}
     return sorted(n for n in names if not any(d == n or d.endswith("." + n) for d in declared))

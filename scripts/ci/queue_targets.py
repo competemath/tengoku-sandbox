@@ -19,6 +19,7 @@ from _git import (
     added_lines,
     annotation,
     changed_files,
+    clash_suffix,
     fail,
     garbled,
     library_of,
@@ -144,7 +145,7 @@ for lib, paths in sorted(work.items()):
         targets.append(".".join(cand.relative_to(ROOT).with_suffix("").parts))
     # A record that no candidate module declares would skip the build and the axioms check alike, and the
     # group would pass on nothing (the build step treats an empty target list as a tooling-only group).
-    missing = unplaced({n for names in paths.values() for n in names}, [c.read_text() for c in cands])
+    missing = unplaced({n for names in paths.values() for n in names}, [c.read_text() for c in cands], clash_suffix(lib))
     if missing:
         fail(f"{lib}: {len(missing)} record(s) this group adds are in no module the queue compiles: {', '.join(missing[:5])}")
 for lib in sorted(touched - set(work)):
