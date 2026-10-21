@@ -44,6 +44,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from scope_notation import scope_library  # noqa: E402
 from seed import IMPORT_RE, PACKAGES, RESERVED, SEED, in_layout, module_map, seed_layout  # noqa: E402
 
 # Only TRUSTED records become modules of the tree. A staging record (both
@@ -80,8 +81,9 @@ GetElem Bind Pure Seq SeqLeft SeqRight ToString Repr Format Syntax Name Expr Lev
 )
 
 
-def seed_heads(out: Path) -> set[str]:
-    """First segments of every declaration/namespace in the seeded tree."""
+def seed_heads(out: Path, skip: Path | None = None) -> set[str]:
+    """First segments of every declaration/namespace in the seeded tree. `skip`: a library directory whose own namespaces are not the seed's (the notation pass: `open scoped` of a
+    namespace the library itself declares switches on nothing of core or Mathlib)."""
     heads = set(TOOLCHAIN_ROOTS)
     rx = re.compile(
         r"^\s*(?:@\[[^\]]*\]\s*)*(?:(?:private|protected|noncomputable|partial|unsafe|nonrec|scoped|local|public)\s+)*(?:namespace|def|theorem|lemma|abbrev|instance|opaque|axiom|inductive|structure|class)\s+([A-Za-z_][\w']*)",
@@ -89,6 +91,8 @@ def seed_heads(out: Path) -> set[str]:
     )
     for f in (out / "Tengoku").rglob("*.lean"):
         if "EquationalTheories" in f.parts or "CompeteMath" in f.parts:
+            continue
+        if skip is not None and skip in f.parents:
             continue
         try:
             heads.update(rx.findall(f.read_text(encoding="utf-8", errors="ignore")))
@@ -1553,6 +1557,18 @@ def main():
                 clash_note += (
                     "; " if clash_note else ""
                 ) + f"{named} unnamed instance(s) another library also declares given names of their own"
+        # No library leaks a notation, macro, elaborator or syntax into the rest of the tree (scripts/scope_notation.py): every global command of the modules just written becomes
+        # `scoped` (in a namespace) or `local` (at the root), and a command that cannot be scoped without changing what a module means STOPS the generator, it is never left global
+        # (2026-10-17/18: lean-pool's `prefix:80 "-"` broke `-(3 * x)` on Leak IV; equational-theories' `elab "resolve"` still reserves a word)
+        scoped = scope_library(lib_dir, lib_ns, seed_heads(out, skip=lib_dir))
+        if scoped["unscopable"]:
+            for label, why in scoped["unscopable"]:
+                print(f"error: {library}: {label} cannot be made scoped or local: {why}", file=sys.stderr)
+            sys.exit(
+                f"{library}: {len(scoped['unscopable'])} global notation/macro/elab/syntax command(s) would leak into the rest of the tree"
+            )
+        if scoped["scoped"]:
+            clash_note += ("; " if clash_note else "") + f"{len(scoped['scoped'])} notation/macro/elab command(s) made scoped or local"
         print(
             f"{library}: {len(records)} records -> {len(modules)} file modules on disk, {len(deps_mods)} Deps modules ({len(eqs)} equations); {warnings} context notes"
             + (f"; {clash_note}" if clash_note else "")

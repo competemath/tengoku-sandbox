@@ -82,14 +82,20 @@ def is_tagged(text: str) -> bool:
     return any(tg.TAG_LINE.match(ln) for kind, a, b in tg.scan(text) if kind == "doc" for ln in text[a + 3 : b - 2].split("\n"))
 
 
+def importer_counts(imports: dict[str, set[str]]) -> dict[str, int]:
+    """for each module, how many other modules of the tree import it"""
+    counts: dict[str, int] = {m: 0 for m in imports}
+    for m, deps in imports.items():
+        for d in deps:
+            if d in counts and d != m:
+                counts[d] += 1
+    return counts
+
+
 def dependents_first(imports: dict[str, set[str]]) -> list[str]:
     """modules in an order where none comes after a module it imports (Kahn's algorithm from the modules nothing imports); ties by name. A cycle (Lean has none) is
     appended by name rather than lost."""
-    importers: dict[str, int] = {m: 0 for m in imports}
-    for m, deps in imports.items():
-        for d in deps:
-            if d in importers and d != m:
-                importers[d] += 1
+    importers = importer_counts(imports)
     ready = [m for m, n in importers.items() if n == 0]
     heapq.heapify(ready)
     out: list[str] = []
@@ -98,11 +104,12 @@ def dependents_first(imports: dict[str, set[str]]) -> list[str]:
         m = heapq.heappop(ready)
         out.append(m)
         done.add(m)
-        for d in imports[m]:
-            if d in importers and d != m and d not in done:
-                importers[d] -= 1
-                if importers[d] == 0:
-                    heapq.heappush(ready, d)
+        for d in imports[m] & importers.keys() - {
+            m
+        }:  # a module popped earlier cannot be here: it is imported by m, so its count was above zero until now
+            importers[d] -= 1
+            if importers[d] == 0:
+                heapq.heappush(ready, d)
     return out + sorted(set(imports) - done)
 
 
@@ -124,7 +131,7 @@ def plan(root: Path, scope: str, prefix: str, limit: int) -> list[str]:
     return [m for m in todo(root, scope) if m.startswith(prefix)][: min(limit, MAX_PART)]
 
 
-def main(argv: list[str]) -> int:
+def main(argv: list[str]) -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("plan")
@@ -140,11 +147,10 @@ def main(argv: list[str]) -> int:
         mine = [m for m in every if m.startswith(a.prefix)]
         parts = [mine[i : i + MAX_PART] for i in range(0, len(mine), MAX_PART)]
         print(json.dumps({"to_tag": len(mine), "parts": len(parts), "first_of_each_part": [pt[0] for pt in parts]}, indent=1))
-        return 0
+        return
     mods = plan(root, a.scope, a.prefix, a.max)
     print("\n".join(mods))
-    return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1:]))
+    main(sys.argv[1:])

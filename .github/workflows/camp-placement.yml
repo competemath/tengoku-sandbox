@@ -1,0 +1,25 @@
+name: campaign-placement
+# Campaign only (tengoku #644): the merge queue's "Generate candidates and build only them" step up to the placement check, on the `pull_request` event: the same command
+# (`python3 scripts/ci/queue_targets.py "$BASE" HEAD`) with the scripts of this branch. The queue itself cannot be used here: the sandbox's main takes PRs only, behind the gates.
+on:
+  pull_request:
+    branches: [campaign/placement-before, campaign/placement-after]
+    types: [opened, synchronize, reopened]
+permissions: { contents: read }
+defaults:
+  run:
+    shell: bash
+jobs:
+  helper:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { fetch-depth: 0, ref: "${{ github.event.pull_request.head.sha }}", persist-credentials: false }
+      - name: queue_targets.py (the queue-build's own command)
+        env: { BASE: "${{ github.event.pull_request.base.sha }}" }
+        run: |
+          set -o pipefail
+          python3 scripts/ci/queue_targets.py "$BASE" HEAD > targets.txt 2> helper.log || { cat helper.log targets.txt; exit 1; }
+          cat helper.log
+          echo "--- targets"; cat targets.txt

@@ -1,0 +1,1 @@
+-- ArchonFirstproofResults: a factory bundle (data/intake/archon-firstproof-results). This file only marks the library for Tengoku/All.lean.

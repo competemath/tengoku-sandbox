@@ -268,6 +268,7 @@ def load_base_mappings(repo: str, tag: str, summary: dict) -> None:
     accepted, why = verify(bj, repo, "build.yml") if ok else (False, "not published")
     if ok and accepted:
         HAD.write_text(bj.read_text(encoding="utf-8"), encoding="utf-8")
+        (LAKE / ".base-missing").unlink(missing_ok=True)  # a marker left by an earlier failed fetch in a reused workspace
     else:
         HAD.write_text("", encoding="utf-8")
         summary["base_mappings"] = f"missing ({why}): a build cannot tell its delta from the base, so its merge is marked needs-nightly"
