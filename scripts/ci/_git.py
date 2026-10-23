@@ -178,15 +178,16 @@ def file_diff(base: str, head: str, path: str) -> str:
 def added_lines(base: str, head: str, path: str) -> list[tuple[int, str]]:
     """(new line number, text) for lines added in the diff of one file."""
     diff = file_diff(base, head, path)
-    out, new_no = [], 0
+    out, new_no, in_hunk = [], 0, False
     for line in diff.splitlines():
         if line.startswith("@@"):
             m = re.search(r"\+(\d+)(?:,(\d+))?", line)
-            new_no = int(m.group(1))
-        elif line.startswith("+") and not line.startswith("+++"):
+            new_no, in_hunk = int(m.group(1)), True
+        # the `+++ b/path` header comes before the first hunk; inside a hunk a line is content, whatever it starts with (`++ x`)
+        elif in_hunk and line.startswith("+"):
             out.append((new_no, line[1:]))
             new_no += 1
-        elif line.startswith("-") and not line.startswith("---"):
+        elif in_hunk and line.startswith("-"):
             continue  # a removed line: the new file's line number does not advance
         elif not line.startswith(("diff", "index", "\\")):
             new_no += 1
@@ -195,15 +196,16 @@ def added_lines(base: str, head: str, path: str) -> list[tuple[int, str]]:
 
 def removed_lines(base: str, head: str, path: str) -> list[tuple[int, str]]:
     diff = file_diff(base, head, path)
-    out, old_no = [], 0
+    out, old_no, in_hunk = [], 0, False
     for line in diff.splitlines():
         if line.startswith("@@"):
             m = re.search(r"-(\d+)(?:,(\d+))?", line)
-            old_no = int(m.group(1))
-        elif line.startswith("-") and not line.startswith("---"):
+            old_no, in_hunk = int(m.group(1)), True
+        # the `--- a/path` header comes before the first hunk; inside a hunk `-- Authors: x` (a removed Lean comment) is content, shown as `--- Authors: x`
+        elif in_hunk and line.startswith("-"):
             out.append((old_no, line[1:]))
             old_no += 1
-        elif line.startswith("+"):
+        elif in_hunk and line.startswith("+"):
             continue  # an added line: the old file's line number does not advance
         elif not line.startswith(("diff", "index", "\\")):
             old_no += 1
@@ -325,8 +327,24 @@ def garbled(record: dict) -> bool:
     return any("\ufffd" in str(record.get(f, "")) for f in ("statement", "proof", "context"))
 
 
-def unplaced(names: set[str], texts: list[str]) -> list[str]:
+def clash_suffix(library: str) -> str:
+    """The suffix scripts/generate.py puts on a record it renames because another library declares the same name
+    (generate.clash_suffix: the same rule, and a test holds the two together)."""
+    return "__" + re.sub(r"[^A-Za-z0-9]", "_", library)
+
+
+def unplaced(names: set[str], texts: list[str], suffix: str = "") -> list[str]:
     """Records no candidate module declares. A module may wrap its records in a library namespace
-    (`EquationalTheories`), so a declared name counts when it is the record's name or ends with `.<name>`."""
+    (`EquationalTheories`), so a declared name counts when it is the record's name or ends with `.<name>`.
+    `suffix`: the library's clash suffix. The generator renames a record that another library declares (the last
+    component of the outermost clashing name, `Problem6.foo` -> `Problem6.foo__archon_firstproof_p6`, and so every
+    name below a renamed parent); the record keeps the name it was banked under, so a declared name counts with
+    the suffix taken out of it too, at the end of a component only (`foo__fltextra` is not `foo` renamed for `flt`;
+    archon-firstproof-p6, 2026-10-21: 16 renamed records, "in no module the queue compiles", the group ejected for
+    a rename the generator itself had made)."""
     declared = set().union(*(declared_names(t) for t in texts)) if texts else set()
+    if suffix:
+        # the generator appends the suffix to a component, so only the end of one is a rename
+        boundary = re.compile(re.escape(suffix) + r"(?=\.|$)")
+        declared |= {boundary.sub("", d) for d in declared if suffix in d}
     return sorted(n for n in names if not any(d == n or d.endswith("." + n) for d in declared))
