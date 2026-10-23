@@ -1,0 +1,140 @@
+name: autotag-build
+# BORN TAGGED, half one (docs/isnad.md, "Born tagged"; scripts/ci/autotag.py). The lanes that open pull requests by themselves, the studied lane and the intake lane, used to leave
+# the isnad tags to the sweep: one more PR to approve for every PR the lane opened. Now the lane's PR gets its tags before anyone reviews it: this workflow tags the PR's modules
+# on the compiled tree and uploads them as an artifact; autotag-push (a workflow_run workflow, main's code, the bot's token) checks the artifact as data and adds ONE commit to the
+# PR's branch. No job here holds a token and no job there runs a line of the PR, so the PR's Lean never runs next to a secret.
+#
+# It runs only for a pull request from a branch of this repository, opened by one of the lane's Apps (the repository variable AUTOTAG_ACTORS; the default names the studied lane's
+# and the intake lane's), and only after the lane's own gate (the allow-list and the shape rules) passed on the PR with the tags pending: the PR's modules are elaborated here before
+# anyone approved them, which only those content rules make safe. One PR at a time: a tag build is a build of the tree.
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+
+permissions: {}
+
+concurrency:
+  group: autotag-build
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  BASE: ${{ github.event.pull_request.base.sha }}
+  HEAD: ${{ github.event.pull_request.head.sha }}
+  PR_REF: ${{ format('refs/pull/{0}/head', github.event.pull_request.number) }}
+
+jobs:
+  tag:
+    if: github.event.pull_request.head.repo.full_name == github.repository && contains(format(',{0},', vars.AUTOTAG_ACTORS || 'tengoku-supervisor[bot],tengoku-intake[bot],mikael-bashir'), format(',{0},', github.event.pull_request.user.login))
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    permissions: { contents: read }
+    steps:
+      - uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2
+        with: { egress-policy: audit }
+      # The base commit with plain git, as the PR gate does: the checks are main's, and the PR is read as git objects until the plan says it may be built.
+      - name: The base commit (the checks are main's)
+        run: |
+          git init -q .
+          git remote add origin "https://github.com/$GITHUB_REPOSITORY"
+          git fetch -q --no-tags --filter=blob:none origin "$BASE" "+$PR_REF:refs/remotes/origin/pr-head"
+          git cat-file -e "$HEAD^{commit}"
+          git checkout -q --detach "$BASE"
+      - name: The plan (nothing is built unless the lane's gate passed on the PR with the tags pending)
+        id: plan
+        env:
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+          AUTOTAG_ACTORS: ${{ vars.AUTOTAG_ACTORS || 'tengoku-supervisor[bot],tengoku-intake[bot],mikael-bashir' }}
+          LINT: ${{ vars.TENGOKU_INTAKE_LINT || 'strict' }}
+        run: |
+          python3 scripts/ci/autotag.py plan "$BASE" "$HEAD" "$AUTHOR" > plan.json
+          cat plan.json
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          p = json.load(open("plan.json"))
+          if p["refused"]:
+              print("::error::" + p["refused"][:500].replace("\n", " "))
+          print("any=" + ("true" if p["modules"] and not p["tagged"] and not p["refused"] else "false"))
+          print("refused=" + ("true" if p["refused"] else "false"))
+          PY
+      - name: A refused plan is a failed run (the PR waits for its lane's gate to pass)
+        if: steps.plan.outputs.refused == 'true'
+        run: exit 1
+      - name: Free disk (the compiled tree is large)
+        if: steps.plan.outputs.any == 'true'
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache /usr/local/share/boost /usr/share/swift /usr/lib/jvm /usr/share/miniconda /usr/local/share/powershell /usr/local/share/chromium || true
+          sudo docker image prune --all --force >/dev/null 2>&1 || true
+          df -h / | tail -1
+      # The PR's files now, on top of the base: the lane's gate has just said they are modules, a manifest and a report, and nothing else.
+      - name: The PR's tree
+        if: steps.plan.outputs.any == 'true'
+        run: git checkout -q --detach "$HEAD"
+      - name: elan
+        if: steps.plan.outputs.any == 'true'
+        run: |
+          # the installer at a fixed commit, over https, checked against its digest before it runs (as pr-tests.yml)
+          curl --proto '=https' --tlsv1.2 -sSfL -o elan-init.sh https://raw.githubusercontent.com/leanprover/elan/0e36a07b9bbcc5381fa6250df109f9a4f94d7bac/elan-init.sh
+          echo "a620ff1641616222c8d37c54845492004bb84d6877cdbc944dd65c1aa685bf53  elan-init.sh" | sha256sum -c -
+          sh elan-init.sh -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: The compiled tree (the attested cache) and the PR's modules on top of it
+        if: steps.plan.outputs.any == 'true'
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: scripts/cache.sh get 2>&1 | tail -3 && lake build Tengoku.All 2>&1 | tail -3
+      - name: Tag the PR's modules
+        if: steps.plan.outputs.any == 'true'
+        run: |
+          lake build tengoku-isnad 2>&1 | tail -1
+          args=(); mods=()
+          while read -r m; do args+=(--module "$m"); mods+=("$m"); done < <(python3 -c 'import json; print("\n".join(json.load(open("plan.json"))["modules"]))')
+          python3 scripts/isnad.py tag "${args[@]}" --write 2>&1 | tee tag.log | tail -5
+          if git diff --quiet -- Tengoku; then echo "::error::the tagger wrote nothing into the PR's modules"; exit 1; fi
+          # the tagger may change the PR's own modules and nothing else
+          python3 - <<'PY'
+          import json, subprocess
+          paths = set(json.load(open("plan.json"))["paths"])
+          changed = set(subprocess.run(["git", "diff", "--name-only"], capture_output=True, text=True, check=True).stdout.split("\n")) - {""}
+          extra = changed - paths
+          assert not extra, f"the tagger changed files that are not the PR's modules: {sorted(extra)[:5]}"
+          PY
+      - name: The tagged modules build, and every tag is the build's
+        if: steps.plan.outputs.any == 'true'
+        run: |
+          mods=(); args=()
+          while read -r m; do mods+=("$m"); args+=(--module "$m"); done < <(python3 -c 'import json; print("\n".join(json.load(open("plan.json"))["modules"]))')
+          lake build "${mods[@]}" 2>&1 | tail -3
+          python3 scripts/isnad.py check-tags "${args[@]}" 2>&1 | tee check.log
+      - name: The artifact, and the trusted half's own checks on it (a dry run, nothing is written)
+        if: steps.plan.outputs.any == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          AUTOTAG_ACTORS: ${{ vars.AUTOTAG_ACTORS || 'tengoku-supervisor[bot],tengoku-intake[bot],mikael-bashir' }}
+        run: |
+          mkdir -p artifact/tagged
+          python3 - <<'PY'
+          import json, pathlib, shutil
+          for p in json.load(open("plan.json"))["paths"]:
+              dst = pathlib.Path("artifact/tagged") / p
+              dst.parent.mkdir(parents=True, exist_ok=True)
+              shutil.copyfile(p, dst)
+          PY
+          printf '{"pr": %s, "head": "%s"}\n' "$PR" "$HEAD" > artifact/meta.json
+          python3 scripts/ci/autotag_push.py --repo "$GITHUB_REPOSITORY" --pr "$PR" --head "$HEAD" --artifact artifact/tagged --dry-run
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: steps.plan.outputs.any == 'true'
+        with: { name: autotag, path: artifact, retention-days: 3, if-no-files-found: error }
+      - name: Summary
+        if: always() && steps.plan.outputs.any == 'true'
+        run: |
+          {
+            echo '### autotag-build'
+            echo '```'
+            tail -3 tag.log 2>/dev/null || true
+            tail -1 check.log 2>/dev/null || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

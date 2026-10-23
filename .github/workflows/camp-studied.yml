@@ -1,0 +1,41 @@
+name: camp-studied
+# SANDBOX CAMPAIGN ONLY (campaign/born-*): pr-gate does not run for a PR into a campaign branch, so this pull_request workflow runs the studied lane's gate steps of pr-gate
+# unchanged (classify, studied_check, born_tagged) against the PR's commits read as git objects, with the studied App's name set to the account that opens the scenario PRs.
+on:
+  pull_request:
+    branches: ["campaign/born-*"]
+
+permissions: {}
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  BASE: ${{ github.event.pull_request.base.sha }}
+  HEAD: ${{ github.event.pull_request.head.sha }}
+  PR_REF: ${{ format('refs/pull/{0}/head', github.event.pull_request.number) }}
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions: { contents: read }
+    steps:
+      - name: The base commit and the PR's commits, as data
+        run: |
+          git init -q .
+          git remote add origin "https://github.com/$GITHUB_REPOSITORY"
+          git fetch -q --no-tags --filter=blob:none origin "$BASE" "+$PR_REF:refs/remotes/origin/pr-head"
+          git cat-file -e "$HEAD^{commit}"
+          git checkout -q --detach "$BASE"
+      - name: classify
+        env:
+          PR_ACTOR: ${{ github.event.pull_request.user.login }}
+          TENGOKU_STUDIED_BOT: mikael-bashir
+          TENGOKU_BOT: tengoku-bot
+        run: python3 scripts/ci/classify.py "$BASE" "$HEAD"
+      - name: studied checks
+        run: python3 scripts/ci/studied_check.py "$BASE" "$HEAD"
+      - name: born tagged (the isnad tags are in the PR)
+        run: python3 scripts/ci/born_tagged.py "$BASE" "$HEAD"

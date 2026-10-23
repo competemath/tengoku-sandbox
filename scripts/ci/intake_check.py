@@ -12,11 +12,13 @@ git objects only:
               and not already a trusted record of the tree or a theorem of an intake bundle in it
   lint        every module passes the content allow-list (scripts/ci/allowlist.py: known-inert commands, attributes, options; no code that
               runs while compiling) after its header; the header may only import the tree (Tengoku.*) and Lean/Std/Init.
-              `--lint proposed` additionally allows notation commands (notation, infix, prefix, postfix, notation3, scoped, local);
-              `--lint wide` also allows the macro family (macro, macro_rules, syntax, declare_syntax_cat): they run in Lean's pure macro monad, which cannot reach IO,
-              and every word that does (unsafe, IO., run_cmd, #eval, elab, initialize, implemented_by, extern, native_decide, ...) stays refused wherever it appears.
+              `--lint proposed` additionally allows notation commands (notation, infix, prefix, postfix, notation3), `scoped` or `local` only: a global one changes how every
+              other library parses (2026-10-17: a global `prefix:80 "-"` broke `-(3 * x)` on the reals tree-wide);
+              `--lint wide` also allows the macro family (macro, macro_rules, syntax, declare_syntax_cat), `macro`/`syntax` `scoped` or `local` only: they run in Lean's pure macro
+              monad, which cannot reach IO, and every word that does (unsafe, IO., run_cmd, #eval, elab, initialize, implemented_by, extern, native_decide, ...) stays refused wherever it appears.
               In every mode a word at column 0 starts a command only if it is a command keyword of the tree's Lean (schemas/command-keywords.json): any other word
               continues the command above (termination_by, by, fun, a proof term) and Lean itself refuses it if it does not parse
+  verdicts    the report says `"gate2_unjudged": []`: Gate 2 judged every module the bundle ships (the factory's claim, inside the attested archive)
   provenance  with --tar, the bundle archive is rebuilt from the PR's files (the factory's own reproducible tar) for the workflow to
               check against the factory's build attestation: the bytes the factory built are the bytes in this PR
 
@@ -38,10 +40,14 @@ from __future__ import annotations
 import json
 import re
 import sys
+from pathlib import Path
 
-from _git import ROOT, blob, changed_files, fail, module_name, module_stem, pascal, run
-from allowlist import violations
-from bundle_tar import write_tar
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # scripts/ of the checkout this file is in
+import isnad_tag as tg  # noqa: E402
+from _git import ROOT, blob, changed_files, fail, module_name, module_stem, pascal, run  # noqa: E402
+from allowlist import unscoped_violations, violations  # noqa: E402
+from bundle_tar import write_tar  # noqa: E402
+from lean_lex import code_only  # noqa: E402
 
 args = sys.argv[1:]
 base, head = args[0], args[1]
@@ -70,12 +76,25 @@ extending = bool(part_files)
 if len(part_files) > 1:
     fail(f"an extend PR adds one part, not {len(part_files)}: {part_files}")
 MANIFEST, UMBRELLA = f"data/intake/{lib}/manifest.jsonl", f"Tengoku/{ns}.lean"
+LEAN = ".lean"
+
+
+def is_module(p: str) -> bool:
+    """A Lean module of this library's folder."""
+    return p.startswith(f"Tengoku/{ns}/") and p.endswith(LEAN)
+
+
+def member_name(p: str) -> str:
+    """The name a file has inside the archive the factory attested: the part's report is report.json, a data/intake file loses its data/intake/<library>/ prefix."""
+    if extending and p == part_files[0]:
+        return "report.json"
+    return p.split("/", 3)[3] if p.startswith("data/intake/") else p
 
 
 def allowed_paths(p: str) -> bool:
     if extending:
-        return p in (MANIFEST, UMBRELLA, part_files[0]) or (p.startswith(f"Tengoku/{ns}/") and p.endswith(".lean"))
-    return p in (MANIFEST, f"data/intake/{lib}/report.json", UMBRELLA, ALL) or (p.startswith(f"Tengoku/{ns}/") and p.endswith(".lean"))
+        return p in (MANIFEST, UMBRELLA, part_files[0]) or is_module(p)
+    return p in (MANIFEST, f"data/intake/{lib}/report.json", UMBRELLA, ALL) or is_module(p)
 
 
 errors: list[str] = []
@@ -164,9 +183,7 @@ if extending:
             errors.append(f"{part_files[0]} says part {rep.get('part')!r} of {rep.get('library')!r}")
     except Exception as e:  # noqa: BLE001
         errors.append(f"{part_files[0]} is not a JSON report: {e}")
-    new_mods = sorted(
-        module_name(p[: -len(".lean")]) for p in (q for _, q in files) if p.startswith(f"Tengoku/{ns}/") and p.endswith(".lean")
-    )
+    new_mods = sorted(module_name(p[: -len(LEAN)]) for p in (q for _, q in files) if is_module(p))
     if len(new_mods) > MAX_PART_MODULES:
         errors.append(f"{len(new_mods)} modules in one part (cap {MAX_PART_MODULES}): cut the bundle into smaller parts")
 
@@ -184,6 +201,22 @@ if extending:
         errors.append(f"{UMBRELLA} must import each new module exactly once")
     if [ln for ln in head_lines if norm(ln) not in wanted_lines] != lines_of((blob(base, UMBRELLA) or b"").decode("utf-8")):
         errors.append(f"{UMBRELLA} may only gain the imports of the new modules")
+# Gate 2 judged every module the bundle ships. The factory says so in the report (`gate2_unjudged`, emissary bundle.py compose: the modules Gate 2 gave no verdict are cut with their
+# importers and the field is empty by construction), and the report is inside the archive the provenance step below checks against the factory's attestation (built by main's workflow
+# only). A report without the field, or with modules in it, is a bundle from a factory that does not prove it (2026-10-17: navier-stokes-euler part 1 shipped 89 modules that
+# two Gate 2 shards ran out of memory and time on; the field did not exist, and nothing in this gate noticed).
+REPORT = part_files[0] if extending else f"data/intake/{lib}/report.json"
+try:
+    report_doc = json.loads(show(REPORT))
+except Exception as e:  # noqa: BLE001
+    report_doc = {}
+    errors.append(f"{REPORT} is not a JSON report: {e}")
+unjudged = report_doc.get("gate2_unjudged") if isinstance(report_doc, dict) else None
+if unjudged != []:
+    errors.append(
+        f"{REPORT}: gate2_unjudged is {str(unjudged)[:120]}, it must be []: the bundle must come from a factory run that proves Gate 2 judged every module it ships "
+        "(emissary-archangel bundle.py compose cuts the modules without a verdict and records them in gate2_left_out)"
+    )
 if not manifest:
     errors.append(
         "the manifest has no theorem: " + ("a part that carries none is empty" if extending else "a bundle that carries none is empty")
@@ -218,7 +251,7 @@ command_keywords = set(json.loads((ROOT / "schemas" / "command-keywords.json").r
 if lint_mode not in LINT_MODES:
     fail(f"--lint is one of {', '.join(LINT_MODES)}, not {lint_mode!r}")
 total = 0
-for p in sorted(p for _, p in files if p.endswith(".lean") and p != ALL):
+for p in sorted(p for _, p in files if p.endswith(LEAN) and p != ALL):
     try:
         text = show(p)
     except UnicodeDecodeError:
@@ -226,8 +259,10 @@ for p in sorted(p for _, p in files if p.endswith(".lean") and p != ALL):
         continue
     total += len(text)
     body = []
-    for ln in text.split("\n"):
-        m = IMPORT_LINE.match(ln.split("--", 1)[0])  # a comment after the module name is part of the line
+    # comments and strings blanked, newlines kept: a docstring line that reads `import them.` is prose, not an import
+    code = code_only(text).split("\n")
+    for k, ln in enumerate(text.split("\n")):
+        m = IMPORT_LINE.match(code[k])  # a comment after the module name is blank here, so it is part of the line
         if m and not TREE_IMPORT.match(m.group(1)):
             errors.append(f"{p}: imports {m.group(1)}, which is not the tree")
         body.append("" if m or MODULE_LINE.match(ln) else ln)
@@ -236,6 +271,11 @@ for p in sorted(p for _, p in files if p.endswith(".lean") and p != ALL):
         vs = [v for v in vs if not NOTATION_OK.search(v)]
     if lint_mode == "wide":
         vs = [v for v in vs if not MACRO_OK.search(v)]
+    if lint_mode in (
+        "proposed",
+        "wide",
+    ):  # what these modes allow, they allow `scoped` or `local` only: a global notation leaks into every other library (2026-10-17)
+        vs += unscoped_violations("\n".join(body), macro=lint_mode == "wide")
     for v in vs[:3]:
         errors.append(f"{p}: {v}")
 if total > MAX_BYTES:
@@ -258,7 +298,14 @@ if tar_out:
             fail(f"{p} is not readable at {head}")
         if extending and p == MANIFEST:
             raw = manifest_new  # the part's archive holds its own lines only
-        members["report.json" if extending and p == part_files[0] else p.split("/", 3)[3] if p.startswith("data/intake/") else p] = raw
+        if p.endswith(
+            ".lean"
+        ):  # the factory attested the modules before their isnad tags existed: in the canonical form, which does not see them (born_tagged.py)
+            try:
+                raw = tg.canonical_text(raw.decode("utf-8")).encode("utf-8")
+            except UnicodeDecodeError:
+                pass
+        members[member_name(p)] = raw
     print(f"archive rebuilt: {tar_out} sha256 {write_tar(members, tar_out)}")
 if extending:
     print(f"extend ok: {lib}: part {part_files[0][-8:-5]}, {len(modules)} modules, {len(manifest)} theorems, lint {lint_mode}")
