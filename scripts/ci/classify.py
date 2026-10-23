@@ -11,8 +11,10 @@ import re
 import sys
 
 from _git import changed_files, fail, gh_output, pascal, run, tier_of
-from native_check import is_native
+from raze_check import is_raze
 from restructure_check import is_restructure
+from studied_check import studied_targets
+from studied_check import tier as studied_tier
 from tag_check import is_tag
 
 base, head = sys.argv[1], sys.argv[2]
@@ -25,7 +27,14 @@ if not files:
 intake_libs = {m.group(1) for _, p in files if (m := re.fullmatch(r"data/intake/([^/]+)/manifest\.jsonl", p))}
 
 
+# A STUDIED PR carries theorems that Leak runs proved and rated four stars or more, re-derived and bundled by the intake job in competemath/emissary-archangel
+# (scripts/ci/studied_check.py): one target's manifest, its bundle report, its modules under Tengoku/Studied/. It is named by the manifest in the same diff.
+studied_set = studied_targets(files)
+
+
 def tier(p: str) -> str:
+    if studied_tier(p, studied_set):
+        return "studied"
     for lib in intake_libs:
         ns = pascal(lib)
         if p == f"Tengoku/{ns}.lean" or p.startswith(f"Tengoku/{ns}/") or p.startswith(f"data/intake/{lib}/"):
@@ -35,6 +44,14 @@ def tier(p: str) -> str:
     return tier_of(p)
 
 
+# A RAZE PR takes modules of an intake library out of the tree (scripts/ci/raze_check.py judges it: the removal and nothing else, dependencies included). It is the only class
+# that removes content, so it is asked first, and it comes from any author: its marker data/raze/<id>.json is under data/, which no content-lane line of CODEOWNERS covers, so a
+# code owner has to review it.
+if is_raze(base, head):
+    print(f"class=raze ({len(files)} files)")
+    gh_output("class", "raze")
+    gh_output("files", " ".join(p for _, p in files))
+    sys.exit(0)
 # A TAG PR writes isnad tags into modules that are already in the tree and changes nothing else (scripts/ci/tag_check.py judges it: after the tags are taken out, code and
 # docstring words are the base's). Asked before the scope-fix shape, which is also "existing modules modified in place", because only the content tells them apart.
 if is_tag(base, head):
@@ -43,15 +60,6 @@ if is_tag(base, head):
         fail(f"a tag PR comes from the factory's account ({bot_}), not from {os.environ.get('PR_ACTOR') or 'nobody'}")
     print(f"class=tag ({len(files)} modules)")
     gh_output("class", "tag")
-    gh_output("files", " ".join(p for _, p in files))
-    sys.exit(0)
-# A NATIVE PR adds or edits modules of Tengoku/Native/ (novel content: scripts/ci/native_check.py judges it) and nothing else.
-if is_native(base, head):
-    bot_ = os.environ.get("TENGOKU_BOT", "tengoku-bot")
-    if not (os.environ.get("PR_ACTOR", "") == bot_ or os.environ.get("TENGOKU_ACTOR_CHECKED") == "1"):
-        fail(f"a native PR comes from the factory's account ({bot_}), not from {os.environ.get('PR_ACTOR') or 'nobody'}")
-    print(f"class=native ({len(files)} files)")
-    gh_output("class", "native")
     gh_output("files", " ".join(p for _, p in files))
     sys.exit(0)
 # A SCOPE-FIX PR makes what a merged intake library registered for the whole tree local to its modules (scripts/ci/scope_fix_check.py judges the
@@ -93,6 +101,17 @@ intake_actor_ok = actor_ok or actor == os.environ.get("TENGOKU_INTAKE_BOT", "ten
 if set(by) <= {"derived", "content", "tombstone"} and (derived or by.get("tombstone")) and actor_ok:
     print(f"class=promotion ({len(files)} files, by {actor or 'the merge group'})")
     gh_output("class", "promotion")
+    gh_output("files", " ".join(p for _, p in files))
+    sys.exit(0)
+if "studied" in by:
+    others = [c for c in by if c not in ("studied", "docs")]
+    if others or len(studied_set) != 1:
+        fail(f"a studied PR is one target's bundle and nothing else (targets: {sorted(studied_set)}; also touches: {others})")
+    studied_bot = os.environ.get("TENGOKU_STUDIED_BOT", "tengoku-supervisor[bot]")
+    if actor != studied_bot and os.environ.get("TENGOKU_ACTOR_CHECKED") != "1":
+        fail(f"a studied PR comes from the supervisor App ({studied_bot}), not from {actor or 'nobody'}")
+    print(f"class=studied ({len(files)} files, target {sorted(studied_set)[0]})")
+    gh_output("class", "studied")
     gh_output("files", " ".join(p for _, p in files))
     sys.exit(0)
 if "intake" in by:

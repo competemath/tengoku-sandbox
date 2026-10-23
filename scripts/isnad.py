@@ -26,6 +26,7 @@ import argparse
 import hashlib
 import json
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -215,6 +216,23 @@ def run_exe(args: list[str], exe: str | None = None, cwd: Path = ROOT, extra_pat
     return [Record(ln) for ln in run_exe_lines(args, exe, cwd, extra_path)]
 
 
+BATCH = 25  # modules per `tengoku-isnad` process (see facts)
+
+
+def facts(modules: list[str], names: list[str], exe: str | None, batch: int = BATCH) -> tuple[list[Record], list[str]]:
+    """The records and the range lines of the modules, from one `tengoku-isnad` process per `batch` modules (all of them in one process when batch < 1). One
+    process over a whole 400-module tag part held the import closure and the analysis of every module, and the hosted runner was shut down for memory (exit 143,
+    'The runner has received a shutdown signal': three tag runs on 2026-10-15/16); a batch frees it before the next."""
+    size = batch if batch > 0 else max(len(modules), 1)
+    recs: list[Record] = []
+    ranges: list[str] = []
+    for i in range(0, len(modules), size):
+        args = [x for m in modules[i : i + size] for x in ("--module", m)] + [x for n in names for x in ("--name", n)]
+        recs += run_exe(args, exe)
+        ranges += run_exe_lines(["--ranges", *args], exe)
+    return recs, ranges
+
+
 def golden() -> list[tuple[str, str, str, str]]:
     """(import module, theorem, expected id, expected shape+vocab) rows of tools/isnad/golden.tsv."""
     rows = []
@@ -275,15 +293,21 @@ def parse_range_line(line: str) -> tuple[str, str, Range, Range]:
 
 
 def origin_of(module: str) -> str:
-    """Where a module's theorems come from: the seed (Mathlib, Batteries, …), CompeteMath's own (Native), or a translation (every library under Tengoku/)."""
-    for prefix, origin in (("Tengoku.Seed", "seed"), ("Tengoku.Native", "novel")):
+    """Where a module's theorems come from: the seed (Mathlib, Batteries, …), CompeteMath's own (Native, and the studied theorems of Leak runs), or a
+    translation (every library under Tengoku/)."""
+    for prefix, origin in (("Tengoku.Seed", "seed"), ("Tengoku.Native", "novel"), ("Tengoku.Studied", "novel")):
         if module == prefix or module.startswith(prefix + "."):
             return origin
     return "translated"
 
 
 def module_file(module: str, root: Path = ROOT) -> Path:
-    return root / (module.replace(".", "/") + ".lean")
+    """The file of a module under root. A module name arrives on the command line, so one that could leave root is refused: an empty component (`.etc.passwd`
+    would become the absolute path /etc/passwd.lean), a slash or a backslash, a NUL."""
+    parts = module.split(".")
+    if not all(parts) or any(c in module for c in "/\\\0"):
+        raise ValueError(f"not a module name: {module!r}")
+    return root.joinpath(*parts[:-1], parts[-1] + ".lean")
 
 
 def _tagger():
@@ -401,7 +425,7 @@ def tagtest(exe: str | None = None) -> int:
     with tempfile.TemporaryDirectory() as tmp:
         d = Path(tmp)
         path = d / f"{FIXTURE_MODULE}.lean"
-        path.write_bytes(original.encode("utf-8"))
+        shutil.copyfile(TAGGER_DIR / "Fixture.lean", path)  # the fixture's own bytes (`original` is the same text, read as bytes above)
         compile_fixture(d)
         recs, ranges = fixture_facts(d, exe)
         fresh = {name: [list(r), list(s)] for name, _, r, s in map(parse_range_line, ranges)}
@@ -449,9 +473,9 @@ def tagtest(exe: str | None = None) -> int:
 
 
 def cmd_tag(a: argparse.Namespace) -> int:
-    mods = [x for m in a.module for x in ("--module", m)] + [x for n in a.name for x in ("--name", n)]
-    plan, skipped = plan_tags(run_exe(mods, a.exe), run_exe_lines(["--ranges", *mods], a.exe), a.origin, a.src)
-    counts, more = tag_files(plan, Path(a.root), a.write)
+    recs, ranges = facts(a.module, a.name, a.exe, a.batch)
+    plan, skipped = plan_tags(recs, ranges, a.origin, a.src)
+    counts, more = tag_files(plan, ROOT, a.write)
     for name, why in skipped + more:
         print(f"skipped {name}: {why}")
     print(
@@ -467,15 +491,41 @@ def tag_lines_of(text: str) -> int:
     return sum(1 for kind, a, b in tg.scan(text) if kind == "doc" for ln in text[a + 3 : b - 2].split("\n") if tg.TAG_LINE.match(ln))
 
 
+def module_tag_lines(module: str, root: Path) -> int:
+    """The tag lines in one module's docstrings (0 when the file is missing)."""
+    path = module_file(module, root)
+    return tag_lines_of(read_source(path)) if path.is_file() else 0
+
+
+def modules_with_odd_tag_counts(modules: list[str], plan: dict, root: Path) -> list[str]:
+    """The modules whose tag lines differ from the theorems that carry the right tag, each as 'Module (N tag line(s), M theorem(s) right)'. A part is hundreds of
+    modules and the run that finds a mismatch takes two hours (2026-10-11: 4880 tag lines, 4881 right, in 365 modules, no module named), so say WHERE."""
+    odd = []
+    for m in modules:
+        here = module_tag_lines(m, root)
+        right = tag_files({m: plan[m]}, root, write=False)[0]["same"] if m in plan else 0
+        if here != right:
+            odd.append(f"{m} ({here} tag line(s), {right} theorem(s) right)")
+    return odd
+
+
+def where_clause(odd: list[str], shown: int = 8) -> str:
+    """' — in A, B, … and N more' for the modules `modules_with_odd_tag_counts` found, or nothing when it found none."""
+    if not odd:
+        return ""
+    return f" — in {', '.join(odd[:shown])}" + (f" and {len(odd) - shown} more" if len(odd) > shown else "")
+
+
 def check_tags(recs: list[Record], ranges: list[str], modules: list[str], root: Path) -> tuple[list[str], str]:
     """A tag PR's modules, as built: tagging them again must change nothing (every taggable theorem has exactly the tag the build computes: none missing, none
     stale, no docstring to create) and no tag may be there that belongs to no theorem. Returns (problems, a summary line)."""
     plan, skipped = plan_tags(recs, ranges)
+    # only the modules this PR carries are checked: the tag lines are counted in them, so the theorems that carry the right tag are counted in them too. The records can name a module
+    # the PR does not carry; counting those made the sweep of 2026-10-12 fail after two hours with 4,880 tag lines against 4,881 right tags and no module odd
+    outside = {m: v for m, v in plan.items() if m not in set(modules)}
+    plan = {m: v for m, v in plan.items() if m in set(modules)}
     counts, more = tag_files(plan, root, write=False)
-    present = 0
-    for m in modules:
-        path = module_file(m, root)
-        present += tag_lines_of(read_source(path)) if path.is_file() else 0
+    present = sum(module_tag_lines(m, root) for m in modules)
     problems = [
         f"{counts[k]} theorem(s) {why}"
         for k, why in (
@@ -492,14 +542,21 @@ def check_tags(recs: list[Record], ranges: list[str], modules: list[str], root: 
     if present != counts["same"]:
         problems.append(
             f"{present} tag line(s) in the docstrings but {counts['same']} theorem(s) carry the right one: a tag belongs to no theorem, or is on a theorem twice"
+            + where_clause(modules_with_odd_tag_counts(modules, plan, root))
         )
     by_rule = len(skipped) + len(more) - len(refused)
-    return problems, f"{counts['same']} tags right, {by_rule} theorems skipped by rule, {len(recs)} theorems in {len(modules)} modules"
+    ignored = (
+        f", {sum(len(v) for v in outside.values())} theorem(s) of {len(outside)} module(s) outside the PR not checked" if outside else ""
+    )
+    return (
+        problems,
+        f"{counts['same']} tags right, {by_rule} theorems skipped by rule, {len(recs)} theorems in {len(modules)} modules{ignored}",
+    )
 
 
 def cmd_check_tags(a: argparse.Namespace) -> int:
-    mods = [x for m in a.module for x in ("--module", m)]
-    problems, summary = check_tags(run_exe(mods, a.exe), run_exe_lines(["--ranges", *mods], a.exe), a.module, Path(a.root))
+    recs, ranges = facts(a.module, [], a.exe, a.batch)
+    problems, summary = check_tags(recs, ranges, a.module, ROOT)
     if problems:
         print("isnad check-tags: " + "; ".join(problems[:10]) + (f"; and {len(problems) - 10} more" if len(problems) > 10 else ""))
         return 1
@@ -548,13 +605,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--origin", choices=FROM, help="default: by where the module lives (Tengoku.Seed -> seed, Tengoku.Native -> novel, else translated)"
     )
     s.add_argument("--src", help="default: 0 for seed and novel, - for translated")
-    s.add_argument("--root", default=str(ROOT))
     s.add_argument("--write", action="store_true")
     s.add_argument("--exe")
+    s.add_argument("--batch", type=int, default=BATCH, help=f"modules per tengoku-isnad process (default {BATCH}; below 1: all in one)")
     s = sub.add_parser("check-tags")
     s.add_argument("--module", action="append", required=True)
-    s.add_argument("--root", default=str(ROOT))
     s.add_argument("--exe")
+    s.add_argument("--batch", type=int, default=BATCH, help=f"modules per tengoku-isnad process (default {BATCH}; below 1: all in one)")
     s = sub.add_parser("strip")
     s.add_argument("paths", nargs="+")
     s.add_argument("--write", action="store_true")

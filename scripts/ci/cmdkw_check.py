@@ -1,19 +1,21 @@
 #!/usr/bin/env python3
-"""cmdkw_check.py [LIST.json] — the command keywords Lean reports (tools/CommandKeywords.lean, on stdin, one per line) against schemas/command-keywords.json.
+"""cmdkw_check.py [--emit] — the command keywords Lean reports (tools/CommandKeywords.lean, on stdin, one per line) against schemas/command-keywords.json.
 
 The content lint (scripts/ci/allowlist.py) reads a word at column 0 as a command only if it is on that list, so a keyword the seed added since the list was made
 would be read as a continuation. This says which words are new and which are gone, and exits 1 when they differ: regenerate the list (the command is in the message).
+It never writes a file: `--emit` prints the regenerated list on stdout for the caller to put in place (Sonar S2083 flagged the write: the list was read from a file and
+written back, and the analyzer takes `json.loads` of a file for an untrusted source).
 """
 
 from __future__ import annotations
 
 import json
 import sys
-from pathlib import Path
 
 from _git import ROOT
 
-REGENERATE = "lake env lean --run tools/CommandKeywords.lean | python3 scripts/ci/cmdkw_check.py --write"
+LIST = ROOT / "schemas" / "command-keywords.json"  # the repository's own list: never a path from the command line
+REGENERATE = 'kw=$(mktemp schemas/.kw.XXXXXX) && lake env lean --run tools/CommandKeywords.lean | python3 scripts/ci/cmdkw_check.py --emit > "$kw" && mv "$kw" schemas/command-keywords.json'
 
 
 def compare(reported: set[str], listed: set[str]) -> tuple[list[str], list[str]]:
@@ -22,25 +24,24 @@ def compare(reported: set[str], listed: set[str]) -> tuple[list[str], list[str]]
 
 
 def main(argv: list[str]) -> int:
-    write = "--write" in argv
-    paths = [a for a in argv if not a.startswith("--")]
-    path = Path(paths[0]) if paths else ROOT / "schemas" / "command-keywords.json"
+    emit = "--emit" in argv
+    if [a for a in argv if a != "--emit"]:
+        print("cmdkw_check.py reads schemas/command-keywords.json and takes no path (the only option is --emit)")
+        return 2
     reported = {ln.strip() for ln in sys.stdin.read().splitlines() if ln.strip()}
     if len(reported) < 100:
         print(
             f"Lean reported {len(reported)} command keywords: that is not the tree's command grammar (the program failed, or nothing was loaded)"
         )
         return 2
-    doc = json.loads(path.read_text(encoding="utf-8"))
+    doc = json.loads(LIST.read_text(encoding="utf-8"))
     new, gone = compare(reported, set(doc["commands"]))
-    if write:
-        doc["commands"] = sorted(reported)
-        path.write_text(json.dumps(doc, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
-        print(f"{path}: {len(reported)} command keywords written (new: {new}, gone: {gone})")
+    if emit:
+        print(json.dumps({**doc, "commands": sorted(reported)}, ensure_ascii=False, indent=1))
         return 0
     if new or gone:
         print(
-            f"::error::the tree's command keywords changed since {path.name} was made: new {new}, gone {gone}. A keyword that is missing from the list is read as a continuation "
+            f"::error::the tree's command keywords changed since {LIST.name} was made: new {new}, gone {gone}. A keyword that is missing from the list is read as a continuation "
             f"by the lint, so the list must be current. Regenerate: {REGENERATE}"
         )
         return 1
