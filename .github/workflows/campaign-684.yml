@@ -21,6 +21,7 @@ jobs:
           for n in $PRS; do git fetch -q origin "+refs/pull/$n/head:refs/remotes/pr/$n"; done
           git fetch -q origin "+refs/pull/684/head:refs/remotes/fix"
           git rev-parse origin/main refs/remotes/fix | tee ../revs.txt
+          git worktree add -q --detach ../root origin/main
       - name: Two copies of the tooling, main's and the fix's
         run: |
           cd obj
@@ -35,13 +36,15 @@ jobs:
           python3 - <<'PY'
           import json, os, subprocess, sys
           obj = os.path.abspath("obj")
+          root = os.path.abspath("root")
           bad = 0
           for n in os.environ["PRS"].split():
               head = subprocess.run(["git", "rev-parse", f"refs/remotes/pr/{n}"], cwd=obj, capture_output=True, text=True, check=True).stdout.strip()
               base = subprocess.run(["git", "merge-base", "origin/main", head], cwd=obj, capture_output=True, text=True, check=True).stdout.strip()
+              subprocess.run(["git", "checkout", "-q", "--detach", base], cwd=root, check=True)
               out = {}
               for v in ("main", "fix"):
-                  env = {**os.environ, "TENGOKU_CI_ROOT": obj}
+                  env = {**os.environ, "TENGOKU_CI_ROOT": root}
                   p = subprocess.run([sys.executable, "scripts/ci/autotag.py", "plan", base, head, "tengoku-intake[bot]"], cwd=f"tools-{v}", capture_output=True, text=True, env=env)
                   if p.returncode != 0:
                       print(f"#{n} {v}: planner exited {p.returncode}: {p.stderr[-600:]}"); bad += 1; continue
