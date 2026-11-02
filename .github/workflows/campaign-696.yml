@@ -1,5 +1,5 @@
 name: campaign-696
-run-name: campaign for competemath/tengoku#696 (autotag_push: a module with no theorem is not a tag failure)
+run-name: "campaign for competemath/tengoku#696 (autotag_push, a module with no theorem is not a tag failure)"
 on:
   push:
     branches: [campaign-696]
