@@ -1,0 +1,68 @@
+name: campaign-696
+run-name: campaign for competemath/tengoku#696 (autotag_push: a module with no theorem is not a tag failure)
+on:
+  push:
+    branches: [campaign-696]
+permissions: { contents: read }
+jobs:
+  push-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Objects, two copies of the tooling (main's and the fix's), and the files of intake PR 681
+        run: |
+          git clone -q --filter=blob:none --no-checkout https://github.com/competemath/tengoku obj
+          cd obj
+          git fetch -q origin "+refs/pull/681/head:refs/remotes/pr/681" "+refs/pull/696/head:refs/remotes/fix"
+          for v in main fix; do
+            rev=origin/main; [ "$v" = fix ] && rev=refs/remotes/fix
+            mkdir -p "../tools-$v"; git archive "$rev" scripts schemas tools | tar -x -C "../tools-$v"
+          done
+          git rev-parse refs/remotes/pr/681 > ../head.txt
+          git show refs/remotes/pr/681:Tengoku/Azurite/Azurite/Algorithm/ExactDiv.lean > ../ExactDiv.lean
+          git ls-tree -r --name-only refs/remotes/pr/681 | grep '^Tengoku/.*\.lean$' > ../pr-modules.txt
+          wc -l ../pr-modules.txt; head -c 300 ../ExactDiv.lean
+      - name: The push check on the real file that was refused, with each copy of the tooling
+        run: |
+          python3 - <<'PY'
+          import os, sys, importlib, subprocess, json
+          head = open("head.txt").read().strip()
+          path = "Tengoku/Azurite/Azurite/Algorithm/ExactDiv.lean"
+          text = open("ExactDiv.lean").read()
+          os.environ["AUTOTAG_ACTORS"] = "tengoku-intake[bot]"
+          def api(method, p, body=None, raw=False):
+              if method == "GET" and p == "repos/competemath/tengoku/pulls/681":
+                  return {"state": "open", "head": {"sha": head, "ref": "intake/azurite-41426780992-part-001", "repo": {"full_name": "competemath/tengoku"}}, "user": {"login": "tengoku-intake[bot]"}}
+              if method == "GET" and "/pulls/681/files" in p:
+                  return [{"filename": path, "status": "added"}] if "page=1" in p else []
+              if method == "GET" and "/contents/" in p:
+                  return text.encode() if raw else {}
+              raise AssertionError(f"unexpected call {method} {p}")
+          results = {}
+          for v in ("main", "fix"):
+              for m in [k for k in sys.modules if k in ("autotag_push", "born_tagged", "_git")]: del sys.modules[m]
+              sys.path.insert(0, os.path.abspath(f"tools-{v}/scripts/ci")); sys.path.insert(1, os.path.abspath(f"tools-{v}/scripts"))
+              os.environ["TENGOKU_CI_ROOT"] = os.path.abspath("obj")
+              ap = importlib.import_module("autotag_push")
+              try:
+                  out = ap.push(api, "competemath/tengoku", 681, head, {path: text}, {"AUTOTAG_ACTORS": "tengoku-intake[bot]"}, dry_run=True)
+                  results[v] = f"accepted: {out}"
+              except ap.Refused as e:
+                  results[v] = f"REFUSED: {e}"
+              sys.path[:2] = []
+          for v, r in results.items(): print(f"{v}: {r}")
+          ok = results["main"].startswith("REFUSED") and "nothing was tagged" in results["main"] and results["fix"].startswith("accepted") and "nothing to tag" in results["fix"]
+          print("campaign:", "OK (main refuses the real ExactDiv.lean of azurite part 1; the fix accepts it and writes nothing)" if ok else "WRONG")
+          sys.exit(0 if ok else 1)
+          PY
+      - name: The push tests, main's tooling against the fix's (same environment, same failures)
+        run: |
+          git config --global user.email c@c; git config --global user.name c; git config --global init.defaultBranch main
+          for v in main fix; do
+            (cd "tools-$v/scripts/ci/tests" && python3 -m unittest -v test_autotag.Push > "../../../../t-$v.txt" 2>&1 || true)
+            echo "== $v: $(grep -E '^Ran ' t-$v.txt) $(tail -1 t-$v.txt)"
+            grep -E '(FAIL|ERROR)$|^(FAIL|ERROR):' "t-$v.txt" | sed -E 's/ \(.*//' | sort -u > "b-$v.txt" || true
+          done
+          echo "--- failing in the fix and not in main (must be empty):"; comm -13 b-main.txt b-fix.txt | tee nb.txt
+          echo "--- the two new tests:"; grep -E "no_theorem_comes_out|modules_all_need_no_tag" t-fix.txt
+          [ ! -s nb.txt ]
