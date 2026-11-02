@@ -59,10 +59,16 @@ jobs:
               bad += 0 if ok else 1
           sys.exit(1 if bad else 0)
           PY
-      - name: The tool tests that touch the lane (the fix's tooling)
+      - name: The tool tests that touch the lane, with main's tooling and the fix's (same environment, so the same failures are the environment's)
         run: |
-          cd tools-fix
           git config --global user.email c@c; git config --global user.name c; git config --global init.defaultBranch main
-          cd scripts/ci/tests
-          python3 -m unittest test_autotag test_born_tagged 2>&1 | tail -6
-          python3 -m unittest discover -s . 2>&1 | tail -6 || true
+          for v in main fix; do
+            (cd "tools-$v/scripts/ci/tests" && python3 -m unittest -v test_autotag test_born_tagged > "../../../../tests-$v.txt" 2>&1 || true)
+            echo "== $v: $(grep -E '^Ran ' tests-$v.txt) $(tail -1 tests-$v.txt)"
+            grep -E '(FAIL|ERROR)$|^(FAIL|ERROR):' "tests-$v.txt" | sed -E 's/ \(.*//' | sort -u > "bad-$v.txt" || true
+          done
+          echo "--- failing in the fix and not in main (must be empty):"
+          comm -13 bad-main.txt bad-fix.txt | tee new-bad.txt
+          echo "--- the two new tests:"
+          grep -E "marker_of_a_factory_bundle" tests-fix.txt || true
+          [ ! -s new-bad.txt ]
