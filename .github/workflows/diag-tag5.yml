@@ -36,7 +36,7 @@ jobs:
           cd tree
           lake build Tengoku.DerivedAlgGeoLean.DerivedAlgGeo.CategoryTheory.Triangulated.StabilityCondition.CentralCharge.Exponential.Kernel Tengoku.DerivedAlgGeoLean.DerivedAlgGeo.CategoryTheory.Triangulated.StabilityCondition.CentralCharge.Exponential.Comparison Tengoku.DerivedAlgGeoLean.DerivedAlgGeo.CategoryTheory.Triangulated.StabilityCondition.CentralCharge.Exponential.Divisorial Tengoku.DerivedAlgGeoLean.DerivedAlgGeo.CategoryTheory.Triangulated.StabilityCondition.CentralCharge.Exponential.Twist 2>&1 | tail -3
           lake build tengoku-isnad 2>&1 | tail -1
-      - name: The four together, then each alone: records, ranges, skipped lines
+      - name: "The four together, then each alone (records, ranges, skipped lines)"
         run: |
           cd tree
           P=Tengoku.DerivedAlgGeoLean.DerivedAlgGeo.CategoryTheory.Triangulated.StabilityCondition.CentralCharge.Exponential
