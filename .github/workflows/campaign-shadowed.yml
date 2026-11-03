@@ -64,8 +64,14 @@ jobs:
           has = collections.Counter(r.module for r in recs)
           inpr = set(mods)
           import re
+          import re
+          NAME = re.compile(r"^[ \t]*(?:@\[[^\]\n]*\][ \t]*)*(?:(?:public|protected|noncomputable|nonrec)[ \t]+)*(?:theorem|lemma)[ \t]+([^\s:({\[]+)", re.M)
+          def declared(m):
+              t = open("Tengoku/" + m.split("Tengoku.", 1)[1].replace(".", "/") + ".lean").read()
+              ns = {n.strip("«»").split(".")[-1] for n in NAME.findall(t)}
+              return {n for n in ns if n and not n.startswith(("_", "eq_", "proof_", "match_", "sizeOf_")) and n != "injEq"}
           planned = {m: {it.name.split(".")[-1] for it in v} for m, v in plan.items()}
-          unplanned = sorted(m for m in inpr if isnad.declared_theorem_names(m) - planned.get(m, set()))
+          unplanned = sorted(m for m in inpr if declared(m) - planned.get(m, set()))
           twice = sum(1 for k, c in collections.Counter((r.module, r.name) for r in recs).items() if c > 1)
           print(f"RESULT {v:4} | records {len(recs):5} | planned modules {sum(1 for m in plan if m in inpr):4} of {len(mods)} | planned theorems {sum(len(x) for m, x in plan.items() if m in inpr):5} | theorems recorded twice {twice:4} | modules with a declared theorem that no plan has {len(unplanned)}")
           for m in unplanned[:12]: print(f"RESULT {v:4}   unplanned: {m}")
