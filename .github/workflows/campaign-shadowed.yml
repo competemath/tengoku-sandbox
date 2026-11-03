@@ -1,0 +1,74 @@
+name: campaign-shadowed
+run-name: "campaign for the tagger fix (a module with theorems and no record in its batch is asked again alone): main's facts and plan against the fix's, on the real modules of tengoku#694"
+on:
+  push:
+    branches: [campaign-shadowed]
+permissions: { contents: read }
+jobs:
+  campaign:
+    strategy:
+      fail-fast: false
+      matrix:
+        pr: [694]
+    runs-on: ubuntu-26.04
+    timeout-minutes: 120
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TENGOKU_CACHE_SOURCE: competemath/tengoku
+    steps:
+      - name: Free disk
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache /usr/local/share/boost /usr/share/swift /usr/lib/jvm /usr/share/miniconda || true
+          df -h / | tail -1
+      - name: "The PR's tree, and the two copies of scripts (main's and the fix's)"
+        run: |
+          git clone -q --filter=blob:none --no-checkout https://github.com/competemath/tengoku tree
+          cd tree
+          git fetch -q origin "+refs/pull/${{ matrix.pr }}/head:refs/remotes/pr" "+refs/heads/fix/tag-shadowed-theorems:refs/remotes/fix"
+          git checkout -q --detach refs/remotes/pr
+          for v in main fix; do
+            rev=origin/main; [ "$v" = fix ] && rev=refs/remotes/fix
+            mkdir -p "../scripts-$v"; git archive "$rev" scripts | tar -x -C "../scripts-$v"
+          done
+          git log --oneline -1
+      - name: elan
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSfL -o elan-init.sh https://raw.githubusercontent.com/leanprover/elan/0e36a07b9bbcc5381fa6250df109f9a4f94d7bac/elan-init.sh
+          echo "a620ff1641616222c8d37c54845492004bb84d6877cdbc944dd65c1aa685bf53  elan-init.sh" | sha256sum -c -
+          sh elan-init.sh -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: The compiled tree (the library's cache)
+        run: cd tree && scripts/cache.sh get 2>&1 | tail -3
+      - name: "The PR's modules and the tagger's executable"
+        run: |
+          cd tree
+          git fetch -q origin main && B=$(git merge-base HEAD FETCH_HEAD)
+          git diff --name-only --diff-filter=A "$B" HEAD -- Tengoku | grep '\.lean$' | grep -v -E '/Deps\.lean$|^Tengoku/All\.lean$|^Tengoku/[^/]+\.lean$' | sort > /tmp/paths.txt
+          wc -l /tmp/paths.txt
+          sed -E 's#\.lean$##; s#/#.#g' /tmp/paths.txt > /tmp/mods.txt
+          lake build $(cat /tmp/mods.txt) 2>&1 | tail -2
+          lake build tengoku-isnad 2>&1 | tail -1
+      - name: "Facts and plan for every module of the PR, as the lane does (batches of 25), main's against the fix's"
+        run: |
+          cd tree
+          for v in main fix; do
+            rm -rf scripts && cp -r "../scripts-$v/scripts" scripts
+            V=$v python3 - <<'PY'
+          import os, sys, collections
+          sys.path.insert(0, "scripts")
+          import isnad
+          v = os.environ["V"]
+          mods = open("/tmp/mods.txt").read().split()
+          recs, ranges = isnad.facts(mods, [], None, 25, exact=True)
+          plan, skipped = isnad.plan_tags(recs, ranges)
+          has = collections.Counter(r.module for r in recs)
+          inpr = set(mods)
+          import re
+          decl = re.compile(r"^[ \t]*(?:@\[[^\]\n]*\][ \t]*)*(?:(?:private|protected|nonrec)[ \t]+)*(?:theorem|lemma)[ \t]", re.M)
+          def declares(m): return bool(decl.search(open("Tengoku/" + m.split("Tengoku.", 1)[1].replace(".", "/") + ".lean").read()))
+          unplanned = sorted(m for m in inpr if declares(m) and not plan.get(m))
+          twice = sum(1 for k, c in collections.Counter((r.module, r.name) for r in recs).items() if c > 1)
+          print(f"RESULT {v:4} | records {len(recs):5} | planned modules {sum(1 for m in plan if m in inpr):4} of {len(mods)} | planned theorems {sum(len(x) for m, x in plan.items() if m in inpr):5} | theorems recorded twice {twice:4} | modules that declare a theorem and have nothing planned {len(unplanned)}")
+          for m in unplanned[:12]: print(f"RESULT {v:4}   unplanned: {m}")
+          PY
+          done
