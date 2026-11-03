@@ -1,0 +1,65 @@
+name: campaign-700
+run-name: "campaign for competemath/tengoku#700 (autotag_push, a read is repeated after a server error)"
+on:
+  push:
+    branches: [campaign-700]
+permissions: { contents: read }
+jobs:
+  retries:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+      AUTOTAG_ACTORS: "tengoku-intake[bot]"
+    steps:
+      - name: Two copies of the tooling (main's and the fix's)
+        run: |
+          git clone -q --filter=blob:none --no-checkout https://github.com/competemath/tengoku obj
+          cd obj
+          git fetch -q origin "+refs/pull/700/head:refs/remotes/fix"
+          for v in main fix; do
+            rev=origin/main; [ "$v" = fix ] && rev=refs/remotes/fix
+            mkdir -p "../tools-$v"; git archive "$rev" scripts schemas tools | tar -x -C "../tools-$v"
+          done
+      - name: A real read of a real pull request through a gh that fails with HTTP 500 twice first, main's tooling against the fix's
+        run: |
+          mkdir -p shim; REAL="$(command -v gh)"
+          cat > shim/gh <<SH
+          #!/usr/bin/env bash
+          n=\$(cat "\$FLAKY_COUNT" 2>/dev/null || echo 0)
+          if [ "\$1" = api ] && [ "\$n" -lt "\$FLAKY_FAILS" ]; then echo \$((n+1)) > "\$FLAKY_COUNT"; echo "gh: Internal Server Error (HTTP 500)" >&2; exit 1; fi
+          exec "$REAL" "\$@"
+          SH
+          sed -i 's/^          //' shim/gh; chmod +x shim/gh
+          python3 - <<'PY'
+          import os, subprocess, sys, importlib, tempfile
+          shim = os.path.abspath("shim")
+          results = {}
+          for v in ("main", "fix"):
+              for m in [k for k in sys.modules if k in ("autotag_push", "autotag", "born_tagged", "_git", "isnad", "isnad_tag", "lean_lex", "studied_check", "tag_check")]: del sys.modules[m]
+              sys.path[:0] = [os.path.abspath(f"tools-{v}/scripts/ci"), os.path.abspath(f"tools-{v}/scripts")]
+              os.environ["PATH"] = shim + os.pathsep + os.environ["PATH"].replace(shim + os.pathsep, "")
+              os.environ["FLAKY_COUNT"] = tempfile.mktemp(); os.environ["FLAKY_FAILS"] = "2"
+              ap = importlib.import_module("autotag_push")
+              try:
+                  pr = ap.gh_api("GET", "repos/competemath/tengoku/pulls/700")
+                  results[v] = f"read ok after {open(os.environ['FLAKY_COUNT']).read().strip()} server errors: PR {pr['number']} is {pr['state']}"
+              except ap.Refused as e:
+                  results[v] = f"REFUSED: {str(e)[:120]}"
+              del sys.path[:2]
+          for v, r in results.items(): print(f"{v}: {r}")
+          ok = results["main"].startswith("REFUSED") and results["fix"].startswith("read ok after 2")
+          print("campaign:", "OK (main refuses after one server error; the fix reads the real pull request after two)" if ok else "WRONG")
+          sys.exit(0 if ok else 1)
+          PY
+      - name: The tooling tests, main's against the fix's (same environment, same failures)
+        run: |
+          git config --global user.email c@c; git config --global user.name c; git config --global init.defaultBranch main
+          for v in main fix; do
+            (cd "tools-$v/scripts/ci/tests" && python3 -m unittest -v test_autotag > "../../../../t-$v.txt" 2>&1 || true)
+            echo "== $v: $(grep -E '^Ran ' t-$v.txt) $(tail -1 t-$v.txt)"
+            grep -E '(FAIL|ERROR)$|^(FAIL|ERROR):' "t-$v.txt" | sed -E 's/ \(.*//' | sort -u > "b-$v.txt" || true
+          done
+          echo "--- failing in the fix and not in main (must be empty):"; comm -13 b-main.txt b-fix.txt | tee nb.txt
+          echo "--- the new tests:"; grep -E "Retries" t-fix.txt | head -6
+          [ ! -s nb.txt ]
