@@ -52,6 +52,40 @@ jobs:
           print("campaign:", "OK (main refuses after one server error; the fix reads the real pull request after two)" if ok else "WRONG")
           sys.exit(0 if ok else 1)
           PY
+      - name: The workflow step "Main's scripts" itself, as the runner runs it (bash -e -o pipefail), main's against the fix's, with a gh that fails twice and then answers, and with a gh that always fails
+        run: |
+          mkdir -p wf && for v in main fix; do
+            rev=origin/main; [ "$v" = fix ] && rev=refs/remotes/fix
+            (cd obj && git show "$rev:.github/workflows/autotag-push.yml") > "wf/$v.yml"
+          done
+          python3 - <<'PY'
+          import os, subprocess, tempfile, pathlib, sys
+          try:
+              import yaml
+          except ImportError:
+              subprocess.run([sys.executable, "-m", "pip", "install", "-q", "pyyaml"], check=True); import yaml
+          def run(v, fails):
+              steps = yaml.safe_load(open(f"wf/{v}.yml"))["jobs"]["push"]["steps"]
+              script = next(x for x in steps if x.get("name") == "Main's scripts")["run"]
+              with tempfile.TemporaryDirectory() as d:
+                  d = pathlib.Path(d); (d / "shim").mkdir(); (d / "work").mkdir()
+                  (d / "shim/gh").write_text('#!/usr/bin/env bash\nn=$(cat "$COUNT" 2>/dev/null || echo 0); echo $((n+1)) > "$COUNT"\nif [ "$n" -lt "$FAILS" ]; then echo "gh: Internal Server Error (HTTP 500)" >&2; exit 1; fi\necho "# a file"\n')
+                  (d / "shim/sleep").write_text("#!/usr/bin/env bash\nexit 0\n")
+                  for f in (d / "shim").iterdir(): f.chmod(0o755)
+                  env = {**os.environ, "PATH": f"{d/'shim'}:{os.environ['PATH']}", "COUNT": str(d / "count"), "FAILS": str(fails), "GITHUB_REPOSITORY": "competemath/tengoku"}
+                  r = subprocess.run(["bash", "-e", "-o", "pipefail", "-c", script], cwd=d / "work", env=env, capture_output=True, text=True)
+                  n = len([p for p in (d / "work").rglob("*") if p.is_file() and p.stat().st_size])
+                  return r.returncode, n, int((d / "count").read_text().strip())
+          out = {}
+          for v in ("main", "fix"):
+              for label, fails in (("two server errors then answers", 2), ("always fails", 100)):
+                  code, files, calls = run(v, fails); out[(v, label)] = (code, files, calls)
+                  print(f"{v:5} | gh {label:30} | exit {code} | files written {files:2} | gh calls {calls}")
+          ok = (out[("main", "two server errors then answers")][0] != 0 and out[("fix", "two server errors then answers")] == (0, 11, 13)
+                and out[("fix", "always fails")][0] != 0 and out[("fix", "always fails")][2] == 4)
+          print("campaign:", "OK (main's step dies at the first server error; the fix's recovers after two and gives up after four, non-zero)" if ok else "WRONG")
+          sys.exit(0 if ok else 1)
+          PY
       - name: The tooling tests, main's against the fix's (same environment, same failures)
         run: |
           git config --global user.email c@c; git config --global user.name c; git config --global init.defaultBranch main
