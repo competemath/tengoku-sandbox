@@ -36,3 +36,4 @@ jobs:
           for v in main fix; do
             (cd t-$v && python3 -m unittest scripts.ci.tests.test_gate_limits 2>&1 | tail -3 | sed "s/^/$v: /")
           done
+# rerun after queue-recheck
