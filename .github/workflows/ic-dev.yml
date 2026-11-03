@@ -37,7 +37,7 @@ jobs:
         run: |
           cd tree
           cp ../dev/ic/ic_graph.lean ../dev/ic/ic_plan.py "$RUNNER_TEMP/"
-          printf 'import Lean\nopen Lean\n#check @importModulesCore\n#print ImportState\n#check @findOLean\n#print Import\n#print ModuleData\n' > "$RUNNER_TEMP/Probe.lean"
+          printf 'import Lean\nopen Lean\n#check @readModuleData\n#check @freeRegions\n#print ModuleData\n#print Import\n' > "$RUNNER_TEMP/Probe.lean"
           lake env lean "$RUNNER_TEMP/Probe.lean" 2>&1 | head -60
           s=$(date +%s)
           lake env lean --run "$RUNNER_TEMP/ic_graph.lean" Tengoku.All > "$RUNNER_TEMP/graph.tsv" 2>&1 || { echo "ic_graph failed:"; head -30 "$RUNNER_TEMP/graph.tsv"; exit 1; }
