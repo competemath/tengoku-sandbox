@@ -1,0 +1,38 @@
+name: campaign-limits
+run-name: "campaign for the pr-gate job limits: main's workflow against the fix's, and the new test on both"
+on:
+  push:
+    branches: [campaign-limits]
+permissions: { contents: read }
+jobs:
+  limits:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Two copies of the files (main's and the fix's)
+        run: |
+          git clone -q --filter=blob:none --no-checkout https://github.com/competemath/tengoku obj
+          cd obj
+          git fetch -q origin "+refs/heads/fix/gate-job-limits:refs/remotes/fix"
+          for v in main fix; do
+            rev=origin/main; [ "$v" = fix ] && rev=refs/remotes/fix
+            mkdir -p "../t-$v"; git archive "$rev" .github scripts | tar -x -C "../t-$v"
+          done
+      - name: "The time limit of every pr-gate job, main's against the fix's"
+        run: |
+          python3 -m pip install -q pyyaml
+          python3 - <<'PY'
+          import yaml
+          docs = {v: yaml.safe_load(open(f"t-{v}/.github/workflows/pr-gate.yml"))["jobs"] for v in ("main", "fix")}
+          print(f"{'job':18} {'blobless':9} {'main':>5} {'fix':>5}")
+          for name in docs["main"]:
+              blobless = any("blob:none" in str(s.get("with", {})) for s in docs["main"][name].get("steps", []))
+              a, b = docs["main"][name].get("timeout-minutes"), docs["fix"][name].get("timeout-minutes")
+              print(f"{name:18} {str(blobless):9} {a!s:>5} {b!s:>5}" + ("   <- changed" if a != b else ""))
+          PY
+      - name: "The new test on main's workflow (must fail) and on the fix's (must pass)"
+        run: |
+          cp t-fix/scripts/ci/tests/test_gate_limits.py t-main/scripts/ci/tests/
+          for v in main fix; do
+            (cd t-$v && python3 -m unittest scripts.ci.tests.test_gate_limits 2>&1 | tail -3 | sed "s/^/$v: /")
+          done
