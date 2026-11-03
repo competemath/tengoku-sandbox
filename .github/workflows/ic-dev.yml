@@ -52,7 +52,7 @@ jobs:
           (cd "$RUNNER_TEMP/lean4export" && lake build 2>&1 | tail -1)
           git clone -q https://github.com/ammkrn/nanoda_lib "$RUNNER_TEMP/nanoda"; git -C "$RUNNER_TEMP/nanoda" checkout -q "$NANODA_COMMIT"
           (cd "$RUNNER_TEMP/nanoda" && cargo build --release --locked 2>&1 | tail -1)
-      - name: Three shards (smallest, middle, largest by bytes): export, memory, lines, nanoda
+      - name: "Three shards (smallest, middle, largest by bytes), each: export, memory, lines, nanoda"
         run: |
           cd tree
           X="$RUNNER_TEMP/lean4export/.lake/build/bin/lean4export"
