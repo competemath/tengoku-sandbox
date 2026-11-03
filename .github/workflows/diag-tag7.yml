@@ -1,0 +1,93 @@
+name: diag-tag7
+run-name: "diagnose why the tagger leaves derived-alg-geo-lean part 2 the batch of 25 written, and what the gate says (tengoku#698)"
+on:
+  push:
+    branches: [diag-tag7]
+permissions: { contents: read }
+jobs:
+  diag:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 90
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TENGOKU_CACHE_SOURCE: competemath/tengoku
+    steps:
+      - name: Free disk
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache /usr/local/share/boost /usr/share/swift /usr/lib/jvm /usr/share/miniconda || true
+          df -h / | tail -1
+      - name: The PR's tree (tengoku PR 698 head)
+        run: |
+          git clone -q --filter=blob:none --no-checkout https://github.com/competemath/tengoku tree
+          cd tree
+          git fetch -q origin "+refs/pull/698/head:refs/remotes/pr/698"
+          git checkout -q --detach refs/remotes/pr/698
+          git log --oneline -1
+      - name: elan
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSfL -o elan-init.sh https://raw.githubusercontent.com/leanprover/elan/0e36a07b9bbcc5381fa6250df109f9a4f94d7bac/elan-init.sh
+          echo "a620ff1641616222c8d37c54845492004bb84d6877cdbc944dd65c1aa685bf53  elan-init.sh" | sha256sum -c -
+          sh elan-init.sh -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: The compiled tree (the library's cache)
+        run: cd tree && scripts/cache.sh get 2>&1 | tail -3
+      - name: Build the batch and the tagger
+        run: |
+          cd tree
+          cat > /tmp/mods.txt <<'EOF'
+          Tengoku.DerivedAlgGeoLean.DerivedAlgGeo.CategoryTheory.Triangulated.StabilityCondition.CentralCharge.Exponential.Comparison
+          Tengoku.DerivedAlgGeoLean.DerivedAlgGeo.CategoryTheory.Triangulated.StabilityCondition.CentralCharge.Exponential.Divisorial
+          Tengoku.DerivedAlgGeoLean.DerivedAlgGeo.CategoryTheory.Triangulated.StabilityCondition.CentralCharge.Exponential.Kernel
+          Tengoku.DerivedAlgGeoLean.DerivedAlgGeo.CategoryTheory.Triangulated.StabilityCondition.CentralCharge.Exponential.Twist
+          Tengoku.DerivedAlgGeoLean.DerivedAlgGeo.CategoryTheory.Triangulated.StabilityCondition.CentralCharge.Mukai.Orientation
+          Tengoku.DerivedAlgGeoLean.DerivedAlgGeo.CategoryTheory.Triangulated.StabilityCondition.CentralCharge.Mukai.Positivity
+          Tengoku.DerivedAlgGeoLean.DerivedAlgGeo.CategoryTheory.Triangulated.StabilityCondition.CentralCharge.Numerical.Threefold
+          Tengoku.DerivedAlgGeoLean.DerivedAlgGeo.CategoryTheory.Triangulated.StabilityCondition.CentralCharge.Quadratic
+          Tengoku.DerivedAlgGeoLean.DerivedAlgGeo.CategoryTheory.Triangulated.StabilityCondition.Families.Ordinary
+          Tengoku.DerivedAlgGeoLean.DerivedAlgGeo.CategoryTheory.Triangulated.StabilityCondition.Foundation.Deformation.NearIdentity
+          Tengoku.DerivedAlgGeoLean.DerivedAlgGeo.CategoryTheory.Triangulated.StabilityCondition.Foundation.Deformation.PhaseArithmetic
+          Tengoku.DerivedAlgGeoLean.DerivedAlgGeo.CategoryTheory.Triangulated.StabilityCondition.Foundation.Deformation.RelativePhase
+          Tengoku.DerivedAlgGeoLean.DerivedAlgGeo.CategoryTheory.Triangulated.StabilityCondition.Mukai.Charge
+          Tengoku.DerivedAlgGeoLean.DerivedAlgGeo.CategoryTheory.Triangulated.StabilityCondition.Mukai.NumericalCases
+          Tengoku.DerivedAlgGeoLean.DerivedAlgGeo.CategoryTheory.Triangulated.StabilityCondition.Mukai.Slope
+          Tengoku.DerivedAlgGeoLean.DerivedAlgGeo.CategoryTheory.Triangulated.StabilityCondition.Support.Divisorial
+          Tengoku.DerivedAlgGeoLean.DerivedAlgGeo.CategoryTheory.Triangulated.StabilityCondition.Symmetry.Autoequivalence.Slicing.Quotient
+          Tengoku.DerivedAlgGeoLean.DerivedAlgGeo.CategoryTheory.Triangulated.StabilityCondition.Symmetry.Autoequivalence.Slicing.Strict
+          Tengoku.DerivedAlgGeoLean.DerivedAlgGeo.CategoryTheory.Triangulated.StabilityCondition.Symmetry.Autoequivalence.Slicing.Transport
+          Tengoku.DerivedAlgGeoLean.DerivedAlgGeo.CategoryTheory.Triangulated.StabilityCondition.Walls.Divisorial.Circle
+          Tengoku.DerivedAlgGeoLean.DerivedAlgGeo.CategoryTheory.Triangulated.StabilityCondition.Walls.Divisorial.Region
+          Tengoku.DerivedAlgGeoLean.DerivedAlgGeo.CategoryTheory.Triangulated.StabilityCondition.Walls.Divisorial.Signature
+          Tengoku.DerivedAlgGeoLean.DerivedAlgGeo.CategoryTheory.Triangulated.StabilityCondition.Walls.Spherical.Basic
+          Tengoku.DerivedAlgGeoLean.DerivedAlgGeo.CategoryTheory.Triangulated.StabilityCondition.Walls.Spherical.DivisorialRegion
+          Tengoku.DerivedAlgGeoLean.DerivedAlgGeo.CategoryTheory.Triangulated.StabilityCondition.Walls.Spherical.Finiteness
+          EOF
+          sed -i 's/^          //' /tmp/mods.txt
+          lake build $(cat /tmp/mods.txt) 2>&1 | tail -3
+          lake build tengoku-isnad 2>&1 | tail -1
+      - name: "The batch as one process (what the lane does), then per module counts of records and ranges"
+        run: |
+          cd tree
+          args=(); while read -r m; do args+=(--module "$m"); done < /tmp/mods.txt
+          lake env .lake/build/bin/tengoku-isnad "${args[@]}" 2>/dev/null | grep '^isnad1	' | cut -f3 | sort | uniq -c > /tmp/rec.txt
+          lake env .lake/build/bin/tengoku-isnad --ranges "${args[@]}" 2>/dev/null | grep '^isnad1-range' | cut -f3 | sort | uniq -c > /tmp/rng.txt
+          echo "--- records per module (count module)"; cat /tmp/rec.txt | sed -E 's/Tengoku.DerivedAlgGeoLean.DerivedAlgGeo.//'
+          echo "--- ranges per module"; cat /tmp/rng.txt | sed -E 's/Tengoku.DerivedAlgGeoLean.DerivedAlgGeo.//'
+          echo "--- tag (dry run), skipped lines"
+          python3 scripts/isnad.py tag "${args[@]}" 2>&1 | cut -c1-260 | tail -40
+      - name: "Tag the batch for real (--write), then what changed and what the gate says about each of the four"
+        run: |
+          cd tree
+          args=(); while read -r m; do args+=(--module "$m"); done < /tmp/mods.txt
+          python3 scripts/isnad.py tag "${args[@]}" --write 2>&1 | tail -2
+          echo "--- files changed:"; git diff --stat | tail -3
+          cd scripts/ci && python3 - <<'PY'
+          import sys
+          sys.path.insert(0, ".")
+          from born_tagged import module_errors
+          for p in open("/tmp/mods.txt").read().split():
+              path = "Tengoku/" + p.split("Tengoku.", 1)[1].replace(".", "/") + ".lean"
+              t = open("../../" + path).read()
+              e = module_errors(path, t)
+              if "Exponential" in path or e:
+                  print(("REFUSED " if e else "ok      ") + path.split("CentralCharge/")[-1] if "CentralCharge/" in path else path[-60:], "|", (e[0][:200] if e else ""), "| tag lines:", t.count("isnad1"))
+          PY
