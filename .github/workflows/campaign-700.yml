@@ -19,7 +19,7 @@ jobs:
           git fetch -q origin "+refs/pull/700/head:refs/remotes/fix"
           for v in main fix; do
             rev=origin/main; [ "$v" = fix ] && rev=refs/remotes/fix
-            mkdir -p "../tools-$v"; git archive "$rev" scripts schemas tools | tar -x -C "../tools-$v"
+            mkdir -p "../tools-$v"; git archive "$rev" scripts schemas tools .github docs | tar -x -C "../tools-$v"
           done
       - name: A real read of a real pull request through a gh that fails with HTTP 500 twice first, main's tooling against the fix's
         run: |
@@ -88,6 +88,7 @@ jobs:
           PY
       - name: The tooling tests, main's against the fix's (same environment, same failures)
         run: |
+          python3 -m pip install -q pyyaml
           git config --global user.email c@c; git config --global user.name c; git config --global init.defaultBranch main
           for v in main fix; do
             (cd "tools-$v/scripts/ci/tests" && python3 -m unittest -v test_autotag > "../../../../t-$v.txt" 2>&1 || true)
