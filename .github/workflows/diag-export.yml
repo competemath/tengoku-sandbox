@@ -1,0 +1,59 @@
+name: diag-export
+run-name: "diagnose the independent check's export step (time, memory, size) by slice of the tree"
+on:
+  push:
+    branches: [diag-export]
+permissions: { contents: read }
+jobs:
+  diag:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 120
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TENGOKU_CACHE_SOURCE: competemath/tengoku
+      LEAN4EXPORT_COMMIT: 483e011449cce37c3f8ad5e2aae434cbb1d2e53c
+    steps:
+      - name: Free disk
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache /usr/local/share/boost /usr/share/swift /usr/lib/jvm /usr/share/miniconda || true
+          sudo swapoff -a || true; sudo rm -f /mnt/swapfile /swapfile || true
+          df -h / | tail -1; free -g; nproc
+      - name: The tree at main
+        run: |
+          git clone -q --filter=blob:none --no-checkout https://github.com/competemath/tengoku tree
+          cd tree && git checkout -q origin/main 2>/dev/null || git checkout -q main; git log --oneline -1
+      - name: elan
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSfL -o elan-init.sh https://raw.githubusercontent.com/leanprover/elan/0e36a07b9bbcc5381fa6250df109f9a4f94d7bac/elan-init.sh
+          echo "a620ff1641616222c8d37c54845492004bb84d6877cdbc944dd65c1aa685bf53  elan-init.sh" | sha256sum -c -
+          sh elan-init.sh -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: The compiled tree
+        run: cd tree && scripts/cache.sh get 2>&1 | tail -2 && lake build Tengoku.All 2>&1 | tail -2
+      - name: lean4export at its pinned commit
+        run: |
+          git clone -q https://github.com/leanprover/lean4export "$RUNNER_TEMP/lean4export"
+          git -C "$RUNNER_TEMP/lean4export" checkout -q "$LEAN4EXPORT_COMMIT"
+          (cd "$RUNNER_TEMP/lean4export" && lake build 2>&1 | tail -1)
+      - name: Export slices, with time, peak memory and size
+        run: |
+          cd tree
+          X="$RUNNER_TEMP/lean4export/.lake/build/bin/lean4export"
+          ls Tengoku/*.lean | head -5; ls Tengoku | wc -l
+          slice() {
+            m="$1"; out="$RUNNER_TEMP/s.ndjson"; s=$(date +%s)
+            /usr/bin/time -v lake env "$X" "$m" > "$out" 2> "$RUNNER_TEMP/t.log" || echo "export of $m failed"
+            echo "SLICE $m: $(wc -l < "$out") lines, $(du -h "$out" | cut -f1), $(( $(date +%s) - s )) s, peak RSS $(grep 'Maximum resident' "$RUNNER_TEMP/t.log" | awk '{print int($NF/1024/1024*10)/10}') GB"
+            rm -f "$out"
+          }
+          for m in Tengoku.Seed Tengoku.Azurite Tengoku.DgLean Tengoku.Flt Tengoku.Lean-pool; do [ -f "Tengoku/${m#Tengoku.}.lean" ] && slice "$m"; done
+      - name: The whole tree, sampled every minute for up to 70 minutes
+        run: |
+          cd tree
+          X="$RUNNER_TEMP/lean4export/.lake/build/bin/lean4export"
+          out="$RUNNER_TEMP/all.ndjson"
+          ( while true; do sleep 60; echo "SAMPLE $(date +%H:%M) rss=$(ps -C lean4export -o rss= | sort -n | tail -1 | awk '{print int($1/1024/1024*10)/10}')GB out=$(du -m "$out" 2>/dev/null | cut -f1)MB free=$(free -g | awk '/Mem/{print $4}')GB"; done ) &
+          sampler=$!
+          timeout 4200 lake env "$X" Tengoku.All > "$out" || echo "stopped after 70 minutes (or failed): $?"
+          kill $sampler || true
+          echo "ALL: $(wc -l < "$out") lines, $(du -h "$out" | cut -f1)"
