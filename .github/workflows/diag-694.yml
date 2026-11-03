@@ -1,0 +1,78 @@
+name: diag-694
+run-name: "diagnose which modules of tengoku#694 have no tagger records, and ReesDepth"
+on:
+  push:
+    branches: [diag-694]
+permissions: { contents: read }
+jobs:
+  campaign:
+    strategy:
+      fail-fast: false
+      matrix:
+        pr: [694]
+    runs-on: ubuntu-26.04
+    timeout-minutes: 120
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TENGOKU_CACHE_SOURCE: competemath/tengoku
+    steps:
+      - name: Free disk
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache /usr/local/share/boost /usr/share/swift /usr/lib/jvm /usr/share/miniconda || true
+          df -h / | tail -1
+      - name: "The PR's tree, and the two copies of scripts (main's and the fix's)"
+        run: |
+          git clone -q --filter=blob:none --no-checkout https://github.com/competemath/tengoku tree
+          cd tree
+          git fetch -q origin "+refs/pull/${{ matrix.pr }}/head:refs/remotes/pr" "+refs/heads/fix/tag-modules-exact:refs/remotes/fix"
+          git checkout -q --detach refs/remotes/pr
+          for v in main fix; do
+            rev=origin/main; [ "$v" = fix ] && rev=refs/remotes/fix
+            mkdir -p "../scripts-$v"; git archive "$rev" scripts | tar -x -C "../scripts-$v"
+          done
+          git log --oneline -1
+      - name: elan
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSfL -o elan-init.sh https://raw.githubusercontent.com/leanprover/elan/0e36a07b9bbcc5381fa6250df109f9a4f94d7bac/elan-init.sh
+          echo "a620ff1641616222c8d37c54845492004bb84d6877cdbc944dd65c1aa685bf53  elan-init.sh" | sha256sum -c -
+          sh elan-init.sh -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: The compiled tree (the library's cache)
+        run: cd tree && scripts/cache.sh get 2>&1 | tail -3
+      - name: "The PR's modules and the tagger's executable"
+        run: |
+          cd tree
+          git fetch -q origin main && B=$(git merge-base HEAD FETCH_HEAD)
+          git diff --name-only --diff-filter=A "$B" HEAD -- Tengoku | grep '\.lean$' | grep -v -E '/Deps\.lean$|^Tengoku/All\.lean$|^Tengoku/[^/]+\.lean$' | sort > /tmp/paths.txt
+          wc -l /tmp/paths.txt
+          sed -E 's#\.lean$##; s#/#.#g' /tmp/paths.txt > /tmp/mods.txt
+          lake build $(cat /tmp/mods.txt) 2>&1 | tail -2
+          lake build tengoku-isnad 2>&1 | tail -1
+      - name: "Modules without records, and ReesDepth on its own"
+        run: |
+          cd tree
+          rm -rf scripts && cp -r ../scripts-fix/scripts scripts
+          python3 - <<'PY'
+          import sys, collections
+          sys.path.insert(0, "scripts")
+          import isnad
+          mods = open("/tmp/mods.txt").read().split()
+          recs, ranges = isnad.facts(mods, [], None, 25, True)
+          has = collections.Counter(r.module for r in recs)
+          none = [m for m in mods if not has[m]]
+          print("RESULT modules without records:", len(none))
+          for m in none: print("RESULT   none:", m.split("RiemannRoch.", 1)[-1], open("Tengoku/" + m.split("Tengoku.", 1)[1].replace(".", "/") + ".lean").read().count("theorem ") + open("Tengoku/" + m.split("Tengoku.", 1)[1].replace(".", "/") + ".lean").read().count("lemma "), "theorem/lemma words")
+          PY
+          M=$(grep ReesDepth /tmp/mods.txt)
+          echo "RESULT ReesDepth module: $M"
+          lake env .lake/build/bin/tengoku-isnad --module $M 2>&1 | head -5 | cut -c1-200 | sed 's/^/RESULT rec: /'
+          cat > /tmp/Probe.lean <<'LEAN'
+          import Lean
+          open Lean
+          LEAN
+          sed -i 's/^          //' /tmp/Probe.lean
+          cat >> /tmp/Probe.lean <<LEAN
+          import $M
+          LEAN
+          printf 'import %s\nopen Lean in\n#eval show CoreM Unit from do\n  let env <- getEnv\n  for n in [`ModuleCat.exists_isRegular_tfae, `ModuleCat.subsingleton_ext_of_exists_isRegular] do\n    IO.println s!"RESULT {n}: contains={env.contains n} kind={(env.find? n).map (fun c => match c with | .thmInfo _ => "thm" | .defnInfo _ => "def" | .axiomInfo _ => "axiom" | _ => "other")}"\n' "$M" > /tmp/Probe2.lean
+          lake env lean /tmp/Probe2.lean 2>&1 | head -8 | cut -c1-240
