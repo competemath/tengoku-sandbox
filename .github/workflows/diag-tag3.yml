@@ -1,0 +1,46 @@
+name: diag-tag3
+run-name: "diagnose why the tagger leaves derived-alg-geo-lean part 2 Comparison.lean untagged (tengoku#698)"
+on:
+  push:
+    branches: [diag-tag3]
+permissions: { contents: read }
+jobs:
+  diag:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 90
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TENGOKU_CACHE_SOURCE: competemath/tengoku
+    steps:
+      - name: Free disk
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache /usr/local/share/boost /usr/share/swift /usr/lib/jvm /usr/share/miniconda || true
+          df -h / | tail -1
+      - name: The PR's tree (tengoku PR 698 head)
+        run: |
+          git clone -q --filter=blob:none --no-checkout https://github.com/competemath/tengoku tree
+          cd tree
+          git fetch -q origin "+refs/pull/698/head:refs/remotes/pr/698"
+          git checkout -q --detach refs/remotes/pr/698
+          git log --oneline -1
+      - name: elan
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSfL -o elan-init.sh https://raw.githubusercontent.com/leanprover/elan/0e36a07b9bbcc5381fa6250df109f9a4f94d7bac/elan-init.sh
+          echo "a620ff1641616222c8d37c54845492004bb84d6877cdbc944dd65c1aa685bf53  elan-init.sh" | sha256sum -c -
+          sh elan-init.sh -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: The compiled tree (the library's cache)
+        run: cd tree && scripts/cache.sh get 2>&1 | tail -3
+      - name: Build the one module and the tagger
+        run: |
+          cd tree
+          lake build Tengoku.DerivedAlgGeoLean.DerivedAlgGeo.CategoryTheory.Triangulated.StabilityCondition.CentralCharge.Exponential.Comparison 2>&1 | tail -3
+          lake build tengoku-isnad 2>&1 | tail -1
+      - name: What the tagger's Lean side records and ranges for the module, and what the tagger writes
+        run: |
+          cd tree
+          M=Tengoku.DerivedAlgGeoLean.DerivedAlgGeo.CategoryTheory.Triangulated.StabilityCondition.CentralCharge.Exponential.Comparison
+          echo "--- records"; lake env .lake/build/bin/tengoku-isnad --module $M 2>&1 | cut -c1-160 | head -12
+          echo "--- ranges"; lake env .lake/build/bin/tengoku-isnad --ranges --module $M 2>&1 | cut -c1-200 | head -12
+          echo "--- tagger"; python3 scripts/isnad.py tag --module $M --write 2>&1 | tail -12
+          git diff --stat | tail -2
