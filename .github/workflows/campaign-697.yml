@@ -1,4 +1,5 @@
 name: campaign-697
+# rerun for the second commit of tengoku#697
 run-name: "campaign for competemath/tengoku#697 (born_tagged, names the tagger leaves out)"
 on:
   push:
