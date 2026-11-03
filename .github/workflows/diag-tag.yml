@@ -1,0 +1,48 @@
+name: diag-tag
+run-name: "diagnose why the tagger leaves azurite's UInt64.Equiv.Basic untagged (tengoku#681)"
+on:
+  push:
+    branches: [diag-tag]
+permissions: { contents: read }
+jobs:
+  diag:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 90
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TENGOKU_CACHE_SOURCE: competemath/tengoku
+    steps:
+      - name: Free disk
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache /usr/local/share/boost /usr/share/swift /usr/lib/jvm /usr/share/miniconda || true
+          df -h / | tail -1
+      - name: The PR's tree (tengoku PR 681 head)
+        run: |
+          git clone -q --filter=blob:none --no-checkout https://github.com/competemath/tengoku tree
+          cd tree
+          git fetch -q origin "+refs/pull/681/head:refs/remotes/pr/681"
+          git checkout -q --detach refs/remotes/pr/681
+          git log --oneline -1
+      - name: elan
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSfL -o elan-init.sh https://raw.githubusercontent.com/leanprover/elan/0e36a07b9bbcc5381fa6250df109f9a4f94d7bac/elan-init.sh
+          echo "a620ff1641616222c8d37c54845492004bb84d6877cdbc944dd65c1aa685bf53  elan-init.sh" | sha256sum -c -
+          sh elan-init.sh -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: The compiled tree (the library's cache)
+        run: cd tree && scripts/cache.sh get 2>&1 | tail -3
+      - name: Build the tree with the PR's modules, and the tagger
+        run: |
+          cd tree
+          lake build Tengoku.All 2>&1 | tail -2
+          lake build tengoku-isnad 2>&1 | tail -1
+      - name: Tag only the module in question, without writing, and show every skip
+        run: |
+          cd tree
+          python3 scripts/isnad.py tag --module Tengoku.Azurite.Azurite.UInt64.Equiv.Basic 2>&1 | tail -20
+          echo "--- and the module as the tagger sees it"
+          cat Tengoku/Azurite/Azurite/UInt64/Equiv/Basic.lean
+          echo "--- all skip reasons over the whole PR (counts)"
+          mods=(); while read -r m; do mods+=(--module "$m"); done < <(git ls-tree -r --name-only HEAD Tengoku/Azurite | grep '\.lean$' | sed -E 's#/#.#g; s#\.lean$##' | grep -v '\.Deps$')
+          python3 scripts/isnad.py tag "${mods[@]}" 2>&1 | grep '^skipped' | sed -E 's/^skipped [^:]+: //' | sort | uniq -c | sort -rn
+          python3 scripts/isnad.py tag "${mods[@]}" 2>&1 | grep -iE 'UInt64|toNat' | head
