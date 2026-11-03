@@ -1,0 +1,62 @@
+name: diag-tag4
+run-name: "diagnose why the tagger leaves derived-alg-geo-lean part 2 Comparison.lean untagged, whole-PR tag as the lane runs it (tengoku#698)"
+on:
+  push:
+    branches: [diag-tag4]
+permissions: { contents: read }
+jobs:
+  diag:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 90
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TENGOKU_CACHE_SOURCE: competemath/tengoku
+    steps:
+      - name: Free disk
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache /usr/local/share/boost /usr/share/swift /usr/lib/jvm /usr/share/miniconda || true
+          df -h / | tail -1
+      - name: The PR's tree (tengoku PR 698 head)
+        run: |
+          git clone -q --filter=blob:none --no-checkout https://github.com/competemath/tengoku tree
+          cd tree
+          git fetch -q origin "+refs/pull/698/head:refs/remotes/pr/698"
+          git checkout -q --detach refs/remotes/pr/698
+          git log --oneline -1
+      - name: elan
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSfL -o elan-init.sh https://raw.githubusercontent.com/leanprover/elan/0e36a07b9bbcc5381fa6250df109f9a4f94d7bac/elan-init.sh
+          echo "a620ff1641616222c8d37c54845492004bb84d6877cdbc944dd65c1aa685bf53  elan-init.sh" | sha256sum -c -
+          sh elan-init.sh -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: The compiled tree (the library's cache)
+        run: cd tree && scripts/cache.sh get 2>&1 | tail -3
+      - name: Build the PR's modules, tag them all as the lane does, and say what was left alone and why
+        run: |
+          cd tree
+          B=$(git merge-base HEAD origin/main 2>/dev/null || true)
+          git fetch -q origin main && B=$(git merge-base HEAD FETCH_HEAD)
+          git diff --name-only --diff-filter=A "$B" HEAD -- 'Tengoku/DerivedAlgGeoLean' | grep '\.lean$' | grep -v '/Deps\.lean$' > /tmp/paths.txt
+          wc -l /tmp/paths.txt
+          sed -E 's#\.lean$##; s#/#.#g' /tmp/paths.txt > /tmp/mods.txt
+          lake build $(cat /tmp/mods.txt) 2>&1 | tail -2
+          lake build tengoku-isnad 2>&1 | tail -1
+          args=(); while read -r m; do args+=(--module "$m"); done < /tmp/mods.txt
+          python3 scripts/isnad.py tag "${args[@]}" --write 2>&1 | tee /tmp/tag.log | tail -3
+          echo "--- skipped by reason"
+          grep '^skipped' /tmp/tag.log | sed -E 's/^skipped [^:]*: //' | sed -E "s/'[^']*'/'..'/g" | sort | uniq -c | sort -rn | head -12
+          echo "--- skipped lines naming a file (left alone)"
+          grep -E '^skipped .*(left alone|does not exist)' /tmp/tag.log | head -10 | cut -c1-300
+          echo "--- modules with theorems that came out unchanged"
+          cd scripts/ci && python3 - <<'PY'
+          import subprocess, sys
+          sys.path.insert(0, ".")
+          from born_tagged import module_errors
+          changed = set(subprocess.run(["git", "diff", "--name-only"], cwd="../..", capture_output=True, text=True).stdout.split())
+          bad = []
+          for p in open("/tmp/paths.txt").read().split():
+              t = open("../../" + p).read()
+              if module_errors(p, t): bad.append(p)
+          print("modules the gate would still refuse after tagging:", len(bad))
+          for p in bad[:30]: print("  ", p)
+          PY
