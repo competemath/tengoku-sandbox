@@ -24,9 +24,9 @@ jobs:
         run: |
           git clone -q --filter=blob:none --no-checkout https://github.com/competemath/tengoku tree
           cd tree
-          git fetch -q origin "+refs/pull/${{ matrix.pr }}/head:refs/remotes/pr" "+refs/heads/fix/tag-modules-exact:refs/remotes/fix"
+          git fetch -q origin "+refs/pull/${{ matrix.pr }}/head:refs/remotes/pr"
           git checkout -q --detach refs/remotes/pr
-          for v in main fix; do
+          for v in main; do
             rev=origin/main; [ "$v" = fix ] && rev=refs/remotes/fix
             mkdir -p "../scripts-$v"; git archive "$rev" scripts | tar -x -C "../scripts-$v"
           done
