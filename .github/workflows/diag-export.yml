@@ -46,8 +46,10 @@ jobs:
             echo "SLICE $m: $(wc -l < "$out") lines, $(du -h "$out" | cut -f1), $(( $(date +%s) - s )) s, peak RSS $(grep 'Maximum resident' "$RUNNER_TEMP/t.log" | awk '{print int($NF/1024/1024*10)/10}') GB"
             rm -f "$out"
           }
-          for m in Tengoku.Seed Tengoku.Azurite Tengoku.DgLean Tengoku.Flt Tengoku.Lean-pool; do [ -f "Tengoku/${m#Tengoku.}.lean" ] && slice "$m"; done
+          for f in $(ls Tengoku/*.lean | grep -vE "All.lean|Studied.lean" | head -400 | awk 'NR%40==1'); do m="Tengoku.$(basename "$f" .lean)"; slice "$m" || true; done
+          true
       - name: The whole tree, sampled every minute for up to 70 minutes
+        if: always()
         run: |
           cd tree
           X="$RUNNER_TEMP/lean4export/.lake/build/bin/lean4export"
