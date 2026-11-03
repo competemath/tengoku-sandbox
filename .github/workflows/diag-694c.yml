@@ -91,7 +91,8 @@ jobs:
           def hides(ms):
               global calls
               calls += 1
-              args = ["--module", R] + [x for m in ms for x in ("--module", m)]
+              order = open("/tmp/batch.txt").read().split()
+              args = [x for m in sorted(ms + [R], key=order.index) for x in ("--module", m)]
               r = subprocess.run(["lake", "env", ".lake/build/bin/tengoku-isnad", *args], capture_output=True, text=True)
               n = sum(1 for ln in r.stdout.splitlines() if R in ln.split("\t")[2:3])
               print(f"call {calls}: {len(ms)} modules -> rc {r.returncode}, ReesDepth records {n}, total lines {len(r.stdout.splitlines())}, stderr {r.stderr.strip()[:120]!r}", flush=True)
