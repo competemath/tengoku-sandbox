@@ -114,5 +114,4 @@ jobs:
           print("RESULT smallest hiding set:", len(cur))
           for m in cur: print("RESULT   ", m.split("RiemannRoch.", 1)[-1])
           PY
-          sed -i 's/^          //' /tmp/ddmin.py
           python3 /tmp/ddmin.py
