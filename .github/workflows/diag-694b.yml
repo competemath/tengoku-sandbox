@@ -1,0 +1,94 @@
+name: diag-694b
+run-name: "bisect which co-listed module hides ReesDepth's records in a batch of 25 (tengoku#694)"
+on:
+  push:
+    branches: [diag-694b]
+permissions: { contents: read }
+jobs:
+  campaign:
+    strategy:
+      fail-fast: false
+      matrix:
+        pr: [694]
+    runs-on: ubuntu-26.04
+    timeout-minutes: 120
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TENGOKU_CACHE_SOURCE: competemath/tengoku
+    steps:
+      - name: Free disk
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache /usr/local/share/boost /usr/share/swift /usr/lib/jvm /usr/share/miniconda || true
+          df -h / | tail -1
+      - name: "The PR's tree, and the two copies of scripts (main's and the fix's)"
+        run: |
+          git clone -q --filter=blob:none --no-checkout https://github.com/competemath/tengoku tree
+          cd tree
+          git fetch -q origin "+refs/pull/${{ matrix.pr }}/head:refs/remotes/pr" "+refs/heads/fix/tag-modules-exact:refs/remotes/fix"
+          git checkout -q --detach refs/remotes/pr
+          for v in main fix; do
+            rev=origin/main; [ "$v" = fix ] && rev=refs/remotes/fix
+            mkdir -p "../scripts-$v"; git archive "$rev" scripts | tar -x -C "../scripts-$v"
+          done
+          git log --oneline -1
+      - name: elan
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSfL -o elan-init.sh https://raw.githubusercontent.com/leanprover/elan/0e36a07b9bbcc5381fa6250df109f9a4f94d7bac/elan-init.sh
+          echo "a620ff1641616222c8d37c54845492004bb84d6877cdbc944dd65c1aa685bf53  elan-init.sh" | sha256sum -c -
+          sh elan-init.sh -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: The compiled tree (the library's cache)
+        run: cd tree && scripts/cache.sh get 2>&1 | tail -3
+      - name: "The PR's modules and the tagger's executable"
+        run: |
+          cd tree
+          git fetch -q origin main && B=$(git merge-base HEAD FETCH_HEAD)
+          git diff --name-only --diff-filter=A "$B" HEAD -- Tengoku | grep '\.lean$' | grep -v -E '/Deps\.lean$|^Tengoku/All\.lean$|^Tengoku/[^/]+\.lean$' | sort > /tmp/paths.txt
+          wc -l /tmp/paths.txt
+          sed -E 's#\.lean$##; s#/#.#g' /tmp/paths.txt > /tmp/mods.txt
+          lake build $(cat /tmp/mods.txt) 2>&1 | tail -2
+          lake build tengoku-isnad 2>&1 | tail -1
+      - name: "Build the batch and the tagger"
+        run: |
+          cd tree
+          cat > /tmp/batch.txt <<'EOF'
+          Tengoku.GrothendieckRiemannRoch.RiemannRoch.Chow.NormalCone.ProjectiveCompletionDeformationInfinityChartGlueB6
+          Tengoku.GrothendieckRiemannRoch.RiemannRoch.Chow.OrderOfVanishingIso
+          Tengoku.GrothendieckRiemannRoch.RiemannRoch.Chow.PrincipalBaseChange
+          Tengoku.GrothendieckRiemannRoch.RiemannRoch.Chow.PrincipalIdealSheafChart
+          Tengoku.GrothendieckRiemannRoch.RiemannRoch.Chow.PrincipalKernelTransport
+          Tengoku.GrothendieckRiemannRoch.RiemannRoch.Chow.PrincipalOpenChart
+          Tengoku.GrothendieckRiemannRoch.RiemannRoch.Chow.PrincipalOrderLength
+          Tengoku.GrothendieckRiemannRoch.RiemannRoch.Chow.PrincipalPullbackKernel
+          Tengoku.GrothendieckRiemannRoch.RiemannRoch.Chow.PrincipalStalkQuotient
+          Tengoku.GrothendieckRiemannRoch.RiemannRoch.Chow.ProperPushforwardNormAlgebra
+          Tengoku.GrothendieckRiemannRoch.RiemannRoch.Chow.ReesDepth
+          Tengoku.GrothendieckRiemannRoch.RiemannRoch.Chow.RegularLocalBasics
+          Tengoku.GrothendieckRiemannRoch.RiemannRoch.Chow.RegularLocalCohenMacaulay
+          Tengoku.GrothendieckRiemannRoch.RiemannRoch.Chow.RegularLocalDomain
+          Tengoku.GrothendieckRiemannRoch.RiemannRoch.Chow.RegularLocalDomainGeneral
+          Tengoku.GrothendieckRiemannRoch.RiemannRoch.Chow.RegularLocalHeightOneDVR
+          Tengoku.GrothendieckRiemannRoch.RiemannRoch.Chow.RegularLocalHeightOnePrincipal
+          Tengoku.GrothendieckRiemannRoch.RiemannRoch.Chow.RegularLocalProjectiveDimension
+          Tengoku.GrothendieckRiemannRoch.RiemannRoch.Chow.RegularLocalUFD
+          Tengoku.GrothendieckRiemannRoch.RiemannRoch.Chow.SerreTorMultiplicity
+          Tengoku.GrothendieckRiemannRoch.RiemannRoch.Chow.StalkDimensionFormulaPushforward
+          Tengoku.GrothendieckRiemannRoch.RiemannRoch.Chow.StalkGenerization
+          Tengoku.GrothendieckRiemannRoch.RiemannRoch.Chow.StalkOrdDivisibility
+          Tengoku.GrothendieckRiemannRoch.RiemannRoch.Foundations.SmoothRegularStalks
+          Tengoku.GrothendieckRiemannRoch.RiemannRoch.GradedModuleAvoidanceD29
+          EOF
+          lake build $(cat /tmp/batch.txt) 2>&1 | tail -2
+          lake build tengoku-isnad 2>&1 | tail -1
+      - name: "ReesDepth's record count alone, in the whole batch, and with each other module of the batch"
+        run: |
+          cd tree
+          R=Tengoku.GrothendieckRiemannRoch.RiemannRoch.Chow.ReesDepth
+          count() { lake env .lake/build/bin/tengoku-isnad "$@" 2>/dev/null | grep -c -F "$R" || true; }
+          echo "RESULT alone: $(count --module $R)"
+          args=(); while read -r m; do args+=(--module "$m"); done < /tmp/batch.txt
+          echo "RESULT whole batch of 25: $(count "${args[@]}")"
+          while read -r m; do
+            [ "$m" = "$R" ] && continue
+            echo "RESULT with $(echo $m | sed 's/.*RiemannRoch.//'): $(count --module $R --module $m)"
+          done < /tmp/batch.txt
