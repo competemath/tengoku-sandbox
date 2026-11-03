@@ -1,0 +1,72 @@
+name: campaign-697
+run-name: "campaign for competemath/tengoku#697 (born_tagged, names the tagger leaves out)"
+on:
+  push:
+    branches: [campaign-697]
+permissions: { contents: read }
+jobs:
+  gate-rule:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Objects, two copies of the tooling (main's and the fix's)
+        run: |
+          git clone -q --filter=blob:none --no-checkout https://github.com/competemath/tengoku obj
+          cd obj
+          git fetch -q origin "+refs/pull/697/head:refs/remotes/fix" "+refs/pull/681/head:refs/remotes/pr/681" "+refs/pull/688/head:refs/remotes/pr/688" "+refs/pull/689/head:refs/remotes/pr/689" "+refs/pull/695/head:refs/remotes/pr/695"
+          for v in main fix; do
+            rev=origin/main; [ "$v" = fix ] && rev=refs/remotes/fix
+            mkdir -p "../tools-$v"; git archive "$rev" scripts schemas tools | tar -x -C "../tools-$v"
+          done
+      - name: The text rule on the four real modules that were refused, and on every module of those four PRs
+        run: |
+          python3 - <<'PY'
+          import os, subprocess, sys, importlib
+          obj = os.path.abspath("obj")
+          refused = {
+              681: "Tengoku/Azurite/Azurite/UInt64/Equiv/Basic.lean",
+              688: "Tengoku/QuotientSubmoduleEquidistribution/QuotientSubmoduleEquidistribution/Foundation/RingTheory/LocalRing/Basic.lean",
+              689: "Tengoku/QuadraticNumberFields/QNFMathlib/NumberTheory/LegendreSymbol/JacobiSymbol.lean",
+              695: "Tengoku/MagnitudeConjecture/MagnitudeConjecture/Combinatorics/TranslationInvariantSubset.lean",
+          }
+          def load(v):
+              for m in [k for k in sys.modules if k in ("born_tagged", "_git", "isnad", "isnad_tag", "lean_lex", "studied_check", "tag_check")]: del sys.modules[m]
+              sys.path[:0] = [os.path.abspath(f"tools-{v}/scripts/ci"), os.path.abspath(f"tools-{v}/scripts")]
+              os.environ["TENGOKU_CI_ROOT"] = obj
+              mod = importlib.import_module("born_tagged")
+              del sys.path[:2]
+              return mod
+          def show(n, path):
+              return subprocess.run(["git", "show", f"refs/remotes/pr/{n}:{path}"], cwd=obj, capture_output=True, text=True, check=True).stdout
+          bt = {v: load(v) for v in ("main", "fix")}
+          bad = 0
+          for n, path in refused.items():
+              text = show(n, path)
+              em, ef = bt["main"].module_errors(path, text), bt["fix"].module_errors(path, text)
+              ok = bool(em) and not ef
+              bad += 0 if ok else 1
+              print(f"#{n} {path.split('/')[-1]}: main asks for a tag: {bool(em)}; fix asks: {bool(ef)}  ->  {'OK' if ok else 'WRONG'}")
+          # nothing else changes: over every module of the four PRs, the fix asks for a tag only where main did, and for fewer modules only where every theorem is left out by name
+          for n in refused:
+              files = [p for p in subprocess.run(["git", "ls-tree", "-r", "--name-only", f"refs/remotes/pr/{n}", "Tengoku/"], cwd=obj, capture_output=True, text=True, check=True).stdout.split() if p.endswith(".lean") and not p.endswith("/Deps.lean") and p.count("/") >= 3]
+              only_main, only_fix = [], []
+              for p in files:
+                  t = show(n, p)
+                  em, ef = bool(bt["main"].module_errors(p, t)), bool(bt["fix"].module_errors(p, t))
+                  if em and not ef: only_main.append(p)
+                  if ef and not em: only_fix.append(p)
+              print(f"#{n}: {len(files)} modules; asked by main only: {[x.split('/')[-1] for x in only_main]}; asked by the fix only: {only_fix}")
+              if only_fix: bad += 1
+          sys.exit(1 if bad else 0)
+          PY
+      - name: The gate tests, main's tooling against the fix's (same environment, same failures)
+        run: |
+          git config --global user.email c@c; git config --global user.name c; git config --global init.defaultBranch main
+          for v in main fix; do
+            (cd "tools-$v/scripts/ci/tests" && python3 -m unittest -v test_born_tagged test_autotag > "../../../../t-$v.txt" 2>&1 || true)
+            echo "== $v: $(grep -E '^Ran ' t-$v.txt) $(tail -1 t-$v.txt)"
+            grep -E '(FAIL|ERROR)$|^(FAIL|ERROR):' "t-$v.txt" | sed -E 's/ \(.*//' | sort -u > "b-$v.txt" || true
+          done
+          echo "--- failing in the fix and not in main (must be empty):"; comm -13 b-main.txt b-fix.txt | tee nb.txt
+          echo "--- the new test:"; grep -E "leaves_out_by_name" t-fix.txt
+          [ ! -s nb.txt ]
