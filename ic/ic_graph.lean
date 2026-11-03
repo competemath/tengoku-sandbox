@@ -15,7 +15,7 @@ partial def visit (seen : IO.Ref (Std.HashSet Name)) (out : IO.Ref (Array String
   let (data, region) ← readModuleData path
   let imps := data.imports.map (·.module)
   out.modify (·.push s!"{n}\t{path}\t{" ".intercalate (imps.toList.map toString)}")
-  freeRegions #[region]
+  region.free
   for i in imps do visit seen out i
 
 def main (roots : List String) : IO UInt32 := do
