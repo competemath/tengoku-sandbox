@@ -48,7 +48,7 @@ jobs:
           args=(); while read -r m; do args+=(--module "$m"); done < /tmp/mods.txt
           run() { # label, scripts dir, extra args, command
             label=$1; dir=$2; extra=$3; cmd=$4
-            rm -rf scripts && cp -r "../$dir/scripts" scripts
+            rm -rf scripts && cp -r "../scripts-$dir/scripts" scripts
             base=$(free -m | awk '/Mem:/{print $7}')
             ( min=$base; while sleep 2; do a=$(free -m | awk '/Mem:/{print $7}'); [ "$a" -lt "$min" ] && { min=$a; echo "$min" > /tmp/min.$label; }; done ) &
             S=$!
