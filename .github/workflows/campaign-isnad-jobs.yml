@@ -42,27 +42,44 @@ jobs:
           mods=(); while read -r m; do mods+=("$m"); done < /tmp/mods.txt
           lake build "${mods[@]}" 2>&1 | tail -1
           lake build tengoku-isnad 2>&1 | tail -1
-      - name: "check-tags and tag (no --write) of the PR's modules: the fix with --jobs 3, then main's scripts as they are"
+      - name: "Where the time goes: facts() of the PR's modules with the fix, --jobs 1 and 3 on 75 modules, then --jobs 3 on all of them; every tengoku-isnad call timed, memory sampled"
         run: |
           cd tree
-          args=(); while read -r m; do args+=(--module "$m"); done < /tmp/mods.txt
-          run() { # label, scripts dir, extra args, command
-            label=$1; dir=$2; extra=$3; cmd=$4
-            rm -rf scripts && cp -r "../scripts-$dir/scripts" scripts
-            base=$(free -m | awk '/Mem:/{print $7}')
-            ( min=$base; while sleep 2; do a=$(free -m | awk '/Mem:/{print $7}'); [ "$a" -lt "$min" ] && { min=$a; echo "$min" > /tmp/min.$label; }; done ) &
+          rm -rf scripts && cp -r ../scripts-fix/scripts scripts
+          cat > /tmp/prof.py <<'PY'
+          import sys, time, threading, subprocess, os
+          sys.path.insert(0, "scripts")
+          import isnad
+          label, jobs, limit = sys.argv[1], int(sys.argv[2]), int(sys.argv[3])
+          mods = open("/tmp/mods.txt").read().split()[: limit or None]
+          log, lock = [], threading.Lock()
+          def wrap(f, kind):
+              def g(args, *a, **k):
+                  n = sum(1 for x in args if x == "--module")
+                  t = time.time(); r = f(args, *a, **k); d = time.time() - t
+                  with lock: log.append((kind, n, d))
+                  return r
+              return g
+          isnad.run_exe = wrap(isnad.run_exe, "recs")
+          isnad.run_exe_lines = wrap(isnad.run_exe_lines, "ranges")
+          t0 = time.time()
+          recs, ranges = isnad.facts(mods, [], None, 25, exact=True, jobs=jobs)
+          wall = time.time() - t0
+          alone = [(k, d) for k, n, d in log if n == 1]
+          batch = [(k, d) for k, n, d in log if n > 1]
+          print(f"RESULT {label}: {len(mods)} modules, --jobs {jobs}: facts took {wall:.0f} s; {len(batch)} batch calls ({sum(d for _, d in batch):.0f} s of process time), {len(alone)} calls on a single module ({sum(d for _, d in alone):.0f} s of process time); {len(recs)} records, {len(ranges)} ranges")
+          import hashlib
+          print(f"RESULT {label}: digest {hashlib.sha256(chr(10).join(r.name + r.module + r.canonical for r in recs).encode() + chr(10).join(ranges).encode()).hexdigest()[:16]}")
+          PY
+          run() {
+            label=$1; shift
+            base=$(free -m | awk '/Mem:/{print $7}'); rm -f /tmp/min.$label; echo $base > /tmp/min.$label
+            ( min=$base; while sleep 2; do a=$(free -m | awk '/Mem:/{print $7}'); if [ "$a" -lt "$min" ]; then min=$a; echo "$min" > /tmp/min.$label; fi; done ) &
             S=$!
-            t0=$(date +%s)
-            python3 scripts/isnad.py $cmd "${args[@]}" $extra > /tmp/out.$label 2>&1; rc=$?
-            t=$(( $(date +%s) - t0 ))
-            kill $S 2>/dev/null; wait $S 2>/dev/null
-            used=$(( base - $(cat /tmp/min.$label 2>/dev/null || echo $base) ))
-            echo "RESULT $label: $cmd took $t s, exit $rc, memory used at most $used MB (of $base MB available at the start), $(wc -l < /tmp/out.$label) lines"
+            python3 /tmp/prof.py $label "$@"
+            kill $S 2>/dev/null || true; wait $S 2>/dev/null || true
+            echo "RESULT $label: memory used at most $(( base - $(cat /tmp/min.$label) )) MB of $base MB available at the start"
           }
-          run fix3-check fix "--jobs 3" check-tags
-          run main-check main "" check-tags
-          run fix3-tag fix "--jobs 3" tag
-          run main-tag main "" tag
-          cmp -s /tmp/out.fix3-check /tmp/out.main-check && echo "RESULT same: check-tags prints the same bytes with --jobs 3 and as main's" || { echo "RESULT DIFFERENT check-tags:"; diff /tmp/out.fix3-check /tmp/out.main-check | head -20; }
-          cmp -s /tmp/out.fix3-tag /tmp/out.main-tag && echo "RESULT same: tag (no --write) prints the same bytes with --jobs 3 and as main's" || { echo "RESULT DIFFERENT tag:"; diff /tmp/out.fix3-tag /tmp/out.main-tag | head -20; }
-          tail -3 /tmp/out.fix3-check
+          run subset-jobs3 3 75
+          run subset-jobs1 1 75
+          run all-jobs3 3 0
