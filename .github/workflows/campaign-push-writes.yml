@@ -1,0 +1,74 @@
+name: campaign-push-writes
+run-name: "campaign for autotag_push repeating a blob creation after a transient error: main's gh_api against the fix's, through a gh that fails POST git/blobs twice, on this repository's own blobs"
+on:
+  push:
+    branches: [campaign-push-writes]
+permissions: { contents: write }
+jobs:
+  writes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+      AUTOTAG_ACTORS: "tengoku-intake[bot]"
+    steps:
+      - name: Two copies of the tooling (main's and the fix's)
+        run: |
+          git clone -q --filter=blob:none --no-checkout https://github.com/competemath/tengoku obj
+          cd obj
+          git fetch -q origin "+refs/heads/fix/autotag-push-retries-idempotent-writes:refs/remotes/fix"
+          for v in main fix; do
+            rev=origin/main; [ "$v" = fix ] && rev=refs/remotes/fix
+            mkdir -p "../tools-$v"; git archive "$rev" scripts | tar -x -C "../tools-$v"
+          done
+      - name: "A real blob creation in this repository through a gh that answers 'unexpected end of JSON input' twice first, main's tooling against the fix's; and a commit creation that must not be repeated"
+        run: |
+          mkdir -p shim; REAL="$(command -v gh)"
+          cat > shim/gh <<SH
+          #!/usr/bin/env bash
+          n=\$(cat "\$FLAKY_COUNT" 2>/dev/null || echo 0)
+          if [ "\$1" = api ] && [ "\$n" -lt "\$FLAKY_FAILS" ]; then echo \$((n+1)) > "\$FLAKY_COUNT"; echo "gh api POST: unexpected end of JSON input" >&2; exit 1; fi
+          exec "$REAL" "\$@"
+          SH
+          sed -i 's/^          //' shim/gh; chmod +x shim/gh
+          python3 - <<'PY'
+          import os, subprocess, sys, importlib, tempfile, base64
+          shim = os.path.abspath("shim"); repo = os.environ["GITHUB_REPOSITORY"]
+          results = {}
+          for v in ("main", "fix"):
+              for m in [k for k in sys.modules if k in ("autotag_push", "autotag", "born_tagged", "_git", "isnad", "isnad_tag", "lean_lex", "studied_check", "tag_check")]: del sys.modules[m]
+              sys.path[:0] = [os.path.abspath(f"tools-{v}/scripts/ci"), os.path.abspath(f"tools-{v}/scripts")]
+              os.environ["PATH"] = shim + os.pathsep + os.environ["PATH"].replace(shim + os.pathsep, "")
+              ap = importlib.import_module("autotag_push")
+              # the blob: content-addressed, repeated by the fix
+              os.environ["FLAKY_COUNT"] = tempfile.mktemp(); os.environ["FLAKY_FAILS"] = "2"
+              try:
+                  b = ap.gh_api("POST", f"repos/{repo}/git/blobs", {"content": base64.b64encode(b"campaign-push-writes " + v.encode()).decode(), "encoding": "base64"})
+                  results[(v, "blob")] = f"created blob {b['sha'][:12]} after {open(os.environ['FLAKY_COUNT']).read().strip()} transient errors"
+              except ap.Refused as e:
+                  results[(v, "blob")] = f"REFUSED after {open(os.environ['FLAKY_COUNT']).read().strip() if os.path.exists(os.environ['FLAKY_COUNT']) else 0} error(s): {str(e)[:100]}"
+              # a commit: never repeated by either (the shim fails the first call; a second call would create a commit)
+              os.environ["FLAKY_COUNT"] = tempfile.mktemp(); os.environ["FLAKY_FAILS"] = "1"
+              try:
+                  ap.gh_api("POST", f"repos/{repo}/git/commits", {"message": "never", "tree": "4b825dc642cb6eb9a060e54bf8d69288fbee4904"})
+                  results[(v, "commit")] = "CREATED (must not happen)"
+              except ap.Refused as e:
+                  results[(v, "commit")] = f"refused after {open(os.environ['FLAKY_COUNT']).read().strip()} error(s), not repeated"
+              del sys.path[:2]
+          for k, r in results.items(): print(f"{k[0]:5} {k[1]:7} | {r}")
+          ok = results[("main", "blob")].startswith("REFUSED after 1") and results[("fix", "blob")].startswith("created blob") and "after 2" in results[("fix", "blob")] and all(results[(v, "commit")].startswith("refused after 1") for v in ("main", "fix"))
+          print("campaign:", "OK (main refuses the blob at the first empty answer; the fix creates it after two; neither repeats a commit)" if ok else "WRONG")
+          sys.exit(0 if ok else 1)
+          PY
+      - name: The tooling tests, main's against the fix's (same environment, same failures)
+        run: |
+          git config --global user.email c@c; git config --global user.name c; git config --global init.defaultBranch main
+          python3 -m pip install -q pyyaml
+          for v in main fix; do
+            (cd "tools-$v/scripts/ci/tests" && python3 -m unittest -v test_autotag > "../../../../t-$v.txt" 2>&1 || true)
+            echo "== $v: $(grep -E '^Ran ' t-$v.txt) $(tail -1 t-$v.txt)"
+            grep -E '(FAIL|ERROR)$|^(FAIL|ERROR):' "t-$v.txt" | sed -E 's/ \(.*//' | sort -u > "b-$v.txt" || true
+          done
+          echo "--- failing in the fix and not in main (must be empty):"; comm -13 b-main.txt b-fix.txt | tee nb.txt
+          echo "--- the new tests:"; grep -E "blob|content_addressed" t-fix.txt | head -6
+          [ ! -s nb.txt ]
