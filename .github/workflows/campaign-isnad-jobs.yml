@@ -1,0 +1,68 @@
+name: campaign-isnad-jobs
+run-name: "campaign for the tagger running its batches three at a time: check-tags and tag of tengoku#710's modules, main's scripts against the fix's, times, memory, and the outputs compared"
+on:
+  push:
+    branches: [campaign-isnad-jobs]
+permissions: { contents: read }
+jobs:
+  compare:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 240
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TENGOKU_CACHE_SOURCE: competemath/tengoku
+    steps:
+      - name: Free disk
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache /usr/local/share/boost /usr/share/swift /usr/lib/jvm /usr/share/miniconda || true
+          df -h / | tail -1; nproc; free -m | head -2
+      - name: "The PR's tree (tengoku#710 at its head) and the two copies of scripts (main's and the fix's)"
+        run: |
+          git clone -q --filter=blob:none --no-checkout https://github.com/competemath/tengoku tree
+          cd tree
+          git fetch -q origin "+refs/pull/710/head:refs/remotes/pr" "+refs/heads/fix/isnad-batches-in-parallel:refs/remotes/fix" main
+          git checkout -q --detach refs/remotes/pr
+          for v in main fix; do
+            rev=origin/main; [ "$v" = fix ] && rev=refs/remotes/fix
+            mkdir -p "../scripts-$v"; git archive "$rev" scripts | tar -x -C "../scripts-$v"
+          done
+          git log --oneline -1
+          B=$(git merge-base HEAD origin/main)
+          git diff --name-only --diff-filter=A "$B" HEAD -- Tengoku | grep '\.lean$' | grep -v -E '/Deps\.lean$|^Tengoku/All\.lean$|^Tengoku/[^/]+\.lean$' | sed -E 's#\.lean$##; s#/#.#g' | sort > /tmp/mods.txt
+          echo "modules: $(wc -l < /tmp/mods.txt)"
+      - name: elan
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSfL -o elan-init.sh https://raw.githubusercontent.com/leanprover/elan/0e36a07b9bbcc5381fa6250df109f9a4f94d7bac/elan-init.sh
+          echo "a620ff1641616222c8d37c54845492004bb84d6877cdbc944dd65c1aa685bf53  elan-init.sh" | sha256sum -c -
+          sh elan-init.sh -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: The compiled tree, the PR's modules (not timed) and the tagger's executable
+        run: |
+          cd tree && scripts/cache.sh get 2>&1 | tail -1
+          mods=(); while read -r m; do mods+=("$m"); done < /tmp/mods.txt
+          lake build "${mods[@]}" 2>&1 | tail -1
+          lake build tengoku-isnad 2>&1 | tail -1
+      - name: "check-tags and tag (no --write) of the PR's modules: the fix with --jobs 3, then main's scripts as they are"
+        run: |
+          cd tree
+          args=(); while read -r m; do args+=(--module "$m"); done < /tmp/mods.txt
+          run() { # label, scripts dir, extra args, command
+            label=$1; dir=$2; extra=$3; cmd=$4
+            rm -rf scripts && cp -r "../$dir/scripts" scripts
+            base=$(free -m | awk '/Mem:/{print $7}')
+            ( min=$base; while sleep 2; do a=$(free -m | awk '/Mem:/{print $7}'); [ "$a" -lt "$min" ] && { min=$a; echo "$min" > /tmp/min.$label; }; done ) &
+            S=$!
+            t0=$(date +%s)
+            python3 scripts/isnad.py $cmd "${args[@]}" $extra > /tmp/out.$label 2>&1; rc=$?
+            t=$(( $(date +%s) - t0 ))
+            kill $S 2>/dev/null; wait $S 2>/dev/null
+            used=$(( base - $(cat /tmp/min.$label 2>/dev/null || echo $base) ))
+            echo "RESULT $label: $cmd took $t s, exit $rc, memory used at most $used MB (of $base MB available at the start), $(wc -l < /tmp/out.$label) lines"
+          }
+          run fix3-check fix "--jobs 3" check-tags
+          run main-check main "" check-tags
+          run fix3-tag fix "--jobs 3" tag
+          run main-tag main "" tag
+          cmp -s /tmp/out.fix3-check /tmp/out.main-check && echo "RESULT same: check-tags prints the same bytes with --jobs 3 and as main's" || { echo "RESULT DIFFERENT check-tags:"; diff /tmp/out.fix3-check /tmp/out.main-check | head -20; }
+          cmp -s /tmp/out.fix3-tag /tmp/out.main-tag && echo "RESULT same: tag (no --write) prints the same bytes with --jobs 3 and as main's" || { echo "RESULT DIFFERENT tag:"; diff /tmp/out.fix3-tag /tmp/out.main-tag | head -20; }
+          tail -3 /tmp/out.fix3-check
