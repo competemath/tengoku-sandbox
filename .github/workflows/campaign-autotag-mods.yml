@@ -1,0 +1,48 @@
+name: campaign-autotag-mods
+run-name: "campaign for the tag lane building the PR's modules instead of Tengoku.All: both builds of tengoku#712's modules on the restored tree, their times and their .oleans compared"
+on:
+  push:
+    branches: [campaign-autotag-mods]
+permissions: { contents: read }
+jobs:
+  compare:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 180
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TENGOKU_CACHE_SOURCE: competemath/tengoku
+      PR_HEAD: 83aa613152f85f8ea2f2caaa5b4008099caadb7d
+    steps:
+      - name: Free disk
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache /usr/local/share/boost /usr/share/swift /usr/lib/jvm /usr/share/miniconda || true
+          df -h / | tail -1
+      - name: "The PR's tree (tengoku#712 at its head, an intake PR whose modules are not in any cache)"
+        run: |
+          git clone -q --filter=blob:none --no-checkout https://github.com/competemath/tengoku tree
+          cd tree && git fetch -q origin "+refs/pull/712/head:refs/remotes/pr" && git checkout -q --detach "$PR_HEAD" && git log --oneline -1
+          git fetch -q origin main && B=$(git merge-base HEAD FETCH_HEAD)
+          git diff --name-only --diff-filter=A "$B" HEAD -- Tengoku | grep '\.lean$' | grep -v -E '/Deps\.lean$|^Tengoku/All\.lean$|^Tengoku/[^/]+\.lean$' | sed -E 's#\.lean$##; s#/#.#g' | sort > /tmp/mods.txt
+          echo "modules: $(wc -l < /tmp/mods.txt)"
+      - name: elan
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSfL -o elan-init.sh https://raw.githubusercontent.com/leanprover/elan/0e36a07b9bbcc5381fa6250df109f9a4f94d7bac/elan-init.sh
+          echo "a620ff1641616222c8d37c54845492004bb84d6877cdbc944dd65c1aa685bf53  elan-init.sh" | sha256sum -c -
+          sh elan-init.sh -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: "A: the current step (lake build Tengoku.All) on the restored tree"
+        run: |
+          cd tree && scripts/cache.sh get 2>&1 | tail -1
+          t0=$(date +%s); lake build Tengoku.All 2>&1 | tail -2 | sed 's/^/A: /'; echo "RESULT A: lake build Tengoku.All took $(( $(date +%s) - t0 )) s"
+          while read -r m; do f=".lake/build/lib/lean/$(echo "$m" | tr . /).olean"; sha256sum "$f"; done < /tmp/mods.txt | sed -E 's#  .*/lib/lean/#  #' | sort -k2 > /tmp/A.sha
+          echo "RESULT A: $(wc -l < /tmp/A.sha) oleans of the PR's modules"
+      - name: "B: the changed step (lake build of the PR's modules) on a fresh restore of the same cache"
+        run: |
+          cd tree && rm -rf .lake/build && scripts/cache.sh get 2>&1 | tail -1
+          mods=(); while read -r m; do mods+=("$m"); done < /tmp/mods.txt
+          t0=$(date +%s); lake build "${mods[@]}" 2>&1 | tail -2 | sed 's/^/B: /'; echo "RESULT B: lake build of the ${#mods[@]} modules took $(( $(date +%s) - t0 )) s"
+          while read -r m; do f=".lake/build/lib/lean/$(echo "$m" | tr . /).olean"; sha256sum "$f"; done < /tmp/mods.txt | sed -E 's#  .*/lib/lean/#  #' | sort -k2 > /tmp/B.sha
+          echo "RESULT B: $(wc -l < /tmp/B.sha) oleans of the PR's modules"
+      - name: "The PR's .oleans are the same bytes either way"
+        run: |
+          if cmp -s /tmp/A.sha /tmp/B.sha; then echo "RESULT same: every .olean of the PR's modules is byte-identical between A and B"; else echo "RESULT DIFFERENT:"; diff /tmp/A.sha /tmp/B.sha | head; exit 1; fi
