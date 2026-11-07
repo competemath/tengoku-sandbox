@@ -1,0 +1,41 @@
+# A2 proof for competemath/tengoku#755 (branch only; nothing on the sandbox's main). tengoku's OWN scripts at main (e366c91, before #755) and at #755's head
+# (cfd7282) on the same fixtures: an extend part and a tag group whose modules are «2d» (formal-conjectures, tengoku#752), «1102.4662» and «A-B».
+# Each ref: classify → the lane's gate → autotag plan / merge-queue targets, then `lake build` of exactly the names printed (Lean 4.34.0-rc2) and
+# isnad.module_file mapping each name back to its file. main must fail with #752's `unknown target …Geometry.2d`; #755 must pass every step.
+name: tengoku-755-a2-proof
+on: { push: { branches: [proof/tengoku-755-a2] } }
+permissions: { contents: read }
+jobs:
+  a2:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { sparse-checkout: proof-755, persist-credentials: false, path: sandbox }
+      - name: elan and the tree's toolchain
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain leanprover/lean4:v4.34.0-rc2
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: tengoku at main (before #755) and at #755's head, without data/ and Tengoku/
+        run: |
+          for x in "main e366c9115967d68820185a249b99653359a79013" "pr cfd7282ae778b2b33e25bc28a818b797f79f329d"; do
+            set -- $x
+            git clone -q --filter=blob:none --no-checkout https://github.com/competemath/tengoku.git "t-$1"
+            git -C "t-$1" sparse-checkout set --no-cone '/*' '!/data/' '!/Tengoku/'
+            git -C "t-$1" checkout -q "$2"
+            echo "$1: $(git -C "t-$1" log --oneline -1)"
+          done
+          test "$(cat t-main/lean-toolchain)" = "leanprover/lean4:v4.34.0-rc2" && test "$(cat t-pr/lean-toolchain)" = "leanprover/lean4:v4.34.0-rc2"
+      - name: the scripts on the fixtures (classify, gates, autotag plan, queue targets)
+        run: |
+          git config --global user.email t@t && git config --global user.name t
+          for ref in main pr; do python3 sandbox/proof-755/a2_driver.py "t-$ref" "res-$ref.json" "pkg-$ref"; done
+      - name: lake build of exactly those names, and isnad.module_file
+        run: |
+          for ref in main pr; do echo "== $ref"; python3 sandbox/proof-755/a2_lake.py "t-$ref" "res-$ref.json" "pkg-$ref"; done
+      - name: verdict
+        run: |
+          python3 sandbox/proof-755/a2_verdict.py res-main.json res-pr.json | tee -a "$GITHUB_STEP_SUMMARY"
+      - if: always()
+        name: the raw results
+        run: cat res-main.json res-pr.json
