@@ -1,0 +1,53 @@
+# Proof for competemath/tengoku#755: Lake (the tree's toolchain) builds the module names the CI now emits, in guillemets.
+name: lake-quoted-targets-proof
+on: { push: { branches: [proof/lake-quoted-targets] } }
+permissions: { contents: read }
+jobs:
+  lake:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: elan and the tree's toolchain
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain leanprover/lean4:v4.34.0-rc2
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: A package with the three modules (formal-conjectures' 2d, an arXiv number, a dash)
+        run: |
+          mkdir -p pkg/Pkg/Geometry pkg/Pkg/Tao pkg/Pkg/Fx && cd pkg
+          echo 'leanprover/lean4:v4.34.0-rc2' > lean-toolchain
+          printf 'name = "pkg"\n\n[[lean_lib]]\nname = "Pkg"\n' > lakefile.toml
+          echo 'theorem fx_ab : 1 + 1 = 2 := rfl' > Pkg/Fx/A-B.lean
+          printf 'import Pkg.Fx.«A-B»\ntheorem tao : 2 + 2 = 4 := rfl\n' > Pkg/Tao/1102.4662.lean
+          printf 'import Pkg.Tao.«1102.4662»\ntheorem two_d : 3 + 3 = 6 := rfl\n' > Pkg/Geometry/2d.lean
+          printf 'import Pkg.Geometry.«2d»\n' > Pkg.lean
+          lean --version
+      - name: The names tengoku#755 emits are targets Lake builds
+        run: |
+          cd pkg
+          lake build 'Pkg.Geometry.«2d»' 'Pkg.Tao.«1102.4662»' 'Pkg.Fx.«A-B»' 2>&1 | tee build.log
+          grep -E 'Built Pkg\.(Geometry\.«2d»|Tao\.«1102\.4662»|Fx\.«A-B»)' build.log
+      - name: The old spelling (tengoku#752's error), for comparison
+        run: |
+          cd pkg
+          for m in Pkg.Geometry.2d Pkg.Tao.1102.4662 Pkg.Fx.A-B; do
+            if lake build "$m" > out.txt 2>&1; then echo "$m: BUILT"; else echo "$m: refused: $(grep -m1 error out.txt)"; fi
+          done
+      - name: String.toName (how tengoku-isnad reads --module) gives one string part per guillemet part
+        run: |
+          cd pkg
+          cat > Check.lean <<'LEAN'
+          def parts : Lean.Name → List String
+            | .anonymous => []
+            | .str p s => parts p ++ [s]
+            | .num p n => parts p ++ [s!"#{n}"]
+
+          def main : IO UInt32 := do
+            let mut bad : UInt32 := 0
+            for (s, want) in [("Pkg.Geometry.«2d»", ["Pkg", "Geometry", "2d"]), ("Pkg.Tao.«1102.4662»", ["Pkg", "Tao", "1102.4662"]),
+                              ("Pkg.Fx.«A-B»", ["Pkg", "Fx", "A-B"])] do
+              let got := parts s.toName
+              IO.println s!"{s} -> {got} -> printed back as {s.toName}"
+              if got != want then bad := bad + 1
+            return bad
+          LEAN
+          lean --run Check.lean
