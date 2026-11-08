@@ -16,7 +16,7 @@ label scope-fix 1d76db "Bot: a merged library's global instances/simp lemmas mad
 label tag 0e8a16 "Bot: isnad tags written into existing modules (nothing else changes; the queue recomputes each tag)"
 label studied 1d76db "Bot: Leak theorems rated 4 stars or more, re-checked by the memory intake (docs/pr-classes.md)"
 label raze d93f0b "Takes modules of an intake library out of the tree, with their dependents (a code owner reviews it)"
-label native 5319e7 "Bot: novel Lean modules under Tengoku/Native/ (CompeteMath's own certified theorems, Leak-proved results)"
+label native 5319e7 "Bot: novel Lean modules under Tengoku/Native/ (certified theorems, Leak-proved results)"
 label restructure 1d76db "Bot: the seed moved into Tengoku/Seed/, recomputed from the base by scripts/restructure.py"
 label tooling   1d76db "Scripts, workflows, schemas, build files"
 label docs      c5def5 "Documentation only"
