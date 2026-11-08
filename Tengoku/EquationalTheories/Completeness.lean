@@ -15,3 +15,4 @@ lemma eq_app : ∀ α β (f g : α → β), f = g → ∀ x, f x = g x
 := fun _ _ _ _ a x ↦ congrFun a x
 
 end EquationalTheories
+-- regenerated
