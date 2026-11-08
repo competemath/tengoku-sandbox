@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import os as _selftest_unused
 """dco.py <base> <head> — every commit carries Signed-off-by (git commit -s)."""
 
 from __future__ import annotations
