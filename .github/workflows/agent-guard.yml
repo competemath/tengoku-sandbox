@@ -1,0 +1,81 @@
+# The advisory `scope` check of agent-written pull requests (docs/agent-security.md): a PR from a bot account or in a factory's
+# shape is held to the scope policy of scripts/ci/agent-paths.json (paths, file modes, size caps); every PR is checked for
+# symlinks, submodules and executables added under data/ and Tengoku/, for secrets in its title, body, commit messages and added
+# lines, for human-owned work dropped by an agent's push, and for CODEOWNERS drifting from .github/agent-paths.json.
+#
+# ADVISORY, and a separate file from pr-gate.yml on purpose (like sonar.yml): its result is a check run named `scope`, it is not
+# in pr-gate's `needs`, the merge queue never waits for it, and it blocks nothing. The maintainer decides when to make it required,
+# pinned to the App that makes it (tengoku-warden docs/RUNBOOK.md, item 4).
+#
+# Same discipline as pr-gate and trust-shadow: pull_request_target runs main's copy of this file and of the scripts; the PR is
+# fetched as git objects and read by those scripts, never checked out or run. Reading the PR (job `guard`, read-only token) and
+# publishing the check (job `publish`, `checks: write`) are different jobs; the second takes one validated JSON file.
+name: agent-guard
+on:
+  pull_request_target:
+    branches: [main]
+    types: [opened, synchronize, reopened, edited]   # edited: a title or description changed after the first scan
+permissions: {}
+concurrency:
+  group: agent-guard-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+defaults:
+  run:
+    shell: bash
+env:
+  BASE: ${{ github.event.pull_request.base.sha }}
+  HEAD: ${{ github.event.pull_request.head.sha }}
+  PR_REF: ${{ format('refs/pull/{0}/head', github.event.pull_request.number) }}
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions: { contents: read }
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
+        with: { egress-policy: audit }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { ref: "${{ env.BASE }}", fetch-depth: 0, filter: "blob:none", persist-credentials: false }
+      - name: The PR's commits, as data (the checks are main's)
+        run: git fetch -q --no-tags --filter=blob:none origin "+$PR_REF:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
+      # A push: the head the PR had before it. After a force-push the commit may be gone; the guard then says so instead of passing.
+      - name: The previous head, as data
+        if: github.event.action == 'synchronize'
+        env: { BEFORE: "${{ github.event.before }}" }
+        run: |
+          [[ "$BEFORE" =~ ^[0-9a-f]{40}$ ]] || exit 0
+          git fetch -q --no-tags --filter=blob:none origin "$BEFORE" || echo "::notice::the previous head could not be fetched (force-push)"
+      - name: scope
+        env:
+          TENGOKU_BOT: "${{ vars.TENGOKU_BOT || 'tengoku-bot' }}"
+          PR_ACTOR: "${{ github.event.pull_request.user.login }}"
+          ACTOR_TYPE: "${{ github.event.pull_request.user.type }}"
+          SENDER: "${{ github.event.sender.login }}"
+          HEAD_REF: "${{ github.event.pull_request.head.ref }}"
+          PR_TITLE: "${{ github.event.pull_request.title }}"
+          PR_BODY: "${{ github.event.pull_request.body }}"
+          BEFORE: "${{ github.event.action == 'synchronize' && github.event.before || '' }}"
+        run: |
+          python3 scripts/ci/agent_guard.py check --repo . --base "$BASE" --head "$HEAD" --out "$RUNNER_TEMP/guard"
+          cat "$RUNNER_TEMP/guard/summary.md" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with: { name: agent-guard, path: "${{ runner.temp }}/guard", retention-days: 30 }
+
+  publish:
+    needs: guard
+    # `!cancelled()`, not `always()`: a run a newer push has cancelled must not publish (the rule `cancelable` of workflow_rules.py)
+    if: ${{ !cancelled() && needs.guard.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # the only write permission of this workflow: it can create a check run and nothing else; the check is attributed to the Actions app (id 15368)
+    permissions: { checks: write }
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
+        with: { egress-policy: audit }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with: { name: agent-guard, path: guard }
+      - name: Post the check run
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: python3 scripts/ci/agent_guard.py publish --dir guard --repo "$GITHUB_REPOSITORY"
