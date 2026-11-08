@@ -1,0 +1,9 @@
+# check	severity	name	a word the detail must contain
+necessity	info	JinshiFixtures.sub_add	justified
+necessity	info	JinshiFixtures.sub_add	every hypothesis
+necessity	warn	JinshiFixtures.over_hyp	neither used
+necessity	info	JinshiFixtures.two_hyps	ha
+necessity	info	JinshiFixtures.two_hyps	hb
+necessity	info	JinshiFixtures.two_hyps	every hypothesis
+necessity	info	JinshiFixtures.bool_case	b = false
+necessity	info	JinshiFixtures.bool_case	every hypothesis
