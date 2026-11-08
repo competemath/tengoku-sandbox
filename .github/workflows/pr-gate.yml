@@ -13,7 +13,7 @@ name: pr-gate
 # Runs on the PR and again on the merge group: a required check must report on both.
 on:
   pull_request_target:
-    branches: [main]   # a PR into any other branch is not judged here and never reaches main
+    branches: [main, campaign/sync-gate, campaign/sync-rehearsals]   # a PR into any other branch is not judged here and never reaches main
     types: [opened, synchronize, reopened, edited]
   merge_group:
 permissions: {}
@@ -53,7 +53,7 @@ jobs:
         name: classify
         env:
           PR_ACTOR: "${{ github.event.pull_request.user.login }}"
-          TENGOKU_BOT: "${{ vars.TENGOKU_BOT || 'tengoku-bot' }}"
+          TENGOKU_BOT: "selftest-stranger"
           TENGOKU_STUDIED_BOT: "${{ vars.TENGOKU_STUDIED_BOT || 'tengoku-supervisor[bot]' }}"  # the App that sends studied PRs
           TENGOKU_ACTOR_CHECKED: "${{ github.event_name == 'merge_group' && '1' || '' }}"  # the PR's own gate verified the actor
         run: python3 scripts/ci/classify.py "$BASE" "$HEAD"
@@ -566,7 +566,7 @@ jobs:
         name: classify
         if: github.event_name == 'merge_group'
         env:
-          TENGOKU_BOT: "${{ vars.TENGOKU_BOT || 'tengoku-bot' }}"
+          TENGOKU_BOT: "selftest-stranger"
           TENGOKU_ACTOR_CHECKED: "1"   # the PR's own gate verified the actor
         run: python3 scripts/ci/classify.py "$BASE" "$HEAD"
       - name: Every import still resolves, on the merged result
