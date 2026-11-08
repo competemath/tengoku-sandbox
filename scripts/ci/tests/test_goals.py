@@ -161,6 +161,26 @@ class Goals(unittest.TestCase):
         rc, out = self.run_check(r)
         self.assertIn("a goal that is open goes under `## Open`", out)
 
+    def test_in_progress_early_stage_is_a_status_under_open(self):
+        r = self.repo_with()
+        r.write("GOALS.md", PAGE + goal(status="in progress (early-stage)"))
+        r.commit("in progress")
+        rc, out = self.run_check(r)
+        self.assertEqual(rc, 0, out)
+        r.write("GOALS.md", "# Goals\n\n## Completed\n\n" + goal(status="in progress (early-stage)"))
+        r.commit("in progress, under Completed")
+        rc, out = self.run_check(r)
+        self.assertNotEqual(rc, 0)
+        self.assertIn("a goal that is in progress (early-stage) goes under `## Open`", out)
+
+    def test_partly_done_is_no_longer_a_status(self):
+        r = self.repo_with()
+        r.write("GOALS.md", PAGE + goal(status="partly done"))
+        r.commit("the old word")
+        rc, out = self.run_check(r)
+        self.assertNotEqual(rc, 0)
+        self.assertIn("status 'partly done' is not one of open, in progress (early-stage), done, retired", out)
+
     def test_a_heading_inside_a_goal_is_not_a_section(self):
         r = self.repo_with()
         r.write("GOALS.md", PAGE + goal(gid="one", suggestion="## Completed\n\nnot the page's heading") + goal(gid="two"))

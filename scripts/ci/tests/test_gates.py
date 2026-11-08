@@ -886,6 +886,17 @@ class LintScope(unittest.TestCase):
 
 
 class RecordNames(unittest.TestCase):
+    def test_a_name_that_is_not_a_string_is_refused_not_a_crash(self):
+        """fuzz_records found `{"name": ["Known.thm"], ...}` in a staging file: `n in seen` raised TypeError (a list is unhashable). A malformed name is a refusal with a reason."""
+        for bad in (["Known.thm"], {"a": 1}, 5, None):
+            r = Repo()
+            r.append("data/staging/lib.jsonl", json.dumps({**GOOD, "name": bad}) + "\n")
+            r.commit("bad name")
+            rc, out = r.gate("validate_records.py")
+            self.assertEqual(rc, 1, repr(bad))
+            self.assertIn("not a Lean identifier", out)
+            self.assertNotIn("Traceback", out)
+
     def test_name_with_space_or_comma_fails(self):
         for bad in ["Selftest.has space", "Selftest.a,b"]:
             r = Repo()
@@ -1275,7 +1286,7 @@ class Intake(unittest.TestCase):
         r.write("Tengoku/FxLib/Fx/Basic.lean", mod if mod is not None else self.MOD)
         r.write("Tengoku/FxLib.lean", "import Tengoku.FxLib.Fx.Basic\n")
         r.write("data/intake/fx-lib/manifest.jsonl", json.dumps(manifest) + "\n")
-        r.write("data/intake/fx-lib/report.json", "{}\n")
+        r.write("data/intake/fx-lib/report.json", '{"gate2_unjudged": []}\n')
         r.write("Tengoku/All.lean", "import Tengoku.Lib\nimport Tengoku.FxLib\n")
         r.commit("intake fx-lib")
 
@@ -1321,12 +1332,19 @@ class Intake(unittest.TestCase):
         self.assertNotEqual(rc, 0)
         self.assertIn("not the tree", out)
 
-    def test_notation_needs_the_proposed_lint(self):
+    def test_notation_needs_the_proposed_lint_and_scoped_or_local(self):
         r = self.repo()
-        self.bundle(r, mod=self.MOD + '\nnotation "ℓ" => 1\n')
+        self.bundle(r, mod=self.MOD + '\nscoped notation "ℓ" => 1\n')
         self.assertNotEqual(r.gate("intake_check.py")[0], 0)
         rc, out = r.gate("intake_check.py", "main", "pr", "--lint", "proposed")
         self.assertEqual(rc, 0, out)
+        # a global one is refused in every mode: it would change how every other library parses (2026-10-17)
+        r = self.repo()
+        self.bundle(r, mod=self.MOD + '\nnotation "ℓ" => 1\n')
+        for mode in ("strict", "proposed", "wide"):
+            rc, out = r.gate("intake_check.py", "main", "pr", "--lint", mode)
+            self.assertNotEqual(rc, 0, mode)
+        self.assertIn("without `scoped` or `local`", out)
 
     def test_the_manifest_must_name_a_module_of_the_pr_and_the_trees_toolchain(self):
         r = self.repo()
@@ -1383,6 +1401,23 @@ class Intake(unittest.TestCase):
         with tarfile.open(tar) as t:
             self.assertEqual(t.extractfile("Tengoku/FxLib/Fx/Basic.lean").read(), self.MOD.replace("\n", "\r\n").encode())
 
+    def test_the_archive_is_the_factorys_raw_bytes_until_the_isnad_switch_is_on_then_the_canonical_form(self):
+        """CodeRabbit on tengoku#649: the gate canonicalised every module while the factory still archived the bytes it wrote, so a module with a one-line docstring
+        (`/-- Words. -/` is `/-- Words.-/` in the canonical form) failed attestation the day the lane merged. The canonical form belongs to TENGOKU_ISNAD_REQUIRED=1."""
+        mod = "import Tengoku\n\nnamespace Fx\n\n/-- Words. -/\ntheorem good : 1 + 1 = 2 := rfl\n\nend Fx\n"
+        sys.path.insert(0, str(CI.parent))
+        import isnad_tag as tg
+
+        self.assertNotEqual(tg.canonical_text(mod), mod)  # the module is one the two forms disagree on
+        for env, want in (({}, mod), ({"TENGOKU_ISNAD_REQUIRED": "1"}, tg.canonical_text(mod)), ({"TENGOKU_ISNAD_REQUIRED": "0"}, mod)):
+            r = self.repo()
+            self.bundle(r, mod=mod)
+            tar = Path(tempfile.mkdtemp()) / "bundle.tar"
+            rc, out = r.gate("intake_check.py", "main", "pr", "--tar", str(tar), env=env)
+            self.assertEqual(rc, 0, out)
+            with tarfile.open(tar) as t:
+                self.assertEqual(t.extractfile("Tengoku/FxLib/Fx/Basic.lean").read().decode(), want, env)
+
     def test_a_module_that_is_not_utf8_fails_cleanly(self):
         r = self.repo()
         self.bundle(r)
@@ -1394,21 +1429,21 @@ class Intake(unittest.TestCase):
 
     def test_the_queues_content_lint_follows_the_intake_lint_policy(self):
         r = self.repo()
-        self.bundle(r, mod=self.MOD + '\nnotation "ℓ" => 1\n')
+        self.bundle(r, mod=self.MOD + '\nscoped notation "ℓ" => 1\n')
         rc, out = r.gate("lint_banked.py")
         self.assertNotEqual(rc, 0)  # strict: a notation command is not allowed anywhere
         self.assertIn("notation", out)
         rc, out = r.gate("lint_banked.py", env={"TENGOKU_INTAKE_LINT": "proposed"})
         self.assertEqual(rc, 0, out)
         # a sibling whose name merely starts like the bundle's root file is not the bundle's
-        r.write("Tengoku/FxLib.leanExtra.lean", 'notation "ℓ" => 1\n')
+        r.write("Tengoku/FxLib.leanExtra.lean", 'scoped notation "ℓ" => 1\n')
         r.commit("a sibling of the root file")
         rc, out = r.gate("lint_banked.py", env={"TENGOKU_INTAKE_LINT": "proposed"})
         self.assertNotEqual(rc, 0)
         self.assertIn("Tengoku/FxLib.leanExtra.lean", out)
         r.git("reset", "-q", "--hard", "HEAD~1")
         # and only inside the bundle's own modules: a notation in any other module of the tree is still refused
-        r.write("Tengoku/Lib/Basic.lean", 'theorem Lib.old : 1 + 1 = 2 := rfl\nnotation "ℓ" => 1\n')
+        r.write("Tengoku/Lib/Basic.lean", 'theorem Lib.old : 1 + 1 = 2 := rfl\nscoped notation "ℓ" => 1\n')
         r.commit("a notation in an older library")
         rc, out = r.gate("lint_banked.py", env={"TENGOKU_INTAKE_LINT": "proposed"})
         self.assertNotEqual(rc, 0)
@@ -1419,6 +1454,18 @@ class Intake(unittest.TestCase):
         self.bundle(r, mod=self.MOD + "\n@[implicit_reducible] def Fx.one : Nat := 1\n")
         rc, out = r.gate("intake_check.py")
         self.assertEqual(rc, 0, out)
+
+    def test_instance_reducible_no_expose_and_mk_iff_are_inert_too(self):
+        """Dropping them changes how Lean unfolds a definition (a proof that rewrites through `@[instance_reducible] def bialgebra` stops working: tauceti, 2026-10-11)."""
+        for attr, decl in (
+            ("instance_reducible", "def Fx.one : Nat := 1"),
+            ("no_expose", "def Fx.two : Nat := 2"),
+            ("mk_iff", "inductive Fx.P : Nat -> Prop | zero : Fx.P 0"),
+        ):
+            r = self.repo()
+            self.bundle(r, mod=self.MOD + f"\n@[{attr}] {decl}\n")
+            rc, out = r.gate("intake_check.py")
+            self.assertEqual(rc, 0, f"{attr}: {out}")
 
     def test_a_manifest_that_is_not_made_of_objects_fails_with_a_message(self):
         r = self.repo()
@@ -1444,6 +1491,24 @@ class Intake(unittest.TestCase):
         self.bundle(r, mod="import Tengoku -- the tree\n" + self.MOD.replace("import Tengoku\n", "", 1))
         rc, out = r.gate("intake_check.py")
         self.assertEqual(rc, 0, out)
+
+    def test_a_docstring_line_that_reads_like_an_import_is_prose(self):
+        """2026-10-13: lean-pool part 11 (#546, #548) was refused with `Sabidussi/Statement.lean: imports them., which is not the tree`: the module doc's last line
+        before `-/` was `import them.` (a sentence), and the import scan read every line of the file, comments included."""
+        r = self.repo()
+        self.bundle(
+            r,
+            mod=self.MOD + "\n/-!\nThis module holds the public statements; proof modules build on it, but it does not\nimport them.\n-/\n",
+        )
+        rc, out = r.gate("intake_check.py")
+        self.assertEqual(rc, 0, out)
+
+    def test_an_import_of_a_module_outside_the_tree_is_still_refused(self):
+        r = self.repo()
+        self.bundle(r, mod="import Mathlib.Data.Nat.Basic\n" + self.MOD.replace("import Tengoku\n", "", 1))
+        rc, out = r.gate("intake_check.py")
+        self.assertNotEqual(rc, 0)
+        self.assertIn("which is not the tree", out)
 
     def with_record(self, name):
         """A repository whose base (main) already holds a trusted record of that name, then the bundle's branch."""
@@ -1626,6 +1691,41 @@ class QueuePlacement(unittest.TestCase):
         self.assertEqual(unplaced({"A.m1", "A.m2", "A.after"}, [mutual]), [])  # `end` of mutual keeps namespace A open
         ncs = "namespace A\nnoncomputable section\ntheorem n : True := trivial\nend\ntheorem after2 : True := trivial\nend A\n"
         self.assertEqual(unplaced({"A.n", "A.after2"}, [ncs]), [])
+
+    def test_a_record_the_generator_renamed_for_a_clash_is_placed(self):
+        """The generator renames a record that another library declares (`clash_suffix`), and the record keeps the name it was banked under. archon-firstproof-p6, 2026-10-21: 16 renamed records were
+        'in no module the queue compiles' and the group was ejected for a rename the generator itself had made."""
+        from _git import clash_suffix, unplaced
+
+        sfx = clash_suffix("archon-firstproof-p6")
+        self.assertEqual(sfx, "__archon_firstproof_p6")
+        renamed = f"namespace Problem6\ntheorem barrier_gap_pos{sfx} : True := trivial\nend Problem6\n"
+        self.assertEqual(unplaced({"Problem6.barrier_gap_pos"}, [renamed], sfx), [])  # the last component renamed
+        # without the suffix the rename is not known (the old behaviour)
+        self.assertEqual(unplaced({"Problem6.barrier_gap_pos"}, [renamed]), ["Problem6.barrier_gap_pos"])
+        parent = f"namespace Parent{sfx}\ntheorem child : True := trivial\nend Parent{sfx}\n"
+        self.assertEqual(unplaced({"Parent.child"}, [parent], sfx), [])  # a name below a renamed parent
+        wrapped = f"namespace Lib\nnamespace Problem6\ntheorem x{sfx} : True := trivial\nend Problem6\nend Lib\n"
+        self.assertEqual(unplaced({"Problem6.x"}, [wrapped], sfx), [])  # in a library namespace too
+        # another library's suffix, a different name, or a record that is simply missing is still unplaced
+        self.assertEqual(unplaced({"Problem6.barrier_gap_pos"}, [renamed], clash_suffix("other-lib")), ["Problem6.barrier_gap_pos"])
+        self.assertEqual(unplaced({"Problem6.other"}, [renamed], sfx), ["Problem6.other"])
+        self.assertEqual(unplaced({"Problem6.barrier_gap_pos"}, [], sfx), ["Problem6.barrier_gap_pos"])
+        # the suffix is taken out at the end of a component only: `foo__fltextra` is not `foo` renamed for `flt`, and a name that carries the suffix twice loses one
+        flt = clash_suffix("flt")
+        self.assertEqual(unplaced({"fooextra"}, [f"theorem foo{flt}extra : True := trivial\n"], flt), ["fooextra"])
+        self.assertEqual(unplaced({"foo"}, [f"theorem foo{flt}extra : True := trivial\n"], flt), ["foo"])
+        twice = f"namespace Parent{flt}{flt}\ntheorem child : True := trivial\nend Parent{flt}{flt}\n"
+        self.assertEqual(unplaced({"Parent.child"}, [twice], flt), ["Parent.child"])
+        self.assertEqual(unplaced({f"Parent{flt}.child"}, [twice], flt), [])
+
+    def test_the_suffix_is_the_generators(self):
+        sys.path.insert(0, str(CI.parent))  # scripts/generate.py
+        import generate
+        from _git import clash_suffix
+
+        for lib in ("archon-firstproof-p6", "flt", "a.b c", "Équational-theories"):
+            self.assertEqual(clash_suffix(lib), generate.clash_suffix(lib))
 
     def test_a_garbled_record_is_left_out_like_the_generator_does(self):
         from _git import garbled

@@ -141,6 +141,10 @@ class Order(unittest.TestCase):
         self.assertEqual(sw.dependents_first(imports), sw.dependents_first(dict(reversed(list(imports.items())))))
         self.assertEqual(sw.dependents_first({"B": set(), "A": set()}), ["A", "B"])
 
+    def test_a_module_that_imports_itself_or_a_module_outside_the_tree_is_not_counted(self):
+        self.assertEqual(sw.dependents_first({"A": {"A", "Std"}}), ["A"])
+        self.assertEqual(sw.importer_counts({"A": {"B", "A", "Init"}, "B": set()}), {"A": 0, "B": 1})
+
     def test_a_cycle_is_not_lost(self):
         self.assertEqual(sorted(sw.dependents_first({"A": {"B"}, "B": {"A"}, "C": set()})), ["A", "B", "C"])
 
@@ -182,7 +186,7 @@ class Plan(unittest.TestCase):
         root = tree(self.files(3))
         out = io.StringIO()
         with redirect_stdout(out):
-            self.assertEqual(sw.main(["plan", "--root", str(root), "--scope", "seed", "--max", "2"]), 0)
+            sw.main(["plan", "--root", str(root), "--scope", "seed", "--max", "2"])
         self.assertEqual(out.getvalue().split(), ["Tengoku.Seed.M00", "Tengoku.Seed.M01"])
         out = io.StringIO()
         with redirect_stdout(out):

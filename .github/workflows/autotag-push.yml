@@ -1,0 +1,82 @@
+name: autotag-push
+# BORN TAGGED, half two (docs/isnad.md, "Born tagged"; scripts/ci/autotag_push.py). It runs when autotag-build has finished, from this repository's default branch, so the code that holds the
+# bot's token is main's and never the PR's. The artifact the build uploaded comes from a job that ran the PR's Lean: it is DATA, and nothing in it is believed. The script takes the
+# PR from the API (open, a branch of this repository, its head the commit the build tagged, its author one of the lane's Apps), compares every file with the PR's own (only tags
+# changed) and adds one commit to the PR's branch through the git data API, with a ref update that is not forced. Without the secret TENGOKU_BOT_TOKEN it only says what it would
+# have done.
+on:
+  workflow_run:
+    workflows: [autotag-build]
+    types: [completed]
+
+permissions: {}
+
+concurrency:
+  group: autotag-push-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  push:
+    # a run of this repository's own branches only: a fork's pull_request run executes the fork's copy of autotag-build, so what it uploads is whatever the fork wrote
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions: { contents: read, actions: read, pull-requests: read }
+    steps:
+      - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2
+        with: { egress-policy: audit }
+      # main's scripts, read through the API: a workflow_run workflow never checks a ref out (the files it holds a token next to are main's and nobody else's)
+      - name: Main's scripts
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          for f in scripts/isnad.py scripts/isnad_tag.py scripts/ci/_git.py scripts/ci/allowlist.py scripts/ci/autotag.py scripts/ci/autotag_push.py scripts/ci/born_tagged.py \
+                   scripts/ci/bundle_tar.py scripts/ci/lean_lex.py scripts/ci/studied_check.py scripts/ci/tag_check.py; do
+            mkdir -p "$(dirname "$f")"
+            # a read that fails (GitHub's server errors are the case that happened) is tried again: 4 tries in all, 2 s then 4 s then 8 s apart; the fourth failure fails the step
+            for try in 1 2 3 4; do
+              gh api "repos/$GITHUB_REPOSITORY/contents/$f?ref=main" -H "Accept: application/vnd.github.raw" > "$f" && break
+              [ "$try" = 4 ] && exit 1
+              sleep $((2 ** try))
+            done
+          done
+      # autotag-build uploads only when it tagged something: a run of a PR that already carries its tags (the bot's own commit starts one) has no artifact, and that is not a failure
+      - name: Did the build upload tags?
+        id: has
+        env: { GH_TOKEN: "${{ github.token }}", RUN: "${{ github.event.workflow_run.id }}" }
+        run: |
+          n="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN/artifacts" --jq '[.artifacts[] | select(.name == "autotag")] | length')"
+          echo "any=$([ "$n" -gt 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: steps.has.outputs.any == 'true'
+        with:
+          name: autotag
+          path: autotag
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+      - name: The tags, onto the PR's branch
+        if: steps.has.outputs.any == 'true'
+        env:
+          RUN_HEAD: ${{ github.event.workflow_run.head_sha }}
+          RUN_PRS: ${{ toJSON(github.event.workflow_run.pull_requests.*.number) }}
+          BOT_TOKEN: ${{ secrets.TENGOKU_BOT_TOKEN }}
+          READ_TOKEN: ${{ github.token }}
+          TENGOKU_BOT: ${{ vars.TENGOKU_BOT }}
+          AUTOTAG_ACTORS: ${{ vars.AUTOTAG_ACTORS || 'tengoku-supervisor[bot],tengoku-intake[bot]' }}
+        run: |  # pragma: allowlist secret (the token is a variable here, never a value)
+          read -r pr head < <(python3 -c 'import json; m = json.load(open("autotag/meta.json")); print(int(m["pr"]), str(m["head"]))')
+          # the artifact is data: its PR is one the run was made for, and its head is the commit the run built
+          if [ "$head" != "$RUN_HEAD" ] || ! python3 -c 'import json, sys; sys.exit(0 if int(sys.argv[1]) in json.loads(sys.argv[2]) else 1)' "$pr" "$RUN_PRS"; then
+            echo "::error::the artifact names PR $pr at $head, not a pull request of this run ($RUN_PRS at $RUN_HEAD)"
+            exit 1
+          fi
+          args=(--repo "$GITHUB_REPOSITORY" --pr "$pr" --head "$head" --artifact autotag/tagged)
+          if [ -z "$BOT_TOKEN" ]; then
+            echo "::notice::no TENGOKU_BOT_TOKEN secret: the tags were computed and checked, but not pushed (a dry run follows)"
+            GH_TOKEN="$READ_TOKEN" python3 scripts/ci/autotag_push.py "${args[@]}" --dry-run
+            exit 0
+          fi
+          GH_TOKEN="$BOT_TOKEN" python3 scripts/ci/autotag_push.py "${args[@]}"

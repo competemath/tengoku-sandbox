@@ -1,0 +1,9 @@
+{
+  "title": "Tengoku: one verified Lean 4 tree of formal mathematics, with provenance",
+  "upload_type": "dataset",
+  "description": "<p>Tengoku gathers theorems from many formal mathematics libraries into one Lean 4 tree on a single pinned toolchain. A theorem is trusted only once the tree builds with it and it uses no sorry and only the standard axioms; every record carries a link to its source at a fixed commit, its licence, and its credit.</p><p>This deposit is one numbered release of the dataset: every trusted theorem with its statement, proof, source, licence and credit (tengoku-dataset.jsonl.gz), and a manifest naming the commit, the toolchain, the counts and the dataset's checksum (snapshot.json). The files carry build provenance on GitHub. Repository: https://github.com/competemath/tengoku</p>",
+  "creators": [{ "name": "Tengoku contributors" }, { "name": "Bashir, Mikael" }],
+  "access_right": "open",
+  "license": "apache-2.0",
+  "keywords": ["Lean 4", "formal mathematics", "theorem proving", "provenance"]
+}

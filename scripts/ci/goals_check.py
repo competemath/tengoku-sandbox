@@ -3,7 +3,7 @@
 
 Runs when a PR changes GOALS.md (docs/goals.md explains the page). At the PR's head:
 - every goal is a `<!-- goal: id -->` … `<!-- /goal -->` block with a unique id, a title and a status
-  (open, partly done, done, retired), a people part and one Suggestions part after it, under the section its
+  (open, in progress (early-stage), done, retired), a people part and one Suggestions part after it, under the section its
   status belongs to (`## Open`, `## Completed`, `## Retired`);
 - the people part has the standard fields (a `done` goal also names what did it, a `retired` one why it was given
   up), and no others;
@@ -23,8 +23,8 @@ import sys
 from _git import ROOT, added_lines, blob, changed_files, fail, match
 
 PAGE = "GOALS.md"
-STATUSES = ("open", "partly done", "done", "retired")
-SECTION_OF = {"open": "Open", "partly done": "Open", "done": "Completed", "retired": "Retired"}
+STATUSES = ("open", "in progress (early-stage)", "done", "retired")
+SECTION_OF = {"open": "Open", "in progress (early-stage)": "Open", "done": "Completed", "retired": "Retired"}
 SECTION_RE = re.compile(r"^## (Open|Completed|Retired)[ \t]*$", re.M)
 REQUIRED = ("The statement", "Why it matters", "Why it looks doable", "What it builds on", "Built on the work of")
 OPTIONAL = ("Already tried", "Size", "Proved by", "How it was done", "Why it was retired")

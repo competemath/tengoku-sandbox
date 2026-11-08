@@ -23,7 +23,7 @@ class IntakeApp(unittest.TestCase):
         r.write("Tengoku/FxLib/Fx/A.lean", ex.module("a"))
         r.write("Tengoku/FxLib.lean", f"import {ex.Extend.A}\n")
         r.write("data/intake/fx-lib/manifest.jsonl", ex.record("a", ex.Extend.A))
-        r.write("data/intake/fx-lib/report.json", json.dumps({"library": "fx-lib", "part": 1}) + "\n")
+        r.write("data/intake/fx-lib/report.json", json.dumps({"library": "fx-lib", "part": 1, "gate2_unjudged": []}) + "\n")
         r.write("Tengoku/All.lean", "import Tengoku.Lib\nimport Tengoku.FxLib\n")
         r.commit("part 1")
         return r

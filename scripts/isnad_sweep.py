@@ -20,12 +20,15 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent / "ci"))
+import _git  # noqa: E402
 import isnad_tag as tg  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 MAX_PART = 400
 SCOPES = ("seed", "native", "libs", "all")
-IMPORT = re.compile(r"^[ \t]*(?:public[ \t]+)?(?:meta[ \t]+)?import[ \t]+(Tengoku[\w.«»']*)", re.M)
+# a part in guillemets is read whole (`«A-B»`, `«1102.4662»`): the name must be the one module_name gives its file, or the import is not counted
+IMPORT = re.compile(r"^[ \t]*(?:public[ \t]+)?(?:meta[ \t]+)?import[ \t]+(Tengoku(?:\.(?:«[^»\n]*»|[\w']+))*)", re.M)
 DECL_MODIFIERS = {"private", "protected", "noncomputable", "nonrec", "public", "meta", "unsafe", "partial"}
 
 
@@ -51,7 +54,8 @@ def scope_of(rel: str, intake: set[str]) -> str | None:
 
 
 def module_name(rel: str) -> str:
-    return rel[: -len(".lean")].replace("/", ".")
+    """the module a file is, as Lean spells it (`_git.module_name`: `…/2d.lean` is `….«2d»`), which is what its importers write and `tengoku-isnad` reads"""
+    return _git.module_name(rel[: -len(".lean")])
 
 
 def code_of(text: str) -> str:
@@ -82,14 +86,20 @@ def is_tagged(text: str) -> bool:
     return any(tg.TAG_LINE.match(ln) for kind, a, b in tg.scan(text) if kind == "doc" for ln in text[a + 3 : b - 2].split("\n"))
 
 
+def importer_counts(imports: dict[str, set[str]]) -> dict[str, int]:
+    """for each module, how many other modules of the tree import it"""
+    counts: dict[str, int] = {m: 0 for m in imports}
+    for m, deps in imports.items():
+        for d in deps:
+            if d in counts and d != m:
+                counts[d] += 1
+    return counts
+
+
 def dependents_first(imports: dict[str, set[str]]) -> list[str]:
     """modules in an order where none comes after a module it imports (Kahn's algorithm from the modules nothing imports); ties by name. A cycle (Lean has none) is
     appended by name rather than lost."""
-    importers: dict[str, int] = {m: 0 for m in imports}
-    for m, deps in imports.items():
-        for d in deps:
-            if d in importers and d != m:
-                importers[d] += 1
+    importers = importer_counts(imports)
     ready = [m for m, n in importers.items() if n == 0]
     heapq.heapify(ready)
     out: list[str] = []
@@ -98,11 +108,12 @@ def dependents_first(imports: dict[str, set[str]]) -> list[str]:
         m = heapq.heappop(ready)
         out.append(m)
         done.add(m)
-        for d in imports[m]:
-            if d in importers and d != m and d not in done:
-                importers[d] -= 1
-                if importers[d] == 0:
-                    heapq.heappush(ready, d)
+        for d in imports[m] & importers.keys() - {
+            m
+        }:  # a module popped earlier cannot be here: it is imported by m, so its count was above zero until now
+            importers[d] -= 1
+            if importers[d] == 0:
+                heapq.heappush(ready, d)
     return out + sorted(set(imports) - done)
 
 
@@ -124,7 +135,7 @@ def plan(root: Path, scope: str, prefix: str, limit: int) -> list[str]:
     return [m for m in todo(root, scope) if m.startswith(prefix)][: min(limit, MAX_PART)]
 
 
-def main(argv: list[str]) -> int:
+def main(argv: list[str]) -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("plan")
@@ -140,11 +151,10 @@ def main(argv: list[str]) -> int:
         mine = [m for m in every if m.startswith(a.prefix)]
         parts = [mine[i : i + MAX_PART] for i in range(0, len(mine), MAX_PART)]
         print(json.dumps({"to_tag": len(mine), "parts": len(parts), "first_of_each_part": [pt[0] for pt in parts]}, indent=1))
-        return 0
+        return
     mods = plan(root, a.scope, a.prefix, a.max)
     print("\n".join(mods))
-    return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1:]))
+    main(sys.argv[1:])

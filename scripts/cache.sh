@@ -20,6 +20,10 @@
 # is used when it is installed and logged in.
 set -euo pipefail
 cd "${TENGOKU_ROOT:-$(dirname "$0")/..}"   # TENGOKU_ROOT: the checkout, when a copy of this script runs (the build job packs with one)
+# The cache is ~7 GB and `get`/`pack` stage it in a `mktemp -d`. On ubuntu-26.04 runners (ubuntu-latest since October 2026) /tmp is a 7.9 GB
+# tmpfs with a user quota ("write …/tengoku-cache.tar.zst.part-ab: disk quota exceeded"; ubuntu-24.04 has it on the 145 GB root disk), so stage
+# on the runner's work disk when there is one.
+export TMPDIR="${RUNNER_TEMP:-${TMPDIR:-/tmp}}"
 REPO="${TENGOKU_REPO:-competemath/tengoku}"          # where `put` publishes
 SRC="${TENGOKU_CACHE_SOURCE:-$REPO}"                  # where `get`/`latest` read (a sandbox reads the library's caches)
 TOPUPS="${TENGOKU_TOPUPS:-0}"                         # 1 = follow top-ups (the small per-merge difference from the nightly base); 0 = nightly base only
@@ -168,7 +172,9 @@ case "$cmd" in
     mkdir -p "$dir"
     rm -f "$dir"/tengoku-cache.tar.zst.part-* "$dir/commit"   # a larger earlier pack would leave surplus parts behind
     echo "packing .lake/build for $sha …"
-    tar -C .lake -cf - build | zstd -T0 -3 -q | split -b 1900m - "$dir/tengoku-cache.tar.zst.part-"
+    # *.setup.json (one per module, 1-2 MB each: 80 of the tree's 102 GB on 2026-10-14) is Lake's scratch input for compiling a module, never read for an up-to-date one:
+    # left out, a seed is 22 GB and not 102 (docs/cache-size.md)
+    tar -C .lake --exclude='*.setup.json' -cf - build | zstd -T0 -3 -q | split -b 1900m - "$dir/tengoku-cache.tar.zst.part-"
     printf '%s\n' "$sha" > "$dir/commit"
     ls -la "$dir"
     ;;
@@ -268,13 +274,18 @@ PY
       verify_parts "$tmp" || { rm -rf "$tmp"; exit 1; }
       mkdir -p .lake
       python3 scripts/topup.py rollback >/dev/null 2>&1 || true     # a top-up of the previous base must not leak into the new one
-      cat "$tmp"/tengoku-cache.tar.zst.part-* | zstd -d -q | tar -C .lake -xf -
+      "$0" unpack "$tmp"
       echo "$found $fc" > .lake/.cache-base
       touch .lake/.topup-marker      # everything built from here on is a difference from this base
       echo "unpacked $found into .lake/build (Lake rebuilds only what differs from $want)"
     fi
     rm -rf "$tmp"
     if [ "$TOPUPS" = 1 ]; then apply_topup "$want"; elif [ -f .lake/.topup-applied.json ]; then python3 scripts/topup.py rollback; fi
+    ;;
+  unpack)          # unpack <dir> — the parts of a cache in <dir> into .lake; a cache published before 2026-10-14 still holds *.setup.json: they never reach the disk
+    dir="${2:?usage: cache.sh unpack <dir>}"
+    mkdir -p .lake
+    cat "$dir"/tengoku-cache.tar.zst.part-* | zstd -d -q | tar -C .lake --exclude='*.setup.json' -xf -
     ;;
   topup-make)      # topup-make <tip commit> <out dir> — pack what differs from the unpacked base (CI, Linux)
     python3 scripts/topup.py make --tip "${2:?tip commit}" --out "${3:?out dir}"
@@ -343,5 +354,5 @@ PY
     for f in .lake/.topup-store/topup-*; do [ -e "$f" ] || continue; case "$f" in *"topup-${2:-none}."*) ;; *) rm -f "$f" ;; esac; done
     ;;
   *)
-    echo "usage: $0 get [<commit>] | latest | latest-tag | put | topup-make <tip> <dir> | topup-put <dir> | topup-promote <commit> | topup-gc | topup-rollback | topup-reapply <commit> | topup-prune <commit>" >&2; exit 2 ;;
+    echo "usage: $0 get [<commit>] | unpack <dir> | latest | latest-tag | put | topup-make <tip> <dir> | topup-put <dir> | topup-promote <commit> | topup-gc | topup-rollback | topup-reapply <commit> | topup-prune <commit>" >&2; exit 2 ;;
 esac

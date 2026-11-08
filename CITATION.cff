@@ -1,6 +1,11 @@
 cff-version: 1.2.0
 message: "If you use Tengoku, please cite the version you used (release vX.Y.Z) and the commit its snapshot.json names."
 type: dataset
+doi: 10.5281/zenodo.23050400
+identifiers:
+  - type: doi
+    value: 10.5281/zenodo.23050400
+    description: "Every version (resolves to the newest); each release also has its own DOI"
 title: "Tengoku: one verified Lean 4 tree of formal mathematics, with provenance"
 abstract: >-
   Tengoku gathers theorems from many formal mathematics libraries into one Lean 4 tree on a single pinned

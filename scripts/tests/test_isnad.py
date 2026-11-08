@@ -9,8 +9,11 @@ import stat
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 spec = importlib.util.spec_from_file_location("isnad", ROOT / "scripts" / "isnad.py")
@@ -279,7 +282,10 @@ class CiJob(unittest.TestCase):
             "lakefile.toml",
             "lean-toolchain",
             "scripts/isnad.py",
+            "scripts/isnad_tag.py",
             "tools/isnad/golden.tsv",
+            "tools/isnad/tagger/Fixture.lean",
+            "tools/isnad/tagger/ranges.json",
             "tools/isnad/laws_body.lean",
             "docs/isnad.md",
             ".github/workflows/pr-tests.yml",
@@ -339,6 +345,316 @@ class Laws(unittest.TestCase):
         self.assertIn("#isnad_laws", script)
         self.assertNotIn("def main", script)  # the executable's entry point is not part of the checked code
         self.assertNotIn("importModules", script)
+
+
+class Batches(unittest.TestCase):
+    """One `tengoku-isnad` process over a whole 400-module tag part held the import closure of every module and the hosted runner was shut down for memory
+    (exit 143, 'The runner has received a shutdown signal', three tag runs on 2026-10-15/16): the facts of a part come from one process per batch."""
+
+    MODULES = [f"Tengoku.Lib.M{i}" for i in range(7)]
+
+    def run_facts(self, batch, names=()):
+        calls = []
+
+        def fake_exe(args, exe=None, **_):
+            calls.append(("recs", list(args)))
+            return [f"rec:{a}" for a in args if a.startswith("Tengoku.")]
+
+        def fake_lines(args, exe=None, **_):
+            calls.append(("ranges", list(args)))
+            return [f"range:{a}" for a in args if a.startswith("Tengoku.")]
+
+        with mock.patch.object(isnad, "run_exe", fake_exe), mock.patch.object(isnad, "run_exe_lines", fake_lines):
+            recs, ranges = isnad.facts(self.MODULES, list(names), None, batch)
+        return recs, ranges, calls
+
+    def test_seven_modules_in_batches_of_three_make_three_processes_per_kind(self):
+        _, _, calls = self.run_facts(3)
+        sizes = [sum(1 for a in args if a == "--module") for kind, args in calls if kind == "recs"]
+        self.assertEqual(sizes, [3, 3, 1])
+        self.assertEqual([k for k, _ in calls], ["recs", "ranges"] * 3)
+
+    def test_the_batches_together_give_what_one_process_gives(self):
+        recs, ranges, _ = self.run_facts(3)
+        one_recs, one_ranges, _ = self.run_facts(100)
+        self.assertEqual((recs, ranges), (one_recs, one_ranges))
+        self.assertEqual(recs, [f"rec:{m}" for m in self.MODULES])
+        self.assertEqual(ranges, [f"range:{m}" for m in self.MODULES])
+
+    def test_the_names_filter_goes_to_every_batch_and_ranges_asks_for_the_same_modules(self):
+        _, _, calls = self.run_facts(4, names=["foo"])
+        self.assertTrue(all(args.count("--name") == 1 for _, args in calls))
+        for (k1, a1), (k2, a2) in zip(calls[::2], calls[1::2]):
+            self.assertEqual((k1, k2, a2[0], a2[1:]), ("recs", "ranges", "--ranges", a1))
+
+    def test_a_batch_of_zero_or_less_means_one_process(self):
+        for batch in (0, -5):
+            _, _, calls = self.run_facts(batch)
+            self.assertEqual(len(calls), 2)
+
+    def test_both_commands_hand_their_batch_option_to_facts(self):
+        seen = []
+
+        def fake_facts(modules, names, exe, batch=None, exact=False, jobs=None):
+            seen.append((list(modules), list(names), batch, exact, jobs))
+            return [], []
+
+        ap = isnad.build_parser()
+        with (
+            mock.patch.object(isnad, "facts", fake_facts),
+            mock.patch.object(isnad, "plan_tags", lambda *a, **k: ({}, [])),
+            mock.patch.object(isnad, "tag_files", lambda *a, **k: ({"added": 0, "replaced": 0, "same": 0, "created": 0}, [])),
+            mock.patch.object(isnad, "check_tags", lambda *a, **k: ([], "")),
+            mock.patch("builtins.print"),
+        ):
+            isnad.cmd_tag(ap.parse_args(["tag", "--module", "A", "--module", "B", "--name", "n", "--batch", "7"]))
+            isnad.cmd_check_tags(ap.parse_args(["check-tags", "--module", "A", "--batch", "9", "--jobs", "2"]))
+        self.assertEqual(
+            seen,
+            [(["A", "B"], ["n"], 7, True, isnad.JOBS), (["A"], [], 9, True, 2)],
+            "the PR's modules are exactly the modules, and the batches run --jobs at a time (JOBS by default)",
+        )
+
+    def test_the_lane_runs_batches_in_parallel_by_default(self):
+        self.assertGreater(isnad.JOBS, 1)
+        for cmd in ("tag", "check-tags"):
+            a = isnad.build_parser().parse_args([cmd, "--module", "A"])
+            self.assertEqual(a.jobs, isnad.JOBS, cmd)
+
+    # `--module A.B` selects by prefix: it reports the theorems of `A.B.C` too (derived-alg-geo-lean part 2, 3 Nov 2026: `Exponential.lean` beside `Exponential/Kernel.lean`)
+    PARENT, CHILD = "Tengoku.Lib.Dir", "Tengoku.Lib.Dir.Kid"
+
+    def prefix_selecting_exe(self):
+        """A `tengoku-isnad` that selects by prefix as the real one does: the records and ranges of every theorem whose module has a listed module as a prefix."""
+        theorems = {self.PARENT: ["p1"], self.CHILD: ["c1", "c2"], "Tengoku.Lib.Other": ["o1"]}
+
+        def chosen(args):
+            listed = [a for i, a in enumerate(args) if i and args[i - 1] == "--module"]
+            return [(m, n) for m, ns in theorems.items() for n in ns if any(m == x or m.startswith(x + ".") for x in listed)]
+
+        def fake_exe(args, exe=None, **_):
+            return [isnad.Record("\t".join(["isnad1", n, m, "thm", "0", "0", "1", "c", "s", "v"])) for m, n in chosen(args)]
+
+        def fake_lines(args, exe=None, **_):
+            return ["\t".join(["isnad1-range", n, m, "1:0", "2:0", "1:8", "1:10"]) for m, n in chosen(args)]
+
+        return fake_exe, fake_lines
+
+    def facts_of(self, modules, batch, exact):
+        fake_exe, fake_lines = self.prefix_selecting_exe()
+        with mock.patch.object(isnad, "run_exe", fake_exe), mock.patch.object(isnad, "run_exe_lines", fake_lines):
+            return isnad.facts(modules, [], None, batch, exact)
+
+    def test_a_module_that_is_a_prefix_of_another_made_the_theorems_of_the_other_come_twice(self):
+        recs, ranges = self.facts_of([self.PARENT, self.CHILD], 1, exact=False)
+        self.assertEqual(sorted(r.name for r in recs).count("c1"), 2)
+        self.assertEqual(sum(1 for ln in ranges if "\tc1\t" in ln), 2)
+
+    def test_with_exact_every_theorem_comes_once_from_the_batch_that_lists_its_module(self):
+        for batch in (1, 2, 100):
+            recs, ranges = self.facts_of([self.PARENT, self.CHILD], batch, exact=True)
+            want = sorted([(self.PARENT, "p1"), (self.CHILD, "c1"), (self.CHILD, "c2")])
+            self.assertEqual(sorted((r.module, r.name) for r in recs), want, batch)
+            self.assertEqual(len(ranges), 3, batch)
+
+    def test_a_theorem_is_planned_for_tagging_when_its_module_has_a_parent_module_in_the_pr(self):
+        recs, ranges = self.facts_of([self.PARENT, self.CHILD], 1, exact=True)
+        plan, skipped = isnad.plan_tags(recs, ranges)
+        self.assertEqual(sorted(plan), [self.PARENT, self.CHILD])
+        self.assertEqual([it.name for it in plan[self.CHILD]], ["c1", "c2"])
+        self.assertEqual(skipped, [])
+        recs2, ranges2 = self.facts_of([self.PARENT, self.CHILD], 1, exact=False)
+        plan2, skipped2 = isnad.plan_tags(recs2, ranges2)
+        self.assertNotIn(
+            self.CHILD, plan2, "main's behaviour: the child's theorems are 'the same name for two theorems' and the module is left untagged"
+        )
+        self.assertEqual(sorted(n for n, _ in skipped2), ["c1", "c1", "c2", "c2"])
+
+    def test_a_listed_parent_alone_reports_only_its_own_theorems_with_exact(self):
+        recs, _ = self.facts_of([self.PARENT], 100, exact=True)
+        self.assertEqual([(r.module, r.name) for r in recs], [(self.PARENT, "p1")])
+
+    # a theorem that two modules of one environment declare (same name and type, which Lean accepts) belongs to only one of them in that environment: grothendieck-riemann-roch
+    # part 1, 3 Nov 2026, `Chow/ReesDepth.lean` has three theorems the tree's Seed has too, and in a batch it came out with no record
+    SHADOWED, PARTLY, PLAIN, EMPTY = "Tengoku.Lib.Dup", "Tengoku.Lib.Part", "Tengoku.Lib.Plain", "Tengoku.Lib.Defs"
+    DECLARED = {SHADOWED: {"s1", "s2"}, PARTLY: {"own", "dup"}, PLAIN: {"p1"}, EMPTY: set()}
+
+    def shadowing_exe(self):
+        calls = []
+
+        def listed(args):
+            return [a for i, a in enumerate(args) if i and args[i - 1] == "--module"]
+
+        def rows(args):
+            mods, alone = listed(args), len(listed(args)) == 1
+            out = [(self.PLAIN, "p1")] if self.PLAIN in mods else []
+            if self.SHADOWED in mods and alone:  # in a batch the other module of the environment holds these theorems
+                out += [(self.SHADOWED, "s1"), (self.SHADOWED, "s2")]
+            if self.PARTLY in mods:
+                out += [(self.PARTLY, "own")] + ([(self.PARTLY, "dup")] if alone else [])
+            return out
+
+        def fake_exe(args, exe=None, **_):
+            calls.append(("recs", listed(args)))
+            return [isnad.Record("\t".join(["isnad1", n, m, "thm", "0", "0", "1", "c", "s", "v"])) for m, n in rows(args)]
+
+        def fake_lines(args, exe=None, **_):
+            calls.append(("ranges", listed(args)))
+            return ["\t".join(["isnad1-range", n, m, "1:0", "2:0", "1:8", "1:10"]) for m, n in rows(args)]
+
+        return fake_exe, fake_lines, calls
+
+    def shadowed_facts(self, exact, declared=None):
+        fake_exe, fake_lines, calls = self.shadowing_exe()
+        mods = [self.SHADOWED, self.PARTLY, self.PLAIN, self.EMPTY]
+        declared = self.DECLARED if declared is None else declared
+        with (
+            mock.patch.object(isnad, "run_exe", fake_exe),
+            mock.patch.object(isnad, "run_exe_lines", fake_lines),
+            mock.patch.object(isnad, "declared_theorem_names", lambda m, root=None: declared[m]),
+        ):
+            recs, ranges = isnad.facts(mods, [], None, 100, exact)
+        return recs, ranges, calls
+
+    def test_a_module_with_a_declared_theorem_and_no_record_in_the_batch_is_asked_again_alone(self):
+        recs, ranges, calls = self.shadowed_facts(exact=True)
+        got = sorted((r.module, r.name) for r in recs)
+        self.assertIn((self.SHADOWED, "s1"), got)
+        self.assertIn((self.SHADOWED, "s2"), got)
+        self.assertEqual(sum(1 for ln in ranges if f"\t{self.SHADOWED}\t" in ln), 2)
+        self.assertIn(("recs", [self.SHADOWED]), calls)
+        self.assertIn(("ranges", [self.SHADOWED]), calls)
+
+    def test_a_module_with_only_some_of_its_theorems_recorded_is_asked_again_and_gets_each_once(self):
+        recs, ranges, calls = self.shadowed_facts(exact=True)
+        part = sorted(r.name for r in recs if r.module == self.PARTLY)
+        self.assertEqual(part, ["dup", "own"], "the retry replaces the batch's records of the module, it does not add to them")
+        self.assertEqual(sum(1 for ln in ranges if f"\t{self.PARTLY}\t" in ln), 2)
+        plan, skipped = isnad.plan_tags(recs, ranges)
+        self.assertEqual(skipped, [])
+        self.assertEqual(sorted(it.name for it in plan[self.PARTLY]), ["dup", "own"])
+
+    def test_a_module_whose_declared_theorems_all_have_records_is_not_asked_again(self):
+        _, _, calls = self.shadowed_facts(exact=True)
+        alone = [m[0] for _, m in calls if len(m) == 1]
+        self.assertNotIn(self.PLAIN, alone)
+        self.assertNotIn(self.EMPTY, alone, "and a module that declares no theorem neither")
+
+    def test_without_exact_the_batch_is_all_there_is(self):
+        recs, _, calls = self.shadowed_facts(exact=False)
+        self.assertEqual(sorted((r.module, r.name) for r in recs), sorted([(self.PLAIN, "p1"), (self.PARTLY, "own")]))
+        self.assertEqual(len(calls), 2)
+
+    def test_declared_theorem_names_reads_the_commands_of_the_source(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            (root / "Tengoku" / "Lib").mkdir(parents=True)
+            cases = {
+                "A": "import X\n/-- doc -/\ntheorem Foo.foo : True := trivial\nlemma bar (n : Nat) : True := trivial\n",
+                "B": "@[simp] public theorem pub : True := trivial\nprotected noncomputable lemma nc : True := trivial\n",
+                "C": "def f := 1\n-- a theorem in a comment\n/- theorem baz -/\nprivate lemma hidden : True := trivial\n",
+                "D": "theorem eq_1 : True := trivial\ntheorem _aux : True := trivial\ntheorem «odd.name» : True := trivial\n",
+            }
+            for name, text in cases.items():
+                (root / "Tengoku" / "Lib" / f"{name}.lean").write_text(text, encoding="utf-8")
+            got = {n: isnad.declared_theorem_names(f"Tengoku.Lib.{n}", root) for n in (*cases, "Missing")}
+        self.assertEqual(got, {"A": {"foo", "bar"}, "B": {"pub", "nc"}, "C": set(), "D": {"name"}, "Missing": set()})
+
+    def test_a_module_or_theorem_name_that_is_not_a_lean_name_is_refused_before_any_process_runs(self):
+        for bad in ("--import", "-x", "A B", "A;rm", "$(x)", "A\nB", "", ".A"):
+            for modules, names in (([bad], []), (["Tengoku.Lib.M"], [bad])):
+                fake = mock.Mock()
+                with mock.patch.object(isnad, "run_exe", fake), mock.patch.object(isnad, "run_exe_lines", fake):
+                    with self.assertRaises(SystemExit, msg=repr(bad)):
+                        isnad.facts(modules, names, None, 25, True)
+                fake.assert_not_called()
+
+    def test_the_names_of_the_tree_pass_the_check(self):
+        for ok in (
+            "Tengoku.Lib.Foo",
+            "Tengoku.Lib.«A-B».C",
+            "Tengoku.Azurite.Azurite.UInt64.Equiv.Basic",
+            "Nat.add_comm",
+            "Foo.bar'",
+            "Foo._private.x",
+            "_root_.foo",
+            "δ_apply",
+            "ι_total_d",
+            "ω₂_ne_zero",
+        ):
+            self.assertEqual(isnad.lean_name(ok), ok)
+
+    def test_both_commands_take_a_batch_option_with_the_default(self):
+        ap = isnad.build_parser()
+        for cmd in ("tag", "check-tags"):
+            self.assertEqual(ap.parse_args([cmd, "--module", "A"]).batch, isnad.BATCH)
+            self.assertEqual(ap.parse_args([cmd, "--module", "A", "--batch", "7"]).batch, 7)
+
+
+class BatchesInParallel(unittest.TestCase):
+    """The batches of a part are independent processes: `jobs` of them run at a time (214 modules took 18 minutes one batch after the other on a 4-core runner), and the
+    result is the one the serial run gives, in the order of the batches, whatever order they finish in."""
+
+    MODULES = [f"Tengoku.Lib.M{i}" for i in range(10)]
+
+    def facts_with(self, jobs, batch=2, delays=None, boom=None, exact=False):
+        """`facts` over ten modules in batches of `batch`, through stand-ins for the two `tengoku-isnad` calls; returns (records, ranges, most processes at once, calls)."""
+        lock = threading.Lock()
+        state = {"now": 0, "most": 0, "calls": 0}
+        delays = delays or {}
+
+        def call(args):
+            mods = [a for i, a in enumerate(args) if i and args[i - 1] == "--module"]
+            with lock:
+                state["now"] += 1
+                state["calls"] += 1
+                state["most"] = max(state["most"], state["now"])
+            try:
+                time.sleep(delays.get(mods[0], 0))
+                if boom == mods[0]:
+                    raise SystemExit(f"stand-in: {mods[0]} killed")
+            finally:
+                with lock:
+                    state["now"] -= 1
+            return mods
+
+        def fake_exe(args, exe=None, **_):
+            return [isnad.Record("\t".join(["isnad1", "t", m, "thm", "0", "0", "1", "c", "s", "v"])) for m in call(args)]
+
+        def fake_lines(args, exe=None, **_):
+            return ["\t".join(["isnad1-range", "t", m, "1:0", "2:0", "1:8", "1:10"]) for m in call(args[1:])]
+
+        with mock.patch.object(isnad, "run_exe", fake_exe), mock.patch.object(isnad, "run_exe_lines", fake_lines):
+            recs, ranges = isnad.facts(self.MODULES, [], None, batch, exact=exact, jobs=jobs)
+        return [(r.module, r.name) for r in recs], ranges, state["most"], state["calls"]
+
+    def test_the_result_is_the_serial_result_even_when_the_first_batches_finish_last(self):
+        serial = self.facts_with(1)
+        # the first batch is the slowest: a run that appended results as they came would put it last
+        slow_first = self.facts_with(3, delays={self.MODULES[0]: 0.15, self.MODULES[2]: 0.08})
+        self.assertEqual(serial[:2], slow_first[:2])
+        self.assertEqual([m for m, _ in slow_first[0]], self.MODULES)
+        self.assertEqual(serial[3], slow_first[3], "the same number of processes")
+
+    def test_with_exact_the_parallel_result_is_the_serial_result_too(self):
+        self.assertEqual(self.facts_with(1, exact=True)[:2], self.facts_with(4, exact=True)[:2])
+
+    def test_batches_do_run_at_the_same_time_and_never_more_than_jobs(self):
+        delays = {m: 0.05 for m in self.MODULES}  # every call waits a little, so that batches that run together overlap in time
+        self.assertEqual(self.facts_with(1, delays=delays)[2], 1, "jobs=1 is one after the other")
+        self.assertEqual(self.facts_with(3, delays=delays)[2], 3, "five batches, three at a time")
+        self.assertEqual(self.facts_with(50, delays=delays)[2], 5, "never more than there are batches")
+
+    def test_a_batch_that_stops_the_run_stops_it(self):
+        for jobs in (1, 3):
+            with self.assertRaises(SystemExit) as c:
+                self.facts_with(jobs, boom=self.MODULES[4])
+            self.assertIn(self.MODULES[4], str(c.exception))
+
+    def test_one_batch_is_one_process_pair_whatever_jobs_says(self):
+        self.assertEqual(self.facts_with(8, batch=100)[2:], (1, 2))
 
 
 if __name__ == "__main__":

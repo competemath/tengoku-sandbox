@@ -151,6 +151,14 @@ def source_component(lib: str, rows: list[dict], registry: dict) -> dict:
     def licence_for(url: str) -> str | None:
         return next((v for k, v in sorted(licences.items(), key=lambda kv: -len(kv[0])) if url.startswith(k.rstrip("/"))), None)
 
+    def repo_licences(repo: str, commit: str) -> list[dict]:
+        """The repository's licence, then the licence of every file or directory under it that the registry gives its own at
+        this commit (`<repo>/blob/<commit>/<path>`: derived-alg-geo-lean is MIT with eleven Apache-2.0 files), each once. The
+        component is described at `commit`, so an entry for another commit does not describe it."""
+        under = f"{repo.rstrip('/')}/blob/{commit}/"
+        ids = [licence_for(repo)] + [v for k, v in sorted(licences.items()) if k.startswith(under)]
+        return [entry for spdx in dict.fromkeys(i for i in ids if i) for entry in licence(spdx)]
+
     props = [{"name": ROLE, "value": "source"}, {"name": "tengoku:trusted-records", "value": str(len(rows))}]
     if lib in corpora:
         spec = corpora[lib]
@@ -160,7 +168,7 @@ def source_component(lib: str, rows: list[dict], registry: dict) -> dict:
             "name": lib,
             "version": spec["commit"],
             "purl": purl(spec["repo"], spec["commit"]),
-            "licenses": licence(licence_for(spec["repo"])),
+            "licenses": repo_licences(spec["repo"], spec["commit"]),
             "externalReferences": [{"type": "vcs", "url": spec["repo"]}],
             "properties": props,
         }

@@ -21,6 +21,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -48,15 +49,29 @@ def pointer(look: int) -> dict | None:
         return None
 
 
+def sha(value: object) -> str | None:
+    """A full commit id in canonical form, or None. The cache pointer is read from the network, so a commit from it reaches git only as a number's digits: a
+    value that is not 40 hex digits (an option such as `--upload-pack=…` included) never becomes an argument."""
+    if not isinstance(value, str) or not re.fullmatch(r"[0-9a-fA-F]{40}", value):
+        return None
+    return format(int(value, 16), "040x")
+
+
 def is_ancestor(a: str, b: str) -> bool:
-    return subprocess.run(["git", "merge-base", "--is-ancestor", a, b], capture_output=True, check=False).returncode == 0
+    first, second = sha(a), sha(b)
+    if first is None or second is None:
+        return False
+    return subprocess.run(["git", "merge-base", "--is-ancestor", first, second], capture_output=True, check=False).returncode == 0
 
 
 def have(commit: str) -> bool:
-    if subprocess.run(["git", "cat-file", "-e", f"{commit}^{{commit}}"], capture_output=True, check=False).returncode == 0:
+    wanted = sha(commit)
+    if wanted is None:
+        return False
+    if subprocess.run(["git", "cat-file", "-e", f"{wanted}^{{commit}}"], capture_output=True, check=False).returncode == 0:
         return True
-    subprocess.run(["git", "fetch", "-q", "--no-tags", "--filter=blob:none", "origin", commit], capture_output=True, check=False)
-    return subprocess.run(["git", "cat-file", "-e", f"{commit}^{{commit}}"], capture_output=True, check=False).returncode == 0
+    subprocess.run(["git", "fetch", "-q", "--no-tags", "--filter=blob:none", "origin", wanted], capture_output=True, check=False)
+    return subprocess.run(["git", "cat-file", "-e", f"{wanted}^{{commit}}"], capture_output=True, check=False).returncode == 0
 
 
 def reference(p: dict, base: str) -> str | None:

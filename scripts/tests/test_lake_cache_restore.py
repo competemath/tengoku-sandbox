@@ -182,6 +182,12 @@ class Store(unittest.TestCase):
         self.assertEqual(len(s["applied"]), 2)
         self.assertEqual((self.repo / ".lake" / "deltas-had.jsonl").read_text().splitlines(), ['{"m":"c1"}', '{"m":"c3"}'])
 
+    def test_a_marker_left_by_an_earlier_failed_fetch_is_cleared_when_the_mappings_load(self):
+        (self.repo / ".lake" / ".base-missing").write_text("cache-20261014T0336Z\n")  # a reused workspace
+        s, _ = self.restore()
+        self.assertEqual(s["base_mappings"], "present")
+        self.assertFalse((self.repo / ".lake" / ".base-missing").exists())
+
     def test_a_base_with_no_delta_release_yet_restores_nothing_and_succeeds(self):
         (self.shim / "releases" / f"{self.release}.json").unlink()
         s, _ = self.restore()

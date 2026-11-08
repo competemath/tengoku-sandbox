@@ -206,14 +206,16 @@ for st, p in changed_files(base, head):
             r"(?<![\w'])" + re.escape(n.rsplit(".", 1)[-1]) + r"(?![\w'])", str(r.get("statement", ""))
         ):
             errors.append(f"{p}:{no}: statement does not declare {n} (its last component must appear; namespaces may come from context)")
-        if n in seen:
-            errors.append(f"{p}:{no}: duplicate name in this PR: {n}")
-        seen.add(n)
-        if t != "trusted":
-            if known is None:
-                known = trusted_names()
-            if n in known:
-                errors.append(f"{p}:{no}: {n} is already trusted")
+        # a name that is no string was reported above; a list is not even hashable (the fuzzer, 2026-10-18: {"name": ["Known.thm"]} was a TypeError, not a refusal)
+        if isinstance(n, str):
+            if n in seen:
+                errors.append(f"{p}:{no}: duplicate name in this PR: {n}")
+            seen.add(n)
+            if t != "trusted":
+                if known is None:
+                    known = trusted_names()
+                if n in known:
+                    errors.append(f"{p}:{no}: {n} is already trusted")
         # a contributor names headlines when adding records; promotion carries them into trusted, many PRs at once
         if r.get("headline") is True and t != "trusted":
             stmt = str(r.get("statement", ""))

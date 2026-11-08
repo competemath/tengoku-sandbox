@@ -1,6 +1,9 @@
 name: promote
-# Promotion off the laptop. A staging record becomes trusted once its module builds (scripts/promote.py). Every hour,
-# and again after each merged batch, this promotes up to max_files quiet source files (one build each, on the
+# Promotion off the laptop. A staging record becomes trusted once its module builds (scripts/promote.py). On demand only
+# (workflow_dispatch), since 2026-10-05: the hourly schedule is off. Libraries now arrive as factory bundles (intake PRs, built whole and
+# checked by the gate), and the schedule kept re-building the old per-theorem staging files, about 1.4 runner-hours a run (40.8 over 29 runs), with nothing
+# promoted since 2026-09-21. Run it when new staging records are worth a promotion: it then continues itself after each merged batch,
+# and promotes up to max_files quiet source files (one build each, on the
 # attested cache), reduces the staging files to pure removals (a promotion may only remove staging lines: promote.py
 # writes build_error into the records of a file that did not build, which is left out here), and opens ONE promotion
 # PR as the bot (secret TENGOKU_BOT_TOKEN: the promotion class is granted by actor, and a PR opened with the job's own
@@ -9,8 +12,6 @@ name: promote
 # config) can be there when the token is used. The run waits for its PR (promotions share data/trusted and
 # Tengoku/All.lean) before the next batch starts.
 on:
-  schedule:
-    - cron: "41 * * * *"
   workflow_dispatch:
     inputs:
       max_files: { description: "Source files per promotion PR", required: true, default: "150" }
@@ -161,7 +162,7 @@ jobs:
           git format-patch -1 --stdout > promotion.patch
           git diff --stat HEAD~1 | tail -1
           { echo "branch=$branch"; echo "summary=$summary"; echo "more=$more"; } >> "$GITHUB_OUTPUT"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: steps.promote.outputs.branch != ''
         with: { name: promotion, path: promotion.patch, retention-days: 14 }
   propose:
@@ -173,7 +174,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { ref: main, fetch-depth: 0, filter: "blob:none", persist-credentials: false }
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with: { name: promotion, path: promotion }
       - name: The promotion PR, as the bot
         id: pr

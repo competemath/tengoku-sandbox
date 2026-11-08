@@ -5,7 +5,7 @@
 #
 # The checks always come from main: a PR never supplies the rules that judge it. `pull_request_target`
 # runs this file as it is on main (a `pull_request` run would take the PR's copy, which a PR can edit
-# to pass), and every job checks out main's commit and reads the PR only as data (git objects, and for
+# to pass), and every job checks out main's tip (env SCRIPTS) and reads the PR only as data (git objects, and for
 # vacuity the PR's data/ files laid over main's tree). Nothing here runs the PR's scripts, and every
 # checkout drops its token (persist-credentials: false). The PR's own test suite runs in pr-tests.yml.
 # A change to this file therefore takes effect only once merged: prove it in tengoku-sandbox first.
@@ -26,6 +26,11 @@ concurrency:
 env:
   BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
   HEAD: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha }}
+  # The checks come from the base branch's TIP, not from the base commit the event recorded: that commit is the branch as it was at the
+  # PR's last push, and a gate script merged since is missing there (every PR opened before the FOSSA gate landed failed its new job
+  # with "can't open file", and a re-run or a description edit did not help: only a push did, 2026-10-07). BASE stays the commit the
+  # diff is measured against. In the merge queue the entry's base is that tip already.
+  SCRIPTS: ${{ github.event.pull_request.base.ref && format('refs/heads/{0}', github.event.pull_request.base.ref) || github.event.merge_group.base_sha }}
   # where the PR's commits are fetched from (a fork's commits are reachable from refs/pull/<n>/head)
   PR_REF: ${{ github.event.pull_request.number && format('refs/pull/{0}/head', github.event.pull_request.number) || github.event.merge_group.head_ref }}
 jobs:
@@ -34,14 +39,14 @@ jobs:
   classify:
     if: github.event_name == 'pull_request_target'
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
     permissions: { contents: read }   # reads the PR's commits and runs main's scripts: no write token here (the label job below holds it)
     outputs: { class: "${{ steps.c.outputs.class }}" }
     steps:
-      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
+      - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { ref: "${{ env.BASE }}", fetch-depth: 0, filter: "blob:none", persist-credentials: false }
+        with: { ref: "${{ env.SCRIPTS }}", fetch-depth: 0, filter: "blob:none", persist-credentials: false }
       - name: The PR's commits, as data (the checks are main's)
         run: git fetch -q --no-tags --filter=blob:none origin "+$PR_REF:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
       - id: c
@@ -49,6 +54,7 @@ jobs:
         env:
           PR_ACTOR: "${{ github.event.pull_request.user.login }}"
           TENGOKU_BOT: "${{ vars.TENGOKU_BOT || 'tengoku-bot' }}"
+          TENGOKU_STUDIED_BOT: "${{ vars.TENGOKU_STUDIED_BOT || 'tengoku-supervisor[bot]' }}"  # the App that sends studied PRs
           TENGOKU_ACTOR_CHECKED: "${{ github.event_name == 'merge_group' && '1' || '' }}"  # the PR's own gate verified the actor
         run: python3 scripts/ci/classify.py "$BASE" "$HEAD"
 
@@ -58,17 +64,17 @@ jobs:
     needs: classify
     if: ${{ !cancelled() && needs.classify.outputs.class != '' && github.event_name == 'pull_request_target' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
     permissions: { pull-requests: write }
     steps:
-      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
+      - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2
         with: { egress-policy: audit }
       - name: Label the PR with its class
         env: { GH_TOKEN: "${{ github.token }}", CLASS: "${{ needs.classify.outputs.class }}", PR: "${{ github.event.pull_request.number }}" }
         run: |
-          case "$CLASS" in content|tombstone|tooling|docs|promotion|derived|intake|extend|scope-fix|restructure|tag|native) ;; *) echo "::error::not a class name"; exit 1 ;; esac
+          case "$CLASS" in content|tombstone|tooling|docs|promotion|derived|intake|extend|scope-fix|restructure|tag|raze|studied|native) ;; *) echo "::error::not a class name"; exit 1 ;; esac
           # one class label at a time: a PR whose class changes (docs, then content) loses the old one
-          old=$(gh pr view "$PR" -R "$GITHUB_REPOSITORY" --json labels --jq '.labels[].name' | grep -xE 'content|tombstone|tooling|docs|promotion|derived|intake|extend|scope-fix|restructure|tag|native' | grep -vxF "$CLASS" | paste -sd, - || true)
+          old=$(gh pr view "$PR" -R "$GITHUB_REPOSITORY" --json labels --jq '.labels[].name' | grep -xE 'content|tombstone|tooling|docs|promotion|derived|intake|extend|scope-fix|restructure|tag|raze|studied|native' | grep -vxF "$CLASS" | paste -sd, - || true)
           args=(--add-label "$CLASS"); [ -n "$old" ] && args+=(--remove-label "$old")
           gh pr edit "$PR" -R "$GITHUB_REPOSITORY" "${args[@]}" || echo "::warning::could not label the PR '$CLASS' (scripts/ci/labels.sh creates the class labels)"
 
@@ -76,13 +82,13 @@ jobs:
     needs: classify
     if: contains(fromJSON('["content","tombstone","promotion"]'), needs.classify.outputs.class)
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     permissions: { contents: read }
     steps:
-      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
+      - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { ref: "${{ env.BASE }}", fetch-depth: 0, filter: "blob:none", persist-credentials: false }
+        with: { ref: "${{ env.SCRIPTS }}", fetch-depth: 0, filter: "blob:none", persist-credentials: false }
       - name: The PR's commits, as data (the checks are main's)
         run: git fetch -q --no-tags --filter=blob:none origin "+$PR_REF:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
       - name: append-only
@@ -96,29 +102,29 @@ jobs:
   credits:
     needs: classify
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
     permissions: { contents: read }
     steps:
-      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
+      - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { ref: "${{ env.BASE }}", fetch-depth: 0, filter: "blob:none", persist-credentials: false }
+        with: { ref: "${{ env.SCRIPTS }}", fetch-depth: 0, filter: "blob:none", persist-credentials: false }
       - name: The PR's commits, as data (the checks are main's)
         run: git fetch -q --no-tags --filter=blob:none origin "+$PR_REF:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
       - name: credits
-        run: python3 scripts/ci/credits.py "$BASE" "$HEAD" ${{ needs.classify.outputs.class == 'promotion' && '--promotion' || '' }} ${{ needs.classify.outputs.class == 'restructure' && '--restructure' || '' }}
+        run: python3 scripts/ci/credits.py "$BASE" "$HEAD" ${{ needs.classify.outputs.class == 'promotion' && '--promotion' || '' }} ${{ needs.classify.outputs.class == 'restructure' && '--restructure' || '' }} ${{ needs.classify.outputs.class == 'raze' && '--raze' || '' }}
 
   # GOALS.md: its shape, real references, and the AI reviewer writing only Suggestions (docs/goals.md).
   goals:
     needs: classify
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
     permissions: { contents: read }
     steps:
-      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
+      - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { ref: "${{ env.BASE }}", fetch-depth: 0, filter: "blob:none", persist-credentials: false }
+        with: { ref: "${{ env.SCRIPTS }}", fetch-depth: 0, filter: "blob:none", persist-credentials: false }
       - name: The PR's commits, as data (the checks are main's)
         run: git fetch -q --no-tags --filter=blob:none origin "+$PR_REF:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
       - name: goals
@@ -129,11 +135,11 @@ jobs:
   dco:
     needs: classify
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
     permissions: { contents: read }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { ref: "${{ env.BASE }}", fetch-depth: 0, filter: "blob:none", persist-credentials: false }
+        with: { ref: "${{ env.SCRIPTS }}", fetch-depth: 0, filter: "blob:none", persist-credentials: false }
       - name: The PR's commits, as data (the checks are main's)
         run: git fetch -q --no-tags --filter=blob:none origin "+$PR_REF:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
       - name: dco
@@ -149,7 +155,7 @@ jobs:
     timeout-minutes: 30
     permissions: { contents: read, pull-requests: read }
     steps:
-      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
+      - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2
         with: { egress-policy: audit }
       # The base commit with plain git, not actions/checkout: the repository is public, so nothing needs a token (the next step fetches the PR the
       # same way), and no credential is ever written into the checkout. Only the base is checked out; the PR is read as git objects.
@@ -157,21 +163,83 @@ jobs:
         run: |
           git init -q .
           git remote add origin "https://github.com/$GITHUB_REPOSITORY"
-          git fetch -q --no-tags --filter=blob:none origin "$BASE"
-          git checkout -q --detach "$BASE"
+          git fetch -q --no-tags --filter=blob:none origin "+$SCRIPTS:refs/remotes/origin/scripts" "$BASE"
+          git checkout -q --detach origin/scripts
       - name: The PR's commits, as data (the checks are main's)
         run: git fetch -q --no-tags --filter=blob:none origin "+$PR_REF:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
       - name: intake checks
-        env: { LINT: "${{ vars.TENGOKU_INTAKE_LINT || 'strict' }}" }
+        env: { LINT: "${{ vars.TENGOKU_INTAKE_LINT || 'strict' }}", TENGOKU_ISNAD_REQUIRED: "${{ vars.TENGOKU_ISNAD_REQUIRED }}" }
         run: python3 scripts/ci/intake_check.py "$BASE" "$HEAD" --lint "$LINT" --tar "$RUNNER_TEMP/bundle.tar"
+      # Born tagged (docs/isnad.md): once the repository variable TENGOKU_ISNAD_REQUIRED is 1 an intake PR carries its isnad tags, written into its branch by the autotag workflows;
+      # until then this step passes at once. The merge queue recomputes every tag from the build (scripts/ci/tag_verify.py).
+      - name: born tagged (the isnad tags are in the PR)
+        env: { TENGOKU_ISNAD_REQUIRED: "${{ vars.TENGOKU_ISNAD_REQUIRED }}" }
+        run: python3 scripts/ci/born_tagged.py "$BASE" "$HEAD"
       - name: provenance (the factory built exactly these bytes)
         env: { GH_TOKEN: "${{ github.token }}" }
         run: |
           for wf in bump-library bump-sharded; do
+            # --source-ref: the build ran from main. A bundle built by a workflow dispatched from a branch (code nobody reviewed) carries a valid attestation of the same workflow file
             if gh attestation verify "$RUNNER_TEMP/bundle.tar" --repo competemath/emissary-archangel \
-                 --signer-workflow "competemath/emissary-archangel/.github/workflows/$wf.yml"; then ok=1; break; fi
+                 --signer-workflow "competemath/emissary-archangel/.github/workflows/$wf.yml" --source-ref refs/heads/main; then ok=1; break; fi
           done
-          [ "${ok:-0}" = 1 ] || { echo "::error::no build attestation of competemath/emissary-archangel matches the bundle in this PR"; exit 1; }
+          [ "${ok:-0}" = 1 ] || { echo "::error::no build attestation of competemath/emissary-archangel, built from its main branch, matches the bundle in this PR"; exit 1; }
+
+  # A studied PR (theorems that Leak runs proved and rated four stars or more; the intake job in competemath/emissary-archangel re-derived them and opened it as the
+  # supervisor App, tengoku-supervisor) is judged by its shape, its manifest and report, the content lint on every module, and the intake job's build attestation over the very bytes of the PR
+  # (scripts/ci/studied_check.py). Nothing of the PR runs; the queue builds the modules, sealed, and checks every theorem's axioms.
+  studied:
+    needs: classify
+    if: github.event_name == 'pull_request_target' && needs.classify.outputs.class == 'studied'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions: { contents: read, pull-requests: read }
+    steps:
+      - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2
+        with: { egress-policy: audit }
+      # The base commit with plain git (see the intake job): only the base is checked out, the PR is read as git objects.
+      - name: The base commit (the checks are main's)
+        run: |
+          git init -q .
+          git remote add origin "https://github.com/$GITHUB_REPOSITORY"
+          git fetch -q --no-tags --filter=blob:none origin "+$SCRIPTS:refs/remotes/origin/scripts" "$BASE"
+          git checkout -q --detach origin/scripts
+      - name: The PR's commits, as data (the checks are main's)
+        run: git fetch -q --no-tags --filter=blob:none origin "+$PR_REF:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
+      - name: studied checks
+        run: python3 scripts/ci/studied_check.py "$BASE" "$HEAD" --tar "$RUNNER_TEMP/bundle.tar"
+      # Born tagged (docs/isnad.md): a studied PR always carries its isnad tags, written into its branch by the autotag workflows a few minutes after it is opened (this check is red until
+      # then, and green after the push). The merge queue recomputes every tag from the build (scripts/ci/tag_verify.py).
+      - name: born tagged (the isnad tags are in the PR)
+        run: python3 scripts/ci/born_tagged.py "$BASE" "$HEAD"
+      - name: provenance (the memory intake built exactly these bytes, from main)
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          gh attestation verify "$RUNNER_TEMP/bundle.tar" --repo competemath/emissary-archangel \
+            --signer-workflow "competemath/emissary-archangel/.github/workflows/memory-intake.yml" --source-ref refs/heads/main \
+            || { echo "::error::no build attestation of competemath/emissary-archangel's memory-intake workflow, run from its main branch, matches the bundle in this PR"; exit 1; }
+
+  # Who may approve a studied PR: one code owner, or two independent contributors with write access (scripts/ci/studied_approval.py; the ruleset can say one or the
+  # other, not either). Here it only tells the reviewers where the PR stands, and never blocks (`continue-on-error`): approvals arrive after this job ran. The merge queue
+  # asks the same question again, on the reviews it finds when the PR is queued, and ejects the PR if the answer is no (the queue-recheck job).
+  studied-approval:
+    needs: classify
+    if: github.event_name == 'pull_request_target' && needs.classify.outputs.class == 'studied'
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    timeout-minutes: 15
+    permissions: { contents: read, pull-requests: read }
+    steps:
+      # main's scripts with plain git (see the intake job), not actions/checkout
+      - name: The base commit (the checks are main's)
+        run: |
+          git init -q .
+          git remote add origin "https://github.com/$GITHUB_REPOSITORY"
+          git fetch -q --no-tags --filter=blob:none origin "+$SCRIPTS:refs/remotes/origin/scripts" "$BASE"
+          git checkout -q --detach origin/scripts
+      - name: approval (advisory here)
+        env: { GH_TOKEN: "${{ github.token }}", PR: "${{ github.event.pull_request.number }}" }
+        run: scripts/ci/studied_approval.sh "$PR"
 
   # A tag PR (isnad tags written into modules that are already in the tree) is judged without Lean: after the tags are taken out, the code is the base's bytes
   # and every docstring the base's words, every tag is well formed and says where its module is from (scripts/ci/tag_check.py). Nothing of the PR runs; the merge
@@ -183,19 +251,43 @@ jobs:
     timeout-minutes: 15
     permissions: { contents: read }
     steps:
-      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
+      - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2
         with: { egress-policy: audit }
       # The base commit with plain git (see the scope-fix job): only the base is checked out, the PR is read as git objects.
       - name: The base commit (the checks are main's)
         run: |
           git init -q .
           git remote add origin "https://github.com/$GITHUB_REPOSITORY"
-          git fetch -q --no-tags --filter=blob:none origin "$BASE"
-          git checkout -q --detach "$BASE"
+          git fetch -q --no-tags --filter=blob:none origin "+$SCRIPTS:refs/remotes/origin/scripts" "$BASE"
+          git checkout -q --detach origin/scripts
       - name: The PR's commits, as data (the checks are main's)
         run: git fetch -q --no-tags --filter=blob:none origin "+$PR_REF:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
       - name: tag checks
         run: python3 scripts/ci/tag_check.py "$BASE" "$HEAD"
+
+  # A raze PR (modules of an intake library taken out of the tree so that a corrected bundle can bring them back) is the one class that removes content, so it is judged strictly
+  # (scripts/ci/raze_check.py: the removal and nothing else, the dependencies inside the library gone with it; imports_resolve covers the rest of the tree) and a code owner reviews
+  # it: its marker data/raze/<id>.json is under no unowned line of CODEOWNERS. Nothing of the PR runs; the merge queue builds the library without the modules.
+  raze:
+    needs: classify
+    if: github.event_name == 'pull_request_target' && needs.classify.outputs.class == 'raze'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions: { contents: read }
+    steps:
+      - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2
+        with: { egress-policy: audit }
+      # The base commit with plain git (see the scope-fix job): only the base is checked out, the PR is read as git objects.
+      - name: The base commit (the checks are main's)
+        run: |
+          git init -q .
+          git remote add origin "https://github.com/$GITHUB_REPOSITORY"
+          git fetch -q --no-tags --filter=blob:none origin "+$SCRIPTS:refs/remotes/origin/scripts" "$BASE"
+          git checkout -q --detach origin/scripts
+      - name: The PR's commits, as data (the checks are main's)
+        run: git fetch -q --no-tags --filter=blob:none origin "+$PR_REF:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
+      - name: raze checks
+        run: python3 scripts/ci/raze_check.py "$BASE" "$HEAD"
 
   # A native PR (novel Lean modules under Tengoku/Native/) is judged from git objects only: shape, umbrella, credit, imports, the intake allow-list in strict mode, no
   # sorry, no tag (scripts/ci/native_check.py). Nothing of the PR runs; the merge queue builds the modules and checks their axioms.
@@ -206,15 +298,15 @@ jobs:
     timeout-minutes: 15
     permissions: { contents: read }
     steps:
-      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
+      - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2
         with: { egress-policy: audit }
       # The base commit with plain git (see the scope-fix job): only the base is checked out, the PR is read as git objects.
       - name: The base commit (the checks are main's)
         run: |
           git init -q .
           git remote add origin "https://github.com/$GITHUB_REPOSITORY"
-          git fetch -q --no-tags --filter=blob:none origin "$BASE"
-          git checkout -q --detach "$BASE"
+          git fetch -q --no-tags --filter=blob:none origin "+$SCRIPTS:refs/remotes/origin/scripts" "$BASE"
+          git checkout -q --detach origin/scripts
       - name: The PR's commits, as data (the checks are main's)
         run: git fetch -q --no-tags --filter=blob:none origin "+$PR_REF:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
       - name: native checks
@@ -229,7 +321,7 @@ jobs:
     timeout-minutes: 15
     permissions: { contents: read }
     steps:
-      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
+      - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2
         with: { egress-policy: audit }
       # The base commit with plain git, not actions/checkout: the repository is public, so nothing needs a token (the next step fetches the PR the
       # same way), and no credential is ever written into the checkout. Only the base is checked out; the PR is read as git objects.
@@ -237,8 +329,8 @@ jobs:
         run: |
           git init -q .
           git remote add origin "https://github.com/$GITHUB_REPOSITORY"
-          git fetch -q --no-tags --filter=blob:none origin "$BASE"
-          git checkout -q --detach "$BASE"
+          git fetch -q --no-tags --filter=blob:none origin "+$SCRIPTS:refs/remotes/origin/scripts" "$BASE"
+          git checkout -q --detach origin/scripts
       - name: The PR's commits, as data (the checks are main's)
         run: git fetch -q --no-tags --filter=blob:none origin "+$PR_REF:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
       - name: scope-fix checks
@@ -251,17 +343,17 @@ jobs:
     needs: classify
     if: github.event_name == 'pull_request_target'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 30
     permissions: { contents: read }
     steps:
-      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
+      - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2
         with: { egress-policy: audit }
       - name: The base commit (the checks are main's)
         run: |
           git init -q .
           git remote add origin "https://github.com/$GITHUB_REPOSITORY"
-          git fetch -q --no-tags --filter=blob:none origin "$BASE"
-          git checkout -q --detach "$BASE"
+          git fetch -q --no-tags --filter=blob:none origin "+$SCRIPTS:refs/remotes/origin/scripts" "$BASE"
+          git checkout -q --detach origin/scripts
       - name: The PR's commits, as data (the checks are main's)
         run: git fetch -q --no-tags --filter=blob:none origin "+$PR_REF:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
       - name: every import resolves
@@ -276,14 +368,14 @@ jobs:
     timeout-minutes: 20
     permissions: { contents: read }
     steps:
-      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
+      - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2
         with: { egress-policy: audit }
       - name: The base commit (the checks are main's)
         run: |
           git init -q .
           git remote add origin "https://github.com/$GITHUB_REPOSITORY"
-          git fetch -q --no-tags --filter=blob:none origin "$BASE"
-          git checkout -q --detach "$BASE"
+          git fetch -q --no-tags --filter=blob:none origin "+$SCRIPTS:refs/remotes/origin/scripts" "$BASE"
+          git checkout -q --detach origin/scripts
       - name: The PR's commits, as data (the checks are main's)
         run: git fetch -q --no-tags --filter=blob:none origin "+$PR_REF:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
       - name: restructure checks
@@ -296,10 +388,10 @@ jobs:
     permissions: { contents: read }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { ref: "${{ env.BASE }}", fetch-depth: 0, persist-credentials: false }
+        with: { ref: "${{ env.SCRIPTS }}", fetch-depth: 0, persist-credentials: false }
       - name: The PR's commits, as data (the checks are main's)
         run: git fetch -q --no-tags origin "+$PR_REF:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
-      - uses: trufflesecurity/trufflehog@4dd8831c5f12599465d4d45c3c447b4018a34c85 # v3.97.9
+      - uses: trufflesecurity/trufflehog@31ce31ee1abbcc7dc8eee5764c17121c3044c8b2 # v3.99.7
         with:
           base: ${{ env.BASE }}
           head: ${{ env.HEAD }}
@@ -307,12 +399,12 @@ jobs:
       # TruffleHog reports only credentials it can verify or cannot check; a credential-shaped
       # string that fails verification passes it. The same pattern scan as the pre-commit hook
       # runs here for every class, so a secret inside a record is caught too (found by the campaign).
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with: { python-version: "3.12" }
       - name: detect-secrets on the changed files (every class)
         shell: bash
         run: |  # pragma: allowlist secret
-          pip install -q --require-hashes --only-binary ':all:' -r scripts/ci/requirements/secrets.txt   # main's pins (this job's checkout is main); wheels only: no setup script runs
+          pip install -q --require-hashes -r scripts/ci/requirements/secrets.txt   # main's pins (this job's checkout is main)
           git diff --name-only --diff-filter=AM "$BASE...$HEAD" -- . ':!data/' ':!Tengoku/' ':!.lake/' ':!scripts/ci/campaign/' > changed.txt   # the campaign's fixtures hold fake credentials
           mapfile -t files < changed.txt
           # the PR's versions of those files, scanned against main's baseline (a PR cannot allowlist its own secret)
@@ -335,11 +427,11 @@ jobs:
     needs: classify
     if: needs.classify.outputs.class == 'content' || needs.classify.outputs.class == 'tooling'
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
     permissions: { contents: read }   # advisory: what it finds is quoted in the gate comment, which the one privileged job writes
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { ref: "${{ env.BASE }}", fetch-depth: 0, filter: "blob:none", persist-credentials: false }
+        with: { ref: "${{ env.SCRIPTS }}", fetch-depth: 0, filter: "blob:none", persist-credentials: false }
       - name: The PR's commits, as data (the checks are main's)
         run: git fetch -q --no-tags --filter=blob:none origin "+$PR_REF:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
       - id: s
@@ -364,20 +456,34 @@ jobs:
       TENGOKU_VERIFY: require
       TENGOKU_TOPUPS: "1"
     steps:
-      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
+      - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { ref: "${{ env.BASE }}", fetch-depth: 0, filter: "blob:none", persist-credentials: false }
+        with: { ref: "${{ env.SCRIPTS }}", fetch-depth: 0, filter: "blob:none", persist-credentials: false }
       - name: The PR's commits, as data (the checks are main's)
         run: git fetch -q --no-tags --filter=blob:none origin "+$PR_REF:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
       - name: Lean
         run: |
-          curl --proto '=https' --tlsv1.2 -sSfL https://github.com/leanprover/elan/releases/latest/download/elan-x86_64-unknown-linux-gnu.tar.gz | tar xz
+          curl -sSfL https://github.com/leanprover/elan/releases/latest/download/elan-x86_64-unknown-linux-gnu.tar.gz | tar xz
           ./elan-init -y --default-toolchain none && echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
           sudo apt-get install -y -q zstd >/dev/null
           "$HOME/.elan/bin/lake" --version   # installs the tree's toolchain now, while there is network
-      - name: The PR's records over main's tree (data only; every script and tool stays main's)
-        run: git checkout -q "$HEAD" -- data
+      - name: The PR's record changes over main's tree (data only; every script and tool stays main's)
+        # The PR's data files, then main's versions of the data files the PR did not change: what main changed
+        # under data/ since the PR's base stays (a snapshot of HEAD alone would undo it; a file main deleted goes
+        # again), and a file both changed fails here, before anything is built — the queue would conflict on it
+        # too. Paths are NUL-delimited, so a name with a space or a newline survives. No patch: pr-code allows only
+        # `git checkout <pr> -- data` in a job that holds the token.
+        run: |
+          git checkout -q "$HEAD" -- data
+          clash=0
+          while IFS= read -r -d '' path; do
+            git diff --quiet "$BASE" "$HEAD" -- "$path" || { echo "::error::changed under data/ on main since this PR's base and in the PR, rebase: $path"; clash=1; }
+          done < <(git diff --no-renames --name-only -z "$BASE" origin/scripts -- data)
+          [ "$clash" = 0 ] || exit 1
+          while IFS= read -r -d '' path; do
+            if git cat-file -e "origin/scripts:$path" 2>/dev/null; then git checkout -q origin/scripts -- "$path"; else git rm -q -f -- "$path"; fi
+          done < <(git diff --no-renames --name-only -z "$BASE" origin/scripts -- data)
       - name: The compiled tree
         env: { GH_TOKEN: "${{ github.token }}" }
         run: scripts/cache.sh get 2>&1 | tail -3
@@ -401,14 +507,14 @@ jobs:
   workflows:
     needs: classify
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
     permissions: { contents: read }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { ref: "${{ env.BASE }}", fetch-depth: 0, filter: "blob:none", persist-credentials: false }
+        with: { ref: "${{ env.SCRIPTS }}", fetch-depth: 0, filter: "blob:none", persist-credentials: false }
       - name: The PR's commits, as data (the checks are main's)
         run: git fetch -q --no-tags --filter=blob:none origin "+$PR_REF:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with: { python-version: "3.12" }
       - name: workflow rules
         env: { GH_TOKEN: "${{ github.token }}" }
@@ -419,53 +525,31 @@ jobs:
             git cat-file -e "$HEAD:scripts/ci/workflow_rules.py" 2>/dev/null && { echo "main has no workflow_rules.py yet: this PR adds it"; exit 0; }
             echo "::error::neither main nor this PR has scripts/ci/workflow_rules.py"; exit 1
           fi
-          pip install -q --require-hashes --only-binary ':all:' -r scripts/ci/requirements/yaml.txt
+          pip install -q --require-hashes -r scripts/ci/requirements/yaml.txt
           python3 scripts/ci/workflow_rules.py --online --changed "$BASE" "$HEAD"
 
   depends:
     needs: classify
     if: github.event_name == 'pull_request_target'
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
     permissions: { contents: read, pull-requests: read }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { ref: "${{ env.BASE }}", filter: "blob:none", persist-credentials: false }
+        with: { ref: "${{ env.SCRIPTS }}", filter: "blob:none", persist-credentials: false }
       - name: depends
         env: { GH_TOKEN: "${{ github.token }}", BODY: "${{ github.event.pull_request.body }}" }
         run: printf '%s' "$BODY" > body.txt && python3 scripts/ci/depends.py body.txt
-
-  # FOSSA's three verdicts (licences, dependency quality, known vulnerabilities) on the PR's head commit. FOSSA reports on PR commits only,
-  # never on a queue entry, so it cannot be a check of the ruleset itself: this job waits for its statuses and `pr-gate` depends on it.
-  fossa:
-    if: github.event_name == 'pull_request_target'
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    permissions: { contents: read, statuses: read }
-    steps:
-      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
-        with: { egress-policy: audit }
-      # The base commit with plain git, not actions/checkout (as the scope-fix and queue-recheck jobs): the repository is public, nothing needs a token,
-      # and none is written into the checkout. Only main's script runs here; the PR is read as commit statuses.
-      - name: The base commit (the checks are main's)
-        run: |
-          git init -q .
-          git remote add origin "https://github.com/$GITHUB_REPOSITORY"
-          git fetch -q --no-tags --filter=blob:none origin "$BASE"
-          git checkout -q --detach "$BASE"
-      - name: fossa
-        env: { GH_TOKEN: "${{ github.token }}", FOSSA_WAIT_MINUTES: "15" }
-        run: python3 scripts/ci/fossa_check.py "$GITHUB_REPOSITORY" "$HEAD"
 
   # The merge queue's re-check of an entry (the PR merged onto what is ahead of it) against its new base. It reads the entry's commits as data
   # and runs main's scripts; it holds no write token. The privileged `pr-gate` job below never touches the entry's commits.
   queue-recheck:
     if: github.event_name == 'merge_group'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-    permissions: { contents: read }
+    timeout-minutes: 45
+    permissions: { contents: read, pull-requests: read }   # pull-requests: a studied PR's reviews are read below
     steps:
-      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
+      - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2
         with: { egress-policy: audit }
       # The base commit with plain git, not actions/checkout: the repository is public, so nothing needs a token and none is ever written into
       # the checkout (the same as the scope-fix and restructure jobs). The entry is read as git objects.
@@ -473,8 +557,8 @@ jobs:
         run: |
           git init -q .
           git remote add origin "https://github.com/$GITHUB_REPOSITORY"
-          git fetch -q --no-tags --filter=blob:none origin "$BASE"
-          git checkout -q --detach "$BASE"
+          git fetch -q --no-tags --filter=blob:none origin "+$SCRIPTS:refs/remotes/origin/scripts" "$BASE"
+          git checkout -q --detach origin/scripts
       - name: The entry's commits, as data (the checks are main's)
         if: github.event_name == 'merge_group'
         run: git fetch -q --no-tags --filter=blob:none origin "+$PR_REF:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
@@ -492,29 +576,41 @@ jobs:
           # group on 2026-10-05); once main has it, it always runs, even in a group that deletes it.
           if [ ! -f scripts/ci/imports_resolve.py ]; then echo "imports_resolve.py is introduced by this group: main has no copy to run yet"; exit 0; fi
           python3 scripts/ci/imports_resolve.py "$BASE" "$HEAD"
-      - name: The records, or the move of the seed, against everything merged ahead of them
-        if: github.event_name == 'merge_group' && contains(fromJSON('["content","tombstone","promotion","restructure"]'), steps.c.outputs.class)
+      - name: A studied PR has the approval it needs, as it is queued
+        if: github.event_name == 'merge_group' && steps.c.outputs.class == 'studied'
+        env: { GH_TOKEN: "${{ github.token }}", GROUP: "${{ github.event.merge_group.head_ref }}" }
+        run: |
+          # the entry's branch is gh-readonly-queue/<base>/pr-<number>-<sha>; each entry is one PR (see below), and its reviews are the PR's
+          pr="$(sed -n 's#^refs/heads/gh-readonly-queue/[^/]*/pr-\([0-9]\{1,\}\)-.*#\1#p' <<<"$GROUP")"
+          [ -n "$pr" ] || { echo "::error::cannot tell which PR this queue entry is: $GROUP"; exit 1; }
+          scripts/ci/studied_approval.sh "$pr"
+      - name: The records, the move of the seed, or a raze, against everything merged ahead of them
+        if: github.event_name == 'merge_group' && contains(fromJSON('["content","tombstone","promotion","restructure","raze","studied"]'), steps.c.outputs.class)
         env: { CLASS: "${{ steps.c.outputs.class }}", TENGOKU_INTAKE_LINT: "${{ vars.TENGOKU_INTAKE_LINT || 'strict' }}" }
         run: |
           # The move of the seed (docs/pr-classes.md, section 5) depends on everything merged ahead of it: a library that arrived meanwhile has
           # headers the script must rewrite. It is recomputed on the entry's base.
           if [ "$CLASS" = restructure ]; then python3 scripts/ci/restructure_check.py "$BASE" "$HEAD"; exit 0; fi
+          # A raze (docs/pr-classes.md, section 8) is checked again on the entry's base: a part of the library that merged meanwhile may import a module it razes.
+          if [ "$CLASS" = raze ]; then python3 scripts/ci/raze_check.py "$BASE" "$HEAD"; exit 0; fi
+          # A studied PR (docs/pr-classes.md, section 10) is checked again on the entry's base: another bundle of the same target may have merged ahead of it.
+          if [ "$CLASS" = studied ]; then python3 scripts/ci/studied_check.py "$BASE" "$HEAD" && python3 scripts/ci/born_tagged.py "$BASE" "$HEAD"; exit $?; fi
           promotion=(); [ "$CLASS" = promotion ] && promotion=(--promotion)
           python3 scripts/ci/append_only.py "$BASE" "$HEAD" "${promotion[@]}"
           python3 scripts/ci/validate_records.py "$BASE" "$HEAD"
           python3 scripts/ci/lint_banked.py "$BASE" "$HEAD"
 
   pr-gate:
-    needs: [classify, data-rules, credits, dco, secrets, workflows, depends, vacuity, goals, intake, scope-fix, tag, native, restructure, imports, sorry-advisory, fossa, queue-recheck]
+    needs: [classify, data-rules, credits, dco, secrets, workflows, depends, vacuity, goals, intake, studied, studied-approval, scope-fix, tag, raze, native, restructure, imports, sorry-advisory, queue-recheck]
     # `!cancelled()`, not `always()`: a run that a newer run has cancelled (the PR was pushed to or edited again: CodeRabbit rewrites the description after its review, which is an
     # `edited` event) would still run this job, and its failure stays on the commit as the latest `pr-gate` after the newer run has passed: the PR is blocked for nothing
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     permissions: { contents: read, actions: write, pull-requests: write }   # actions: write — to stop the runs of removed queue entries
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { ref: "${{ env.BASE }}", fetch-depth: 0, filter: "blob:none", persist-credentials: false }
+        with: { ref: "${{ env.SCRIPTS }}", fetch-depth: 0, filter: "blob:none", persist-credentials: false }
       # In the merge queue. Each entry is built on the entry ahead of it, so BASE...HEAD is still only this PR's
       # change, and its own gate already passed on that change: credits, sign-off, secrets and the workflow rules
       # would give the same answer again. What the new base can change is checked by `queue-recheck` (above): the class,

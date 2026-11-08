@@ -47,8 +47,21 @@ def string_end(text: str, i: int) -> int:
     return min(j + 1, n)
 
 
+def char_end(text: str, i: int) -> int | None:
+    """`i` is at a `'` that is not part of an identifier: the index just after the character literal (`'a'`, `'\\n'`, `'\\x41'`, `'"'`) that starts there, or None."""
+    if text.startswith("\\", i + 1):
+        j = text.find("'", i + 3, i + 14)
+        return None if j < 0 else j + 1
+    return i + 3 if text.startswith("'", i + 2) else None
+
+
+def after_identifier(text: str, i: int) -> bool:
+    """The character before `i` can be part of an identifier, so a `'` at `i` is a prime (`h'`, `Foo.bar'`, `f ⁻¹'`), not the start of a character literal."""
+    return i > 0 and (text[i - 1].isalnum() or text[i - 1] in "_'!?»")
+
+
 def segment_at(text: str, i: int) -> tuple[str, int] | None:
-    """The docstring, comment or string that starts at `i` as (kind, end), or None when code goes on."""
+    """The docstring, comment or string-like text (string, `«quoted name»`, character literal) that starts at `i` as (kind, end), or None when code goes on."""
     if text.startswith("/-", i):
         kind = "doc" if text.startswith("/--", i) and not text.startswith("/--/", i) else "comment"
         return kind, skip_block_comment(text, i)
@@ -57,11 +70,18 @@ def segment_at(text: str, i: int) -> tuple[str, int] | None:
         return "comment", len(text) if end < 0 else end
     if text[i] == '"':
         return "string", string_end(text, i)
+    if text[i] == "«":
+        end = text.find("»", i + 1)
+        return "string", len(text) if end < 0 else end + 1
+    if text[i] == "'" and not after_identifier(text, i):
+        end = char_end(text, i)
+        if end is not None:
+            return "string", end
     return None
 
 
 def scan(text: str) -> list[tuple[str, int, int]]:
-    """The text as segments (kind, start, end), kind in code / doc (a `/--` docstring) / comment (`/- -/`, `/-! -/`, `-- …`) / string: every byte in exactly one
+    """The text as segments (kind, start, end), kind in code / doc (a `/--` docstring) / comment (`/- -/`, `/-! -/`, `-- …`) / string (a string, a `«quoted name»` or a character literal): every byte in exactly one
     segment, so a docstring-like text inside a string or a comment is never taken for a docstring."""
     out: list[tuple[str, int, int]] = []
     i, n, code_from = 0, len(text), 0
@@ -102,7 +122,11 @@ class Item:
 
 
 def declared_name_matches(name: str, written: str) -> bool:
-    """The text at the name's position is the theorem's name, in full or as the last components (`theorem Foo.bar` inside `namespace X`, or `bar` inside it)."""
+    """The text at the name's position is the theorem's name, in full or as the last components (`theorem Foo.bar` inside `namespace X`, or `bar` inside it).
+    `_root_.Foo.bar` declares exactly `Foo.bar`, whatever namespaces are open (yamaguchi-papers part 3, 6 Nov 2026: ten modules with `theorem _root_.AlgebraicGeometry...` were skipped as
+    "generated", stayed untagged, and the tag push refused the whole PR)."""
+    if written.startswith("_root_."):
+        return name == written[len("_root_.") :]
     return name == written or name.endswith("." + written)
 
 
@@ -224,6 +248,20 @@ def strip_text(text: str) -> str:
 def normalise_doc_end(doc: str) -> str:
     """A docstring with the whitespace before its closing `-/` removed (no regular expression: a long run of whitespace made the pattern slow)."""
     return doc[:-2].rstrip(" \t\r\n") + "-/" if doc.endswith("-/") else doc
+
+
+def canonical_text(text: str) -> str:
+    """The text as a lane's build attestation sees it: the tags taken out and the whitespace before every docstring's closing `-/` normalised. This is the equality
+    `equivalent` judges, as a function: `equivalent(a, b)` holds exactly when `canonical_text(a) == canonical_text(b)`, so a module and the same module with its tags
+    written (the tagger moves a one-line docstring's closing `-/` onto its own line, which `strip_text` alone cannot undo) have one canonical form."""
+    text = strip_text(text)
+    out, last = [], 0
+    for kind, a, b in scan(text):
+        if kind == "doc":
+            out += [text[last:a], normalise_doc_end(text[a:b])]
+            last = b
+    out.append(text[last:])
+    return "".join(out)
 
 
 def equivalent(base: str, head: str) -> bool:

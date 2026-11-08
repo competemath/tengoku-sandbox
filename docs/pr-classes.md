@@ -79,7 +79,6 @@ on failed or was cancelled (a skipped job is fine), or when classification faile
 | credits, dco, secrets | ✓ | ✓ | ✓ | ✓ | ✓ |
 | imports (every `import Tengoku…` resolves; PR runs, and again on the merged result in the queue) | ✓ | ✓ | ✓ | ✓ | ✓ |
 | depends (PR runs only) | ✓ | ✓ | ✓ | ✓ | ✓ |
-| fossa (PR runs only: FOSSA's licence, dependency-quality and vulnerability verdicts on the head commit are all `success`) | ✓ | ✓ | ✓ | ✓ | ✓ |
 | sorry-advisory (advisory, never blocks) | ✓ | | ✓ | | |
 
 Every class then goes through the merge queue, whose `queue-gate` check is required. A group that changes
@@ -146,6 +145,16 @@ shape: the check from the base commit's script, byte for byte and executable bit
 to that class; the queue's recomputation on the entry's base; and the rule that the change is rehearsed in `tengoku-sandbox` (a full build of the moved tree) before
 it reaches production.
 
+A bundle's theorems are trusted by the tree's rule (it builds with them) and have no records: `data/stats.json` counts a library's
+manifest lines as trusted (`scripts/stats.py`, with `intake` saying how many). A tentative record of a theorem the tree already trusts
+stays in its append-only file (its library arrived as a bundle after the harvest, or the record was promoted) and is the same theorem:
+`stats.py` counts it once, as trusted, with `tentative_already_trusted` saying how many (`count_already_trusted`: the same name as a
+trusted record, or the same statement, attributes and whitespace aside, as a manifest line or a trusted record; each trusted record or
+manifest line accounts for at most one tentative record). The nightly independent check audits every
+manifest name like a trusted record (`scripts/ci/axiom_scan.py`: only the three standard axioms; a name the export does not hold,
+an instance Lean renamed when the module moved into the tree, is reported, not failed, since every declaration of the tree is
+scanned for `sorryAx` regardless).
+
 ## 6. The extend class
 
 A library of thousands of modules cannot arrive in one intake PR: the merge queue builds what a PR adds inside a 40-minute check, and a module takes about
@@ -165,6 +174,10 @@ The class is recognised by the new `parts/NNN.json` file and must come from `TEN
 checks of an intake PR on the new modules and manifest lines (allow-list lint, tree imports only, names unique and not the library's own earlier ones, toolchain)
 and with these: the library is in the tree already, the part number is the next one, `Tengoku/All.lean` is untouched, a part has at most 400 modules, and the
 factory's build attestation matches the part's archive (its modules, the root file, its own manifest lines and its report), rebuilt from the PR's files.
+Both classes also require two things of the factory (2026-10-17; navier-stokes-euler part 1 had shipped 89 modules, 504 theorem commands, that Gate 2 never judged):
+the report says `"gate2_unjudged": []` (the factory cuts every module Gate 2 gave no verdict, with its importers, and records the field in the report inside the archive; a
+report without the field, with anything else in it, or that is not a JSON object fails), and the build attestation is of a run **from the factory's main branch**
+(`--source-ref refs/heads/main`): a workflow dispatched from a branch carries a valid attestation of the same workflow file, built from code nobody reviewed.
 The `imports` gate checks that every `import` of the part resolves, in the tree it joins. The merge queue builds and scans the part's own modules (`Tengoku.<Library>.<Module>` for each new
 module, `queue_targets.py`), not the library's root: the earlier parts are in the cache, and the root would re-check every declaration of every earlier part.
 
@@ -197,22 +210,60 @@ twin, a structure's field, several theorems at one command, a file with Windows 
 A library whose modules are generated from records is not tagged by a PR: the promote bot regenerates those files, so a tag would be removed by the next promotion. They
 are tagged when the generator learns to write tags (not built).
 
-A tag PR is meant to be one part of a sweep over the tree (modules in dependency order, at most 400 per PR, the seed first), approved part by part like the parts of an
-intake bundle; the tool that plans and opens the parts is a separate change.
+A tag PR is one part of a sweep over the tree: `scripts/isnad_sweep.py` plans it (dependents first, at most 400 modules a part) and the `isnad-tag` workflow tags a part,
+verifies it and opens the PR as the bot (`docs/isnad.md`, "The sweep"). Parts are approved one by one like the parts of an intake bundle.
 
-## 8. The native class
+## 8. The raze class
 
-A **native PR** adds or edits modules of `Tengoku/Native/`, the tree's own novel content (`docs/native.md`), and nothing else. Like the tag class it comes from `TENGOKU_BOT` and is recognised
-by its paths: every changed path is a module `Tengoku/Native/**.lean`, the umbrella `Tengoku/Native.lean` or `Tengoku/All.lean`, and at least one is a module.
+A **raze PR** takes modules of a library that arrived as an intake bundle **out of the tree**. It is the only operation that removes content from it, and it exists for one
+situation: a library arrives in parts, each part is cut from the tree as it is (`from_tree`, section 6), and so it can only *add* modules. When the factory has cut
+modules wrongly (2026-10-11: the first pruner cut declarations that later parts name, and the later parts of three libraries lost the modules that name them) the merged
+modules cannot be repaired by the next part. Razing them lets the next cut bring them back, rebuilt.
 
-| Path | Status | What it may hold |
-|---|---|---|
-| `Tengoku/Native/**.lean` | added or modified | a credit (`Authors: …`), imports of `Tengoku` and other Native modules only, content that passes the intake allow-list in strict mode, no `sorry`, no isnad tag |
-| `Tengoku/Native.lean` | added or modified | one `import` per module under `Tengoku/Native/`, each once, and nothing else |
-| `Tengoku/All.lean` | modified, by the first native PR only | exactly one new line, `import Tengoku.Native` |
+It comes from any author and is recognised by its marker, the one added file `data/raze/<id>.json`:
 
-`scripts/ci/native_check.py` judges it in the gate from git objects (nothing of the PR runs): a module is never deleted or renamed by a PR, there are at most 400 modules, and
-what the lint refuses (`native_decide` and the other ways to trust the compiler, code that runs while compiling, notation and macros) is refused here as it is for an intake
-bundle. The merge queue builds the PR's modules (`queue_targets.py`; the whole of Native when a PR edits a module, since other Native modules may import it), checks the axioms of every
-theorem (the three standard axioms and nothing else: the second line of defence against a theorem that trusts the compiler) and writes the leak report. Native modules are tagged
-afterwards by the sweep (`from=novel`), never by their author.
+```json
+{"library": "openai-math", "modules": ["Tengoku.OpenaiMath.OAI.Analysis.Daugavet.Enlargement"], "reason": "the first pruner cut finite_dimensional_enlargement, which a later part names"}
+```
+
+`modules` lists module names, or `"all": true` razes the whole library. `reason` is one sentence and is the first thing a reviewer reads. A marker stays in the tree as the record of
+what was removed and why; it is never edited (a PR that changes one is a tooling PR, owned).
+
+**A code owner reviews it.** The files a raze deletes and edits (library modules, the umbrella, the manifest, `Tengoku/All.lean`) are all in the content lane, which no one owns; the marker is
+under `data/`, which the default line of `CODEOWNERS` owns, so the PR cannot merge without a code owner. `test_codeowners.py` holds that.
+
+`scripts/ci/raze_check.py` judges it in the gate, without Lean and without running anything of the PR:
+
+| Check | What it requires |
+|---|---|
+| shape | exactly one added marker; the library has `data/intake/<library>/manifest.jsonl` at the base; every module named is a module of the library at the base; at most 800 modules in a partial raze |
+| nothing but the removal | the deleted files are exactly the marker's modules; the umbrella `Tengoku/<Library>.lean` loses exactly their `import` lines and gains nothing; the manifest loses exactly the lines of their records, every other line unchanged and in its place; no other file changes. A whole-library raze deletes the library's folder, umbrella and `data/intake/<library>/`, and removes its one line from `Tengoku/All.lean` |
+| dependencies inside the library | no module that remains imports a razed one; every manifest record that remains names a module that remains |
+| dependencies in the rest of the tree | `imports_resolve.py` runs over the whole tree whenever a module is deleted (on the PR and again in the queue): another library importing a razed module fails the PR |
+| credits | `credits.py --raze` lets the credit lines of the deleted files and of their manifest records go, and nothing else |
+
+The merge queue re-runs `raze_check.py` on the entry's base (a part of the library that merged meanwhile may import a module it razes) and builds the library without the modules:
+a partial raze builds `Tengoku.<Library>` and everything builds `Tengoku.All`; a whole-library raze has no root left to build, so `Tengoku.All` is the build. Nor does the queue regenerate a library a raze removes whole (`queue_targets.py --regenerate` skips it, like an intake bundle: a library that is registered with a corpus as well, such as `navier-stokes-euler`, would otherwise have the generator rewrite `Tengoku/All.lean`, which the raze edits by hand: tengoku#579, 2026-10-16).
+In a partial raze the part reports `data/intake/<library>/parts/NNN.json` are history and stay as they are: the next part is numbered from the highest one (`from_tree`). A whole-library raze deletes all of `data/intake/<library>/`, reports included (the library leaves the tree, and comes back as a first part, numbered from 1); `test_raze.py` holds both.
+
+## 9. The studied class
+
+A studied PR carries **theorems that Leak runs proved and rated four stars or more**. They come from the accounts that chose to share them (Leak's memory keeps a copy of every theorem rated four stars or more, `leak_memory_kept` on competemath.com; the host lists the accounts that may share, the owner's own for now). The intake job (`competemath/emissary-archangel`, `.github/workflows/memory-intake.yml`, run from its `main`, every six hours) reads the waiting theorems through an endpoint that only that workflow can call (GitHub's OIDC token), re-derives every one of them, and opens the PR as the supervisor App (`tengoku-supervisor[bot]`; the repository variable `TENGOKU_STUDIED_BOT` names another account). What a client says about a theorem, its stars included, is only a claim: the job compiles it on the real tree, lints it, re-rates it from scratch, runs Jinshi's checks on it and has clean-room reviewers read it, and records all of that in the bundle's report, inside the archive it attests.
+
+Paths (target `<t>`, its Pascal-case name `<Ns>`, e.g. `erdos-396` and `Erdos396`):
+
+| Path | What |
+|---|---|
+| `data/studied/<t>/manifest.jsonl` | one JSON line per theorem; append only |
+| `data/studied/<t>/bundles/<id16>.json` | the bundle's report |
+| `Tengoku/Studied/<Ns>/S<id12>.lean` | one module per theorem, its declarations inside `namespace Tengoku.Studied.<Ns>.S<id12>` (it can never shadow another library's name) |
+| `Tengoku/Studied/<Ns>.lean` | the target's root file, one import per module |
+| `Tengoku/Studied.lean` | gains `import Tengoku.Studied.<Ns>` when the target arrives for the first time |
+
+`classify.py` recognises one by the manifest in the diff. It is one target's bundle and nothing else (docs may ride along), at most ten theorems, and it comes from the supervisor App only. `scripts/ci/studied_check.py` judges it without Lean: shape; the manifest (stars 4 or 5, toolchain, source `leak-memory`, one line per module, the statement is the one the module declares); the content allow-list on every module and the namespace; the report (the bundle id is the hash of target, author and entries; the intake job compiled every theorem and re-rated each at four stars or more, Jinshi found no failure, no reviewer blocked, and every theorem carries the harness evidence the server judged: the run's ticket 30 minutes to 49 hours old, a build the project published, and counters plausible for a prover run that agree with the ticket's age. This is friction against a script passed off as Leak's harness, not proof; the recompilation and the human approval are what protect the tree); and with `--tar` the archive is rebuilt for `gh attestation verify` against the memory-intake workflow's build from `main`. The merge queue builds the modules (sealed) and checks every theorem's axioms.
+
+**Approval.** One code owner, or two independent contributors with write access (`scripts/ci/studied_approval.py`; the ruleset can say one or the other, not either). `data/studied/` is in the lane with no owner, so the ruleset asks for nothing; the queue asks: when a studied PR is queued, `queue-recheck` reads its reviews and ejects it unless the rule holds (a review counts only on the current head; the author, bots and the PR's committers never count; the maintainer's two accounts are code owners and never pad the second path). The `studied-approval` job on the PR says where it stands and never blocks.
+
+**Born tagged.** Every theorem of a studied PR carries its isnad tag (`docs/isnad.md`, "Born tagged"): the `autotag-build` and `autotag-push` workflows add the tags to the PR's branch as one commit a few minutes after the PR is opened, `scripts/ci/born_tagged.py` is the gate step that is red until then and green after, and the merge queue recomputes every tag from the build (`scripts/ci/tag_verify.py`). The provenance check of the bundle's attestation looks at the modules in their canonical form (tags out), so the tags never touch it. The intake and extend classes follow the same way once `TENGOKU_ISNAD_REQUIRED` is `1`.
+
+Label `studied`. Folder `data/studied/`. The theorems land tentative: nothing here makes one trusted.

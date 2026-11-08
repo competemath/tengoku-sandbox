@@ -1,0 +1,46 @@
+# Is `import Tengoku.All` usable on the Leak space the provers use? scripts/ci/canary/Canary.lean is ordinary Lean and Mathlib (`-(3 * x)` on a real number, a variable
+# named `v` or `ω`, omega, positivity, linarith, …); the space compiles it on its pinned tree. A red run is a library of the tree that leaks into everybody else
+# (2026-10-17: lean-pool's global `prefix:80 "-"` made `-(3 * x)` "Ambiguous term", and its notations reserved `v`, `na`, `ω` as words, on Leak IV for days).
+# The merge queue runs the same file on every group that changes Lean (queue-gate.yml, step "Canary"); this is the check of what is DEPLOYED: after each promotion
+# (the space is asked to refresh by topup-promote.yml and follows within minutes) and every six hours.
+name: leak-canary
+# Sandbox: dispatch only. The schedule and the run after each promotion exist on the library, whose tree is what the Leak space serves; this repository has no space of its own.
+on:
+  workflow_dispatch:
+    inputs:
+      space: { description: "the Leak space to ask (a name known to scripts/ci/canary/leak_canary.py, not an address)", type: choice, options: [leak-iv], default: leak-iv }
+permissions: {}
+# a scheduled run must not cancel the check that follows a promotion (it would test the tree from before it): each kind of run only replaces an older run of its own kind
+concurrency:
+  group: leak-canary-${{ github.event_name }}
+  cancel-in-progress: true
+defaults:
+  run:
+    shell: bash
+jobs:
+  canary:
+    # a promotion that failed has nothing new to look at
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    # worst case: --settle 90 s + --wait-refresh 2400 s (40 min) for a promotion's refresh, then the client's own --budget 1800 s (30 min): 71.5 min of 90
+    timeout-minutes: 90
+    permissions: { contents: read }
+    env:
+      SPACE: ${{ inputs.space || 'leak-iv' }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2
+        with: { egress-policy: audit }
+      # no checkout in a workflow that a workflow_run starts (Sonar S7631: nothing a fork wrote may run here): the three files are read from main through the API, as data
+      - name: The canary and its files, as main has them
+        run: |
+          mkdir -p canary
+          for f in leak_canary.py Canary.lean CanaryKnown.lean; do
+            gh api -H "Accept: application/vnd.github.raw" "repos/$GITHUB_REPOSITORY/contents/scripts/ci/canary/$f?ref=main" > "canary/$f"
+          done
+      - name: "The canary (after a promotion, once the space follows the published cache pointer)"
+        env: { EVENT: "${{ github.event_name }}" }
+        run: |
+          wait=()
+          [ "$EVENT" = workflow_run ] && wait=(--settle 90 --wait-refresh 2400)
+          python3 canary/leak_canary.py --space "$SPACE" "${wait[@]}" --budget 1800 | tee -a "$GITHUB_STEP_SUMMARY"

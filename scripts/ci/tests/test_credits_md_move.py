@@ -18,10 +18,13 @@ SENTENCE = "One sentence on what it says, then one line starting with `Author:`.
 README = "# t\n\n## Contributors\n\n  ```lean\n  /-- The sum.\n\n" + EXAMPLE + "  ```\n\n" + SENTENCE
 
 
+SRC = "docs/guide.md"  # not the root README.md: that one is exempt (test_credits_root_readme.py)
+
+
 def repo() -> Repo:
     r = Repo()
-    r.write("README.md", README)
-    r.commit("the credit example in the README")
+    r.write(SRC, README)
+    r.commit("the credit example in a guide")
     return r
 
 
@@ -32,7 +35,7 @@ def credits(r: Repo):
 class MarkdownMove(unittest.TestCase):
     def test_a_credit_line_moved_verbatim_to_another_markdown_file_is_not_a_removal(self):
         r = repo()
-        r.write("README.md", "# t\n\n## Contributors\n\nSee [credit](docs/credit.md).\n")
+        r.write(SRC, "# t\n\n## Contributors\n\nSee [credit](docs/credit.md).\n")
         r.write("docs/credit.md", "# Credit\n\n  ```lean\n  /-- The sum.\n\n" + EXAMPLE + "  ```\n\n" + SENTENCE)
         r.commit("move")
         rc, out = credits(r)
@@ -40,7 +43,7 @@ class MarkdownMove(unittest.TestCase):
 
     def test_a_credit_line_removed_from_markdown_and_not_re_added_fails(self):
         r = repo()
-        r.write("README.md", "# t\n")
+        r.write(SRC, "# t\n")
         r.commit("drop")
         rc, out = credits(r)
         self.assertEqual(rc, 1)
@@ -48,7 +51,7 @@ class MarkdownMove(unittest.TestCase):
 
     def test_a_credit_line_re_added_with_different_words_fails(self):
         r = repo()
-        r.write("README.md", "# t\n")
+        r.write(SRC, "# t\n")
         r.write("docs/credit.md", EXAMPLE.replace("Ada Lovelace", "Someone Else") + SENTENCE)
         r.commit("move, changed")
         self.assertEqual(credits(r)[0], 1)
@@ -57,7 +60,7 @@ class MarkdownMove(unittest.TestCase):
         for target in ("scripts/ci/README.md", "Tengoku/Credit.lean"):
             with self.subTest(target=target):
                 r = repo()
-                r.write("README.md", "# t\n")
+                r.write(SRC, "# t\n")
                 r.write(target, EXAMPLE + SENTENCE)
                 r.commit("move into " + target)
                 self.assertEqual(credits(r)[0], 1, target)
@@ -69,7 +72,7 @@ class MarkdownMove(unittest.TestCase):
                 r = repo()
                 r.write("docs/other.md", "# other\n\n" + EXAMPLE)
                 r.commit("the same credit line in a second file")
-                r.write("README.md", "# t\n")
+                r.write(SRC, "# t\n")
                 r.write("docs/other.md", "# other\n")
                 r.write("docs/credit.md", "# Credit\n\n" + EXAMPLE * gains + SENTENCE)
                 r.commit("move both")

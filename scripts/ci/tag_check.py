@@ -26,7 +26,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # scripts/ of the checkout this file is in
 import isnad  # noqa: E402
 import isnad_tag as tg  # noqa: E402
-from _git import blob, changed_files, fail, pascal, run  # noqa: E402
+from _git import blob, changed_files, fail, module_name, pascal, run  # noqa: E402
 
 MAX_TAG_MODULES = 400
 SEED_LIKE = ("Seed", "Native")
@@ -48,7 +48,9 @@ def in_scope(path: str, intake: set[str]) -> bool:
 
 
 def module_of(path: str) -> str:
-    return path[: -len(".lean")].replace("/", ".")
+    """The module a file is, as Lean and Lake spell it (`_git.module_name`): `…/Geometry/2d.lean` is `….Geometry.«2d»`, which `lake build` and `tengoku-isnad`
+    read as the module; `….Geometry.2d` is no name to them (formal-conjectures, tengoku#752: `unknown target`)."""
+    return module_name(path[: -len(".lean")])
 
 
 def texts(base: str, head: str, path: str) -> tuple[str, str] | None:

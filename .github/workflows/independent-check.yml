@@ -43,7 +43,9 @@ jobs:
     steps:
       - name: Free disk (the export of the whole tree is several GB)
         run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/local/share/boost /usr/share/swift
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache /usr/local/share/boost /usr/share/swift /usr/lib/jvm /usr/share/miniconda /usr/local/share/powershell /usr/local/lib/node_modules /opt/az /usr/local/graalvm /usr/local/share/chromium
+          sudo docker image prune --all --force >/dev/null 2>&1 || true
+          sudo swapoff -a >/dev/null 2>&1 || true; sudo rm -f /mnt/swapfile /swapfile || true
           df -h /
       - name: The commit, in full (the run title names it, and a release matches the title exactly)
         env: { WANT: "${{ inputs.commit }}" }
@@ -139,5 +141,5 @@ jobs:
           print(f"report: {report['nanoda']['declarations_checked']} declarations, commit {report['commit']}")
           PY
       - name: The report, for a release of this commit
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with: { name: independent-check, path: independent-check.json, retention-days: 90 }

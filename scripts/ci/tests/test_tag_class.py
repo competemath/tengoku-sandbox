@@ -275,6 +275,23 @@ class Gate(Setup):
         self.assertNotIn("TENGOKU_CI_ROOT", text)
 
 
+class Labels(unittest.TestCase):
+    def test_every_label_description_fits_githubs_limit_of_100_characters(self):
+        """labels.sh stopped at the `tag` label in the sandbox (HTTP 422: description is too long) and would have in production"""
+        lines = [ln for ln in (TREE / "scripts" / "ci" / "labels.sh").read_text().splitlines() if ln.startswith("label ")]
+        self.assertGreater(len(lines), 8)
+        for ln in lines:
+            description = ln.split('"')[1]
+            self.assertLessEqual(len(description), 100, description)
+
+    def test_the_class_labels_the_gate_can_set_exist(self):
+        labels = {ln.split()[1] for ln in (TREE / "scripts" / "ci" / "labels.sh").read_text().splitlines() if ln.startswith("label ")}
+        gate = (TREE / ".github" / "workflows" / "pr-gate.yml").read_text()
+        classes = gate.split('case "$CLASS" in ')[1].split(")")[0].split("|")
+        self.assertIn("tag", classes)
+        self.assertEqual(sorted(set(classes) - labels), [])
+
+
 class Verify(Setup):
     """tag_verify.py: a group that is not a tag group passes at once (it needs no Lean)."""
 
@@ -359,6 +376,41 @@ class CheckTags(unittest.TestCase):
         with mock.patch.object(isnad._tagger(), "equivalent", return_value=False):  # the law the tagger keeps, broken on purpose
             problems, _ = isnad.check_tags(recs, lines, [self.MODULE], root)
         self.assertTrue(any("tagging would change more than tags" in p for p in problems), problems)
+
+    def test_a_tag_that_belongs_to_no_theorem_names_its_module(self):
+        """The count mismatch used to say only 'a tag belongs to no theorem, or is on a theorem twice' (a 365-module part, two hours to find out which)."""
+        text = self.right()
+        recs, lines = self.inputs(text)
+        stray = isnad.format_tag(recs[0], "seed")
+        problems, _ = self.run_check(text + f"\n/-- stray\n{stray}\n-/\ndef stray : Nat := 1\n")
+        msg = next((p for p in problems if "tag belongs to no theorem" in p), "")
+        self.assertIn("— in Tengoku.Seed.Fx (3 tag line(s), 2 theorem(s) right)", msg)
+
+    def test_the_where_clause_lists_eight_modules_and_counts_the_rest(self):
+        self.assertEqual(isnad.where_clause([]), "")
+        self.assertEqual(isnad.where_clause(["A (1 tag line(s), 0 theorem(s) right)"]), " — in A (1 tag line(s), 0 theorem(s) right)")
+        many = [f"M{i}" for i in range(11)]
+        self.assertEqual(isnad.where_clause(many), " — in " + ", ".join(many[:8]) + " and 3 more")
+
+    def test_a_missing_module_has_no_tag_lines_and_no_odd_count(self):
+        root = Path(tempfile.mkdtemp())
+        self.assertEqual(isnad.module_tag_lines(self.MODULE, root), 0)
+        self.assertEqual(isnad.modules_with_odd_tag_counts([self.MODULE], {}, root), [])
+
+    def test_records_of_a_module_the_pr_does_not_carry_are_not_checked(self):
+        """The sweep of 2026-10-12 failed after two hours: 4,880 tag lines against 4,881 right tags and no module odd. The tags were counted in the PR's modules, the right ones also in a
+        module the PR does not carry."""
+        text = self.right()
+        recs, lines = self.inputs(text)
+        recs.append(fake_record("elsewhere", "Tengoku.Seed.Outside"))
+        lines.append(range_line("elsewhere", {"range": (3, 0, 5, 3), "sel": (3, 8, 3, 17)}, "Tengoku.Seed.Outside"))
+        root = Path(tempfile.mkdtemp())
+        path = isnad.module_file(self.MODULE, root)
+        path.parent.mkdir(parents=True)
+        path.write_text(text, encoding="utf-8")
+        problems, summary = isnad.check_tags(recs, lines, [self.MODULE], root)
+        self.assertEqual(problems, [])  # (the outside module has no file here: it used to be 'does not exist')
+        self.assertIn("1 theorem(s) of 1 module(s) outside the PR not checked", summary)
 
     def test_a_theorem_without_a_tag_is_reported(self):
         text = self.right()
