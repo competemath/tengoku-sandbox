@@ -48,8 +48,11 @@ jobs:
       - name: Lean toolchain (pinned by lean-toolchain)
         if: github.event_name == 'merge_group'
         run: |
-          curl -sSfL https://github.com/leanprover/elan/releases/latest/download/elan-x86_64-unknown-linux-gnu.tar.gz | tar xz
-          ./elan-init -y --default-toolchain none && echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+          elan="$RUNNER_TEMP/elan"; mkdir -p "$elan"   # elan v4.2.4, by digest: the installer script of the same repository downloads whatever release is latest
+          curl --proto '=https' --tlsv1.2 -sSfL -o "$elan/elan.tar.gz" https://github.com/leanprover/elan/releases/download/v4.2.4/elan-x86_64-unknown-linux-gnu.tar.gz
+          echo "42b94d4244e8353142c456ec0e4ca6528fd898a6c604d4059f494e706e431f63  $elan/elan.tar.gz" | sha256sum -c -
+          tar xzf "$elan/elan.tar.gz" -C "$elan"
+          "$elan/elan-init" -y --default-toolchain none && echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
           sudo apt-get install -y -q zstd >/dev/null
       # The runner has ended this job twice (no space left on the device; a process killed for memory) and each time the cause was found with
       # probe runs. A sample every 20 s (scripts/ci/runner_telemetry.py), and a summary on the job's page, leave the evidence in the job itself.
