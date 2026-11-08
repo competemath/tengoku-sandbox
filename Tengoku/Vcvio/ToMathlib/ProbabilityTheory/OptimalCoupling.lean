@@ -17,6 +17,9 @@ functions (like expected value) attain their supremum on this space.
 -/
 
 @[expose] public section
+attribute [local simp] PMF.apply_ne_top PMF.coe_le_one PMF.monad_bind_eq_bind PMF.monad_pure_eq_pure PMF.some_map_apply_some SPMF.PMF.map_some_apply_some
+attribute [local simp] SPMF.optionTLift_eq_liftM SPMF.run_eq_toPMF
+
 
 noncomputable section
 
