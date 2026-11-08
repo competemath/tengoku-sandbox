@@ -1,5 +1,6 @@
 import Tengoku.Carleson
 -- Everything in the tree: the seeded root plus every library of verified additions.
+import Tengoku.Prismriver
 import Tengoku.Statsmllib
 import Tengoku.Formalslt
 import Tengoku.Physlib
