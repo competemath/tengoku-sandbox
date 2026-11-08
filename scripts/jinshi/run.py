@@ -46,7 +46,10 @@ UNKNOWN = re.compile(
     r"^(?P<file>[^:\n]+):(?P<line>\d+):(?P<col>\d+): error(?:\([^)]*\))?: (?P<msg>[Uu]nknown (?:identifier|constant) `?(?P<ident>[^`\s']+)`?.*)$",
     re.M,
 )
-ERROR = re.compile(r"^(?P<file>[^:\n]+):(?P<line>\d+):(?P<col>\d+): error(?:\([^)]*\))?: (?P<msg>.*)$", re.M)
+ERROR = re.compile(
+    r"^(?P<file>[^:\n]+):(?P<line>\d+):(?P<col>\d+): error(?:\([^)]*\))?: (?P<msg>.*)$",
+    re.M,
+)
 DECL = re.compile(
     r"^\s*(?:@\[[^\]]*\]\s*)*(?:(?:private|protected|noncomputable|nonrec|public|meta|unsafe|partial)\s+)*(?:theorem|lemma|def|abbrev|instance|structure|class|inductive|opaque|axiom)\s+([^\s:({\[⦃]+)",
     re.M,
@@ -134,7 +137,16 @@ def reproduce_findings(path: Path, module: str, timeout: int = 1800) -> list[dic
     else:
         detail = "the re-compiled olean is byte-identical to the cached one"
     shutil.rmtree(out_dir, ignore_errors=True)
-    return [{"check": "reproduce", "severity": "info" if same else "warn", "module": module, "name": "", "line": None, "detail": detail}]
+    return [
+        {
+            "check": "reproduce",
+            "severity": "info" if same else "warn",
+            "module": module,
+            "name": "",
+            "line": None,
+            "detail": detail,
+        }
+    ]
 
 
 REALIZED = re.compile(r"constant has already been declared '[^']*\.(?:congr_simp|hcongr(?:_[A-Za-z0-9_]+)?)'")
@@ -340,7 +352,13 @@ def options_findings(path: Path, module: str) -> list[dict]:
 
 def replay_finding(module: str, timeout: int = 1800) -> list[dict]:
     try:
-        r = subprocess.run(["lake", "env", "leanchecker", module], cwd=ROOT, capture_output=True, text=True, timeout=timeout)
+        r = subprocess.run(
+            ["lake", "env", "leanchecker", module],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
     except subprocess.TimeoutExpired:
         return [
             {
@@ -372,7 +390,13 @@ def lean4lean_finding(module: str, timeout: int = 1800) -> list[dict]:
     if not binary:
         return []
     try:
-        r = subprocess.run(["lake", "env", binary, module], cwd=ROOT, capture_output=True, text=True, timeout=timeout)
+        r = subprocess.run(
+            ["lake", "env", binary, module],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
     except subprocess.TimeoutExpired:
         return [
             {
@@ -404,30 +428,83 @@ def lean4lean_finding(module: str, timeout: int = 1800) -> list[dict]:
     ]
 
 
-def env_findings(modules: list[str]) -> list[dict]:
+def env_run(modules: list[str], timeout: int) -> tuple[int, list[dict], str]:
+    """one process of the executable over these modules: (exit code, findings, the tail of stderr)"""
     exe = ROOT / ".lake" / "build" / "bin" / "tengoku-jinshi"
     args = [str(exe)]
     for m in modules:
         args += ["--module", m]
-    r = subprocess.run(["lake", "env"] + args, cwd=ROOT, capture_output=True, text=True)
-    if r.returncode:
-        return [
-            {
-                "check": "env",
-                "severity": "warn",
-                "module": "",
-                "name": "",
-                "line": None,
-                "detail": f"tengoku-jinshi failed (exit {r.returncode}): {(r.stderr or r.stdout)[-600:]}",
-            }
-        ]
-    # the executable ends with one {"check": "summary", ...} line of counts: not a finding
-    return [f for f in (json.loads(line) for line in r.stdout.splitlines() if line.strip()) if f.get("check") != "summary"]
+    try:
+        r = subprocess.run(
+            ["lake", "env"] + args,
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        return -1, [], f"timeout after {timeout} s"
+    if r.returncode != 0:  # a process that died may have died mid-line: its stdout is not parsed
+        return r.returncode, [], (r.stderr or r.stdout)[-600:]
+    found = [f for f in (json.loads(line) for line in r.stdout.splitlines() if line.strip()) if f.get("check") != "summary"]
+    return 0, found, (r.stderr or r.stdout)[-600:]
 
 
-def summarize(rnd: int, modules: list[str], results: dict[str, list[dict]], timings: dict[str, float]) -> list[str]:
+def env_findings(
+    modules: list[str],
+    batch: int = int(os.environ.get("JINSHI_ENV_BATCH", "30")),
+    timeout: int = 3600,
+) -> list[dict]:
+    """The executable over the modules in batches of `batch`: a process that dies (a runner's memory, a cap no examination caught)
+    loses one batch, not the shard; the modules of a dead batch are then run alone, and the one that dies alone is named."""
+    if batch < 1:
+        raise SystemExit(f"JINSHI_ENV_BATCH must be a positive number of modules, not {batch}")
+    out: list[dict] = []
+    for i in range(0, len(modules), batch):
+        chunk = modules[i : i + batch]
+        rc, found, err = env_run(chunk, timeout)
+        if rc == 0:
+            out += found
+            print(
+                f"env: batch {i // batch + 1} ({len(chunk)} modules) {len(found)} findings",
+                flush=True,
+            )
+            continue
+        print(
+            f"env: batch {i // batch + 1} ({len(chunk)} modules) died (exit {rc}): running its modules alone",
+            flush=True,
+        )
+        for m in chunk:
+            rc1, found1, err1 = env_run([m], timeout)
+            if rc1 == 0:
+                out += found1
+            else:
+                out.append(
+                    {
+                        "check": "env",
+                        "severity": "warn",
+                        "module": m,
+                        "name": "",
+                        "line": None,
+                        "detail": f"tengoku-jinshi died on this module alone (exit {rc1}): its in-process examinations are missing; {err1.strip()[-300:]}",
+                    }
+                )
+    return out
+
+
+def summarize(
+    rnd: int,
+    modules: list[str],
+    results: dict[str, list[dict]],
+    timings: dict[str, float],
+) -> list[str]:
     """the Markdown summary of a round (or of a merged set of shards): counts per check, every fail, the warns, the Jinshi grade"""
-    lines = [f"# Jinshi — round {rnd} — {len(modules)} modules", "", "| check | fail | warn | info | time |", "|---|---:|---:|---:|---:|"]
+    lines = [
+        f"# Jinshi — round {rnd} — {len(modules)} modules",
+        "",
+        "| check | fail | warn | info | time |",
+        "|---|---:|---:|---:|---:|",
+    ]
     for check, fs in sorted(results.items()):
         n = {s: sum(1 for f in fs if f["severity"] == s) for s in ("fail", "warn", "info")}
         lines.append(f"| {check} | {n['fail']} | {n['warn']} | {n['info']} | {timings.get(check, 0):.0f} s |")
@@ -446,7 +523,11 @@ def summarize(rnd: int, modules: list[str], results: dict[str, list[dict]], timi
         by_check: dict[str, int] = {}
         for f in warns:
             by_check[f["check"]] = by_check.get(f["check"], 0) + 1
-        lines += ["", f"## Warn ({len(warns)}): " + ", ".join(f"{k} {v}" for k, v in sorted(by_check.items())), ""]
+        lines += [
+            "",
+            f"## Warn ({len(warns)}): " + ", ".join(f"{k} {v}" for k, v in sorted(by_check.items())),
+            "",
+        ]
         for f in warns[:150]:
             lines.append(f"- `{f['check']}` {f['module']}" + (f" `{f['name']}`" if f["name"] else "") + f": {f['detail'][:200]}")
     by_module: dict[str, int] = {}
@@ -513,8 +594,14 @@ def main() -> int:
             for m in missing
         ]
         modules = [m for m in modules if m not in set(missing)]
-        print(f"{len(missing)} named modules have no source file in the tree: {missing[:5]}", flush=True)
-    print(f"jinshi round {a.round}: {len(modules)} modules, checks {sorted(checks)}, {a.jobs} jobs", flush=True)
+        print(
+            f"{len(missing)} named modules have no source file in the tree: {missing[:5]}",
+            flush=True,
+        )
+    print(
+        f"jinshi round {a.round}: {len(modules)} modules, checks {sorted(checks)}, {a.jobs} jobs",
+        flush=True,
+    )
 
     def flush(check: str) -> None:
         with (a.out / f"{check}.jsonl").open("w", encoding="utf-8") as fh:
@@ -527,36 +614,58 @@ def main() -> int:
         with ThreadPoolExecutor(a.jobs) as pool:
             results["replay"] = [f for fs in pool.map(replay_finding, modules) for f in fs]
         timings["replay"] = time.time() - t
-        print(f"replay: {len(results['replay'])} findings in {timings['replay']:.0f} s", flush=True)
+        print(
+            f"replay: {len(results['replay'])} findings in {timings['replay']:.0f} s",
+            flush=True,
+        )
         flush("replay")
     if "lean4lean" in checks and os.environ.get("JINSHI_LEAN4LEAN"):
         t = time.time()
         with ThreadPoolExecutor(a.jobs) as pool:
             results["lean4lean"] = [f for fs in pool.map(lean4lean_finding, modules) for f in fs]
         timings["lean4lean"] = time.time() - t
-        print(f"lean4lean: {len(results['lean4lean'])} findings in {timings['lean4lean']:.0f} s", flush=True)
+        print(
+            f"lean4lean: {len(results['lean4lean'])} findings in {timings['lean4lean']:.0f} s",
+            flush=True,
+        )
         flush("lean4lean")
     if "autoimplicit" in checks:
         t = time.time()
         with ThreadPoolExecutor(a.jobs) as pool:
-            both = [f for fs in pool.map(lambda m: autoimplicit_findings(module_path(m), m, lake=True), modules) for f in fs]
+            both = [
+                f
+                for fs in pool.map(
+                    lambda m: autoimplicit_findings(module_path(m), m, lake=True),
+                    modules,
+                )
+                for f in fs
+            ]
         results["autoimplicit"] = [f for f in both if f["check"] == "autoimplicit"]
         timings["autoimplicit"] = time.time() - t
-        print(f"autoimplicit: {len(results['autoimplicit'])} findings in {timings['autoimplicit']:.0f} s", flush=True)
+        print(
+            f"autoimplicit: {len(results['autoimplicit'])} findings in {timings['autoimplicit']:.0f} s",
+            flush=True,
+        )
         flush("autoimplicit")
     if "reproduce" in checks:
         t = time.time()
         with ThreadPoolExecutor(a.jobs) as pool:
             results["reproduce"] = [f for fs in pool.map(lambda m: reproduce_findings(module_path(m), m), modules) for f in fs]
         timings["reproduce"] = time.time() - t
-        print(f"reproduce: {len(results['reproduce'])} findings in {timings['reproduce']:.0f} s", flush=True)
+        print(
+            f"reproduce: {len(results['reproduce'])} findings in {timings['reproduce']:.0f} s",
+            flush=True,
+        )
         flush("reproduce")
     if "options" in checks:
         t = time.time()
         results["options"] = [f for m in modules for f in options_findings(module_path(m), m)]
         timings["options"] = time.time() - t
         flush("options")
-        print(f"options: {len(results['options'])} findings in {timings['options']:.0f} s", flush=True)
+        print(
+            f"options: {len(results['options'])} findings in {timings['options']:.0f} s",
+            flush=True,
+        )
     if "env" in checks:
         t = time.time()
         fs = env_findings(modules)
