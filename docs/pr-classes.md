@@ -267,3 +267,20 @@ Paths (target `<t>`, its Pascal-case name `<Ns>`, e.g. `erdos-396` and `Erdos396
 **Born tagged.** Every theorem of a studied PR carries its isnad tag (`docs/isnad.md`, "Born tagged"): the `autotag-build` and `autotag-push` workflows add the tags to the PR's branch as one commit a few minutes after the PR is opened, `scripts/ci/born_tagged.py` is the gate step that is red until then and green after, and the merge queue recomputes every tag from the build (`scripts/ci/tag_verify.py`). The provenance check of the bundle's attestation looks at the modules in their canonical form (tags out), so the tags never touch it. The intake and extend classes follow the same way once `TENGOKU_ISNAD_REQUIRED` is `1`.
 
 Label `studied`. Folder `data/studied/`. The theorems land tentative: nothing here makes one trusted.
+
+## 10. The native class
+
+A **native PR** adds or edits modules of `Tengoku/Native/`, the tree's own novel content (`docs/native.md`), and nothing else. Like the tag class it comes from `TENGOKU_BOT` and is recognised
+by its paths: every changed path is a module `Tengoku/Native/**.lean`, the umbrella `Tengoku/Native.lean` or `Tengoku/All.lean`, and at least one is a module.
+
+| Path | Status | What it may hold |
+|---|---|---|
+| `Tengoku/Native/**.lean` | added or modified | a credit (`Authors: …`), imports of `Tengoku` and other Native modules only, content that passes the intake allow-list in strict mode, no `sorry`, no isnad tag |
+| `Tengoku/Native.lean` | added or modified | one `import` per module under `Tengoku/Native/`, each once, and nothing else |
+| `Tengoku/All.lean` | modified, by the first native PR only | exactly one new line, `import Tengoku.Native` |
+
+`scripts/ci/native_check.py` judges it in the gate from git objects (nothing of the PR runs): a module is never deleted or renamed by a PR, there are at most 400 modules, and
+what the lint refuses (`native_decide` and the other ways to trust the compiler, code that runs while compiling, notation and macros) is refused here as it is for an intake
+bundle. The merge queue builds the PR's modules (`queue_targets.py`; the whole of Native when a PR edits a module, since other Native modules may import it), checks the axioms of every
+theorem (the three standard axioms and nothing else: the second line of defence against a theorem that trusts the compiler) and writes the leak report. Native modules are tagged
+afterwards by the sweep (`from=novel`), never by their author.
