@@ -11,7 +11,7 @@ project in the first place is in [threat-model.md](threat-model.md).
 | Python packages of the CI scripts | `scripts/ci/requirements/*.txt` | pinned with hashes, installed with `pip install --require-hashes`; Dependabot updates them weekly |
 | Lean toolchain | `lean-toolchain`, `lakefile.toml`, `lake-manifest.json` | one pinned toolchain; the tree has no Lake dependencies (seeded and generated, see `LICENSE-THIRD-PARTY.md`) |
 | Third-party Lean libraries | `schemas/sources.json`: each source's licence and, for compiled libraries, repository and commit | the commit is fixed; a record is trusted only when the tree builds with it |
-| Build tools (elan installer, lean4export, nanoda) | the workflows that run them | pinned to a commit |
+| Build tools (elan installer, lean4export, nanoda) | the workflows that run them | pinned to a commit; elan is the v4.2.4 release tarball, checked with `sha256sum -c` before it is extracted (`workflow_rules.py`, rule `installer`, refuses a download that is run as it arrives) |
 
 The archive of what was used is the git history (every record names its source at a fixed commit), the attested
 release files, and the Zenodo deposit of each release.
