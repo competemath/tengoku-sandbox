@@ -1,0 +1,71 @@
+name: root-inventory
+# Which declarations of the compiled tree sit in the root namespace, library by library. `tengoku-leakscan` (TengokuLeak.lean) is the merge queue's report of them for the modules of one
+# group; this runs it over every library of the tree, on the published cache of a commit of main, so the libraries that arrived before the factory qualified roots (emissary-archangel#179,
+# 2026-11-12: `Tengoku.<Library>.<name>`) can be listed exactly: 62 libraries, about 7,300 names on the Leak IV count. The report is the input of the tree's own fix of them.
+# Read-only, run by hand: it changes nothing, and nothing it runs comes from a PR.
+run-name: root inventory of ${{ inputs.commit || github.sha }}
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: "A commit of main (default: the newest)"
+        required: false
+        default: ""
+
+permissions: {}
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  TENGOKU_REPO: ${{ github.repository }}
+  TENGOKU_VERIFY: require   # an unattested cache part is refused, never unpacked
+  TENGOKU_TOPUPS: "1"
+
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    permissions: { contents: read }
+    steps:
+      - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2
+        with: { egress-policy: audit }
+      - name: The commit, in full
+        env: { WANT: "${{ inputs.commit }}" }
+        run: '[ -z "$WANT" ] || [[ "$WANT" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::commit must be the full 40-character SHA: git rev-parse <commit>"; exit 1; }'
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { ref: "${{ inputs.commit || github.sha }}", fetch-depth: 0, filter: "blob:none", persist-credentials: false }
+      - name: A commit of main
+        env: { WANT: "${{ inputs.commit }}" }
+        run: |
+          [ "$(git rev-parse HEAD)" = "${WANT:-$GITHUB_SHA}" ] || { echo "::error::checked out $(git rev-parse HEAD), not ${WANT:-$GITHUB_SHA}"; exit 1; }
+          git merge-base --is-ancestor HEAD origin/main || { echo "::error::$(git rev-parse HEAD) is not on main"; exit 1; }
+      - name: elan
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/leanprover/elan/0e36a07b9bbcc5381fa6250df109f9a4f94d7bac/elan-init.sh | sh -s -- -y --default-toolchain none   # the installer at a fixed commit (as promote.yml)
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: The compiled tree (the published cache, then whatever this commit has beyond it)
+        env: { GH_TOKEN: "${{ github.token }}" }   # gh attestation verify
+        run: |
+          scripts/cache.sh get 2>&1 | tail -20
+          lake build Tengoku.All 2>&1 | tail -3
+          lake build tengoku-leakscan 2>&1 | tail -3
+      - name: Every library, scanned
+        run: |
+          mkdir -p roots
+          : > roots/summary.tsv
+          # a library is a `Tengoku/<Library>.lean` that is neither the seed's, the tree's umbrella nor a target; the scanner takes the library's umbrella and every module below it
+          for f in Tengoku/*.lean; do
+            lib=$(basename "$f" .lean)
+            case "$lib" in All|Seed|Studied) continue ;; esac
+            [ -d "Tengoku/$lib" ] || continue
+            lake env .lake/build/bin/tengoku-leakscan --module "Tengoku.$lib" --prefix "Tengoku.$lib" > "roots/$lib.txt" 2> "roots/$lib.err" || true
+            n=$(grep -c '^root: ' "roots/$lib.txt" || true)
+            declared=$(sed -n 's/^roots: \([0-9]*\) declarations.*/\1/p' "roots/$lib.txt" | head -1)
+            printf '%s\t%s\t%s\n' "$lib" "$n" "${declared:-NO-REPORT}" | tee -a roots/summary.tsv
+          done
+          { echo '### Root inventory'; echo '```'; sort -t$'\t' -k2 -n -r roots/summary.tsv | head -80; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - name: The report, for the tree's fix of them
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with: { name: root-inventory, path: roots, retention-days: 30 }
