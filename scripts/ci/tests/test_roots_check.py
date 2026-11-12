@@ -16,7 +16,7 @@ from test_gates import TREE, Repo  # noqa: E402
 
 MODULE = "module\n\npublic import Tengoku\n\npublic section\n\nopen Polynomial\n\ndef X : Nat := 1\n\ntheorem one_eq : X = 1 := rfl\n"
 REPORT = "leakscan: 0 global instances\nroots: 1 declarations of the library are in the root namespace (x)\nroot: X\n"
-RECORD = {"name": "X", "statement": "def X : Nat := 1", "module": "Tengoku.Foo.Bar", "library": "foo"}
+RECORD = {"name": "X", "statement": "def X : Nat := 1", "module": "Tengoku.Foo.Bar", "library": "foo", "source_url": "https://x/y"}
 
 
 class RootsPR(Repo):
@@ -127,9 +127,29 @@ class RootsCheck(unittest.TestCase):
 
     def test_the_other_gates_that_read_a_diff_accept_it(self):
         r = self.good()
-        for script in ("append_only.py", "credits.py", "validate_records.py", "lint_banked.py", "dco.py"):
+        for script in ("append_only.py", "validate_records.py", "lint_banked.py", "dco.py"):
             rc, out = r.gate(script)
             self.assertEqual(rc, 0, f"{script}: {out}")
+
+    def test_the_credits_gate_takes_a_rename_with_the_flag_and_only_with_it(self):
+        r = self.good()
+        rc, out = r.gate("credits.py")
+        self.assertEqual(rc, 1, out)  # the record's source_url line changed: without the class flag that is a changed credit
+        self.assertIn("manifest.jsonl", out)
+        rc, out = r.gate("credits.py", "main", "pr", "--roots")
+        self.assertEqual(rc, 0, out)
+
+    def test_the_credits_flag_does_not_excuse_a_changed_source(self):
+        r = RootsPR()
+        r.add_report()
+        r.apply()
+        manifest = r.dir / "data" / "intake" / "foo" / "manifest.jsonl"
+        rec = json.loads(manifest.read_text(encoding="utf-8"))
+        rec["source_url"] = "https://elsewhere/z"
+        manifest.write_text(json.dumps(rec) + "\n", encoding="utf-8")
+        r.commit("roots, but the source changed")
+        rc, out = r.gate("credits.py", "main", "pr", "--roots")
+        self.assertEqual(rc, 1, out)
 
 
 if __name__ == "__main__":
