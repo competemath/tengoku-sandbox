@@ -1,0 +1,13 @@
+leakscan: 16 global instances (0 touch no type of the library), 0 scoped; 17 global simp lemmas (6 trigger on nothing of the library), 0 scoped
+roots: 5 declarations of the library are in the root namespace (nothing in their names tells libraries apart; a second library declaring one fails to import)
+leak: simp ZMod.val_mk registered in Tengoku.Apap.APAP.Mathlib.Data.ZMod.Basic (declared at line 11)
+leak: simp ZMod.mk_eq_natCast registered in Tengoku.Apap.APAP.Mathlib.Data.ZMod.Basic (declared at line 14)
+leak: simp MeasureTheory.convolution_translate registered in Tengoku.Apap.APAP.Mathlib.Analysis.Convolution (declared at line 88)
+leak: simp MeasureTheory.translate_convolution registered in Tengoku.Apap.APAP.Mathlib.Analysis.Convolution (declared at line 94)
+leak: simp RCLike.enorm_ofReal registered in Tengoku.Apap.APAP.Mathlib.Analysis.RCLike.Basic (declared at line 10)
+leak: simp BohrSet.AddChar.nnnorm_apply registered in Tengoku.Apap.APAP.Prereqs.Bohr.Basic (declared at line 308)
+root: nnnorm_one_sub_mul'
+root: norm_one_sub_mul
+root: BohrSet
+root: norm_one_sub_mul'
+root: nnnorm_one_sub_mul

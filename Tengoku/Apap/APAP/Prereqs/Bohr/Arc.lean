@@ -4,12 +4,12 @@ public import Tengoku.Apap.APAP.Prereqs.Bohr.Basic
 public import Tengoku
 
 @[expose] public section
-
+namespace Tengoku.Apap end Tengoku.Apap open Tengoku.Apap 
 /- ### Arc Bohr sets -/
 
 open InnerProductGeometry Real
 
-namespace BohrSet
+namespace Tengoku.Apap.BohrSet
 variable {G : Type*} [AddCommGroup G] {B : BohrSet G} {ψ : AddChar G ℂ} {x : G}
 
 def arcSet : Set G := {x | ∀ ψ, ‖angle (ψ x) 1‖₊ ≤ B.ewidth ψ}
@@ -57,4 +57,5 @@ lemma chordSet_subset_smul_arcSet [Finite G] :
     refine (Complex.angle_le_mul_norm_sub (by simp) (by simp)).trans ?_
     gcongr
 
-end BohrSet
+end Tengoku.Apap.BohrSet
+-- Tengoku: root names of this library moved to Tengoku.Apap so they do not collide with other libraries (generated)
