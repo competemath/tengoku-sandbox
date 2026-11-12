@@ -19,13 +19,20 @@ import os
 import re
 import sys
 
-ROOT_LINE = re.compile(r"^root: (.+?)\s*$")  # a name Lean prints with guillemets (`«foo bar»`) has a space in it
-SUMMARY = re.compile(r"^roots: (\d+) declarations")  # the scanner's own count, printed first: a report without it is not a report
+ROOT_PREFIX = "root: "  # a name Lean prints with guillemets (`«foo bar»`) has a space in it: everything after the prefix is the name
+SUMMARY = re.compile(
+    r"^roots: (\d+) declarations"
+)  # the scanner's own count, printed first: a report without it is not a report
 
 
 def root_lines(report: str) -> list[str]:
     """the names of the `root: NAME` lines of a leakscan report, in order (a name twice is two lines)"""
-    return [m.group(1) for ln in report.splitlines() if (m := ROOT_LINE.match(ln))]
+    names = (
+        ln[len(ROOT_PREFIX) :].strip()
+        for ln in report.splitlines()
+        if ln.startswith(ROOT_PREFIX)
+    )
+    return [n for n in names if n]
 
 
 def roots_of(report: str) -> list[str]:
@@ -36,7 +43,10 @@ def roots_of(report: str) -> list[str]:
 def judge(report: str, required: bool, shown: int = 20) -> tuple[int, str]:
     """(exit status, message). A report that is not the scanner's whole report (no summary line: it crashed; fewer `root:` lines than the summary says: it was cut)
     cannot show that a group has no root, so it fails a required gate: the gate does not open when the scanner does not run."""
-    summary = next((int(m.group(1)) for ln in report.splitlines() if (m := SUMMARY.match(ln))), None)
+    summary = next(
+        (int(m.group(1)) for ln in report.splitlines() if (m := SUMMARY.match(ln))),
+        None,
+    )
     lines = root_lines(report)
     if summary is None or summary != len(lines):
         why = (
@@ -45,7 +55,9 @@ def judge(report: str, required: bool, shown: int = 20) -> tuple[int, str]:
             else f"the leak report counts {summary} root declaration(s) and lists {len(lines)}"
         )
         return (1 if required else 0), f"roots: not checked: {why}" + (
-            "\nerror: roots are required and the group cannot be shown to have none" if required else " (TENGOKU_ROOTS_REQUIRED is not 1)"
+            "\nerror: roots are required and the group cannot be shown to have none"
+            if required
+            else " (TENGOKU_ROOTS_REQUIRED is not 1)"
         )
     roots = roots_of(report)
     if not roots:
