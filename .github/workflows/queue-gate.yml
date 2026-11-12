@@ -223,6 +223,22 @@ jobs:
           lake env .lake/build/bin/tengoku-leakscan "${args[@]}" > leakscan.txt 2>&1 || true
           cat leakscan.txt >> build.log   # the whole report (every leak, every root-level name); the totals are its first lines
           { echo '### Leak report'; echo '```'; head -60 leakscan.txt; echo '```'; } | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: No declaration in the root namespace (scripts/ci/roots_gate.py)
+        # The leak report's `root:` lines, held to: a group that declares a name in the root namespace is ejected once TENGOKU_ROOTS_REQUIRED is 1 (the factory qualifies roots
+        # itself since emissary-archangel#179; the variable is turned on after the libraries merged before that have been fixed in the tree). Until then the names are only listed.
+        if: github.event_name == 'merge_group' && steps.build.outputs.targets != ''
+        shell: bash
+        env: { TENGOKU_ROOTS_REQUIRED: "${{ vars.TENGOKU_ROOTS_REQUIRED }}" }
+        run: |
+          set -o pipefail
+          # no report when the scanner did not build (the step above warned): required, that fails the group (a scanner that does not run is not a group without roots);
+          # not required, nothing is checked. A report that is cut or has no summary line fails the same way (roots_gate.py reads it on stdin).
+          if [ ! -f leakscan.txt ]; then
+            echo "roots: no leak report for this group (the scanner did not build)"
+            [ "$TENGOKU_ROOTS_REQUIRED" = 1 ] && { echo "error: roots are required and the group cannot be shown to have none"; exit 1; }
+            exit 0
+          fi
+          python3 scripts/ci/roots_gate.py < leakscan.txt 2>&1 | tee -a build.log "$GITHUB_STEP_SUMMARY"
       - name: Derived files match their generator
         if: github.event_name == 'merge_group'
         run: |

@@ -13,6 +13,7 @@ import sys
 from _git import changed_files, fail, gh_output, pascal, run, tier_of
 from native_check import is_native
 from restructure_check import is_restructure
+from roots_check import is_roots
 from tag_check import is_tag
 
 base, head = sys.argv[1], sys.argv[2]
@@ -67,6 +68,14 @@ if files and all(st == "M" and (m := re.fullmatch(r"Tengoku/([^/]+)/.+\.lean", p
         fail(f"a scope-fix PR comes from the factory's account ({bot_}), not from {os.environ.get('PR_ACTOR') or 'nobody'}")
     print(f"class=scope-fix ({len(files)} modules)")
     gh_output("class", "scope-fix")
+    gh_output("files", " ".join(p for _, p in files))
+    sys.exit(0)
+# A ROOTS PR gives the root-namespace names of some libraries the namespace of their library (scripts/ci/roots_check.py recomputes it from the base commit and accepts exactly that),
+# so it modifies modules and manifests of several libraries at once, which no other class allows. It adds the reports it was computed from (data/roots/<id>/<Library>.txt), which no
+# content-lane line of CODEOWNERS covers: a code owner reviews it. It comes from any author, because nothing of it is trusted: it is recomputed.
+if is_roots(base, head):
+    print(f"class=roots ({len(files)} files)")
+    gh_output("class", "roots")
     gh_output("files", " ".join(p for _, p in files))
     sys.exit(0)
 # A RESTRUCTURE PR moves the seed into Tengoku/Seed/ (scripts/restructure.py). scripts/ci/restructure_check.py recomputes it from the base commit and
