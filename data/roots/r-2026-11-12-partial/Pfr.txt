@@ -1,0 +1,5 @@
+leakscan: partial report (3 of the 8 root names of Pfr: the guard rehearsal)
+roots: 3 declarations of the library are in the root namespace (the guard rehearsal)
+root: FiniteRange
+root: finiteRange_of_finset
+root: continuous_pmf_apply
