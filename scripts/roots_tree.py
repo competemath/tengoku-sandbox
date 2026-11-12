@@ -75,9 +75,7 @@ NAMESPACE = re.compile(
     r"^\s*(?:(?:public|noncomputable)\s+)*namespace\s+((?:«[^»]*»|[^\s«»])+)\s*$"
 )  # a «quoted» component may hold a space
 
-OPENER = re.compile(
-    r"^\s*(?:namespace\s+(?:«[^»]*»|[^\s«»])+|(?:@\[expose\]\s+)?(?:(?:public|noncomputable)\s+)*section\b.*|mutual\s*)$"
-)
+OPENER = re.compile(r"^\s*(?:namespace\s+(?:«[^»]*»|[^\s«»])+|(?:@\[expose\]\s+)?(?:(?:public|noncomputable)\s+)*section\b.*|mutual\s*)$")
 CLOSER = re.compile(r"^\s*end\b")
 
 
@@ -94,12 +92,8 @@ def scope_info(code: list[str]) -> tuple[list[tuple[int, ...]], dict[int, int]]:
     return open_at, end_of
 
 
-HEADER_LINE = re.compile(
-    r"^\s*(?:(?:public|private|meta)\s+)*(?:import\s|module\s*$|prelude\s*$)"
-)
-SECTION = re.compile(
-    r"^\s*(?:@\[expose\]\s*)?(?:(?:public|noncomputable)\s+)*section\b"
-)
+HEADER_LINE = re.compile(r"^\s*(?:(?:public|private|meta)\s+)*(?:import\s|module\s*$|prelude\s*$)")
+SECTION = re.compile(r"^\s*(?:@\[expose\]\s*)?(?:(?:public|noncomputable)\s+)*section\b")
 
 
 def body_start(lines: list[str]) -> int:
@@ -126,9 +120,7 @@ QUOTED = r"«[^»]*»"
 NAME_TOKEN = rf"(?:{QUOTED}|[^\s:({{\[⦃«»])+"
 PLAIN = r"[^\W\d][\w'!?]*"  # a plain identifier component: a letter or `_`, then letters, digits, `_`, `'`, `!`, `?` (Unicode letters and subscripts included)
 SIMPLE_NAME = re.compile(rf"(?:{QUOTED}|{PLAIN})(?:\.(?:{QUOTED}|{PLAIN}))*")
-ROOT_LINE = re.compile(
-    rf"(?m)^[ \t]*root:\s+((?:{QUOTED}|[^\s«»])+)[ \t]*$"
-)  # leading blanks: `;` may be followed by a space
+ROOT_LINE = re.compile(rf"(?m)^[ \t]*root:\s+((?:{QUOTED}|[^\s«»])+)[ \t]*$")  # leading blanks: `;` may be followed by a space
 
 
 def head_of(name: str) -> str:
@@ -142,14 +134,37 @@ ROOT_DECL = re.compile(
     r"(?:(?:local|scoped)[ \t]+)?(?:theorem|lemma|def|abbrev|structure|inductive|class|opaque|axiom|instance)\s+"
     rf"(?:\(priority\s*:=[^)]*\)\s*)?(?P<name>{NAME_TOKEN})"
 )
-NAMESPACE_NAME = re.compile(
-    rf"^(?P<pre>\s*(?:(?:public|noncomputable)\s+)*namespace\s+)(?P<name>(?:{QUOTED}|[^\s«»])+)\s*$"
-)
+NAMESPACE_NAME = re.compile(rf"^(?P<pre>\s*(?:(?:public|noncomputable)\s+)*namespace\s+)(?P<name>(?:{QUOTED}|[^\s«»])+)\s*$")
 END_NAME = re.compile(rf"^(?P<pre>\s*end\s+)(?P<name>(?:{QUOTED}|[^\s«»])+)\s*$")
 OPEN_MARK = "namespace {ns} end {ns} open {ns} "
-OPEN_LINE = re.compile(
-    r"^(?P<pre>\s*(?:@\[[^\]]*\]\s*)?open\s+(?:scoped\s+)?)(?P<args>[^()]*?)(?P<post>\s+(?:hiding|renaming)\b.*|\s+in\s*|\s*\(.*)?\s*$"  # NOSONAR: the input is one line of Lean source, and the factory's identical, merged regex has never been a problem
+OPEN_HEADS = (  # `open scoped …` first; when that leaves no valid ending, `scoped` is an argument (the order a backtracking match would try)
+    re.compile(r"^(?P<pre>\s*(?:@\[[^\]]*\]\s*)?open\s+scoped\s+)"),
+    re.compile(r"^(?P<pre>\s*(?:@\[[^\]]*\]\s*)?open\s+)"),
 )
+OPEN_TAIL = (  # where the arguments of an `open` end: before `hiding`/`renaming`, before a trailing `in`, before a `(`, or at the end of the line
+    re.compile(r"\s+(?:hiding|renaming)\b"),
+    re.compile(r"\s+in\s*$"),
+    re.compile(r"\s*\("),
+    re.compile(r"\s*$"),
+)
+
+
+def open_args(code: str) -> tuple[int, str] | None:
+    """(column, text) of the arguments of an `open` line, or None: the shortest arguments (no parenthesis in them) after which the line ends as an `open` line may end. The same as the
+    regular expression with a lazy `[^()]*?` and an alternation of those endings (the factory's, emissary-archangel scope_rewrite.py OPEN_LINE) finds on every well-formed `open` line,
+    without its backtracking (each candidate end is tried once); they differ only on lines that are no Lean (`open scoped  hiding)`), where the old one backtracked into the blanks."""
+    for head_re in OPEN_HEADS:
+        head = head_re.match(code)
+        if not head:
+            continue
+        rest = code[head.end() :]
+        for end in range(len(rest) + 1):
+            if end and rest[end - 1] in "()":
+                break  # the arguments cannot contain a parenthesis
+            tail = rest[end:]
+            if any(t.match(tail) for t in OPEN_TAIL):
+                return head.end(), rest[:end]
+    return None
 
 
 def parse_roots(text: str) -> set[str]:
@@ -161,17 +176,11 @@ def _uses_roots(f: Lines, roots: set[str]) -> bool:
     """a bare use of a root name is left in the code (an edited token is preceded by `.`, so it no longer matches)"""
     if not roots:
         return False
-    pat = re.compile(
-        r"(?<![\w.'«])(?:"
-        + "|".join(re.escape(r) for r in sorted(roots, key=len, reverse=True))
-        + r")(?![\w'»])"
-    )
+    pat = re.compile(r"(?<![\w.'«])(?:" + "|".join(re.escape(r) for r in sorted(roots, key=len, reverse=True)) + r")(?![\w'»])")
     return any(pat.search(c) for c in f.code)
 
 
-def qualify_roots_in_file(
-    f: Lines, roots: set[str], ns: str, mark_open: bool = True
-) -> dict:
+def qualify_roots_in_file(f: Lines, roots: set[str], ns: str, mark_open: bool = True) -> dict:
     """The edits of one module: a declaration whose name is a root of the library, a `namespace R` block of a root R (with its `end`), and a dotted `R.x` declaration get `<ns>.`
     in front; the first body line gets `namespace NS end NS open NS` when the module declares or still uses a root. All of it goes INSIDE existing lines (no line moves)."""
     done: dict = {
@@ -192,11 +201,7 @@ def qualify_roots_in_file(
                 done["heads"].add(head)
                 done["namespaces"] += 1
                 end = end_of.get(i)
-                if (
-                    end is not None
-                    and (e := END_NAME.match(f.code[end]))
-                    and e.group("name") == m.group("name")
-                ):
+                if end is not None and (e := END_NAME.match(f.code[end])) and e.group("name") == m.group("name"):
                     f.insert(end, e.start("name"), ns + ".")
             continue
         m = ROOT_DECL.match(code)
@@ -206,34 +211,25 @@ def qualify_roots_in_file(
         if head_of(name) in roots:
             f.insert(i, m.start("name"), ns + ".")
             done["heads"].add(head_of(name))
-            if (
-                len(re.findall(rf"{QUOTED}|[^.«»]+", name)) > 1
-            ):  # a dot inside «quotes» is part of one component
+            if len(re.findall(rf"{QUOTED}|[^.«»]+", name)) > 1:  # a dot inside «quotes» is part of one component
                 done["dotted"] += 1
             else:
                 done["declared"].append(name)
     for i, code in enumerate(
         f.code
     ):  # `open R` of a root namespace R: the namespace moved, so the `open` follows (right to left: an insertion shifts the columns after it)
-        if (m := OPEN_LINE.match(code)) and "namespace" not in code:
-            for t in reversed(
-                list(re.finditer(rf"(?:{QUOTED}|[^\s«»])+", m.group("args")))
-            ):
+        found = open_args(code) if "namespace" not in code else None
+        if found:
+            column, args = found
+            for t in reversed(list(re.finditer(rf"(?:{QUOTED}|[^\s«»])+", args))):
                 tok = t.group(0)
                 if head_of(tok) in roots and not tok.startswith(ns):
-                    f.insert(i, m.start("args") + t.start(), ns + ".")
+                    f.insert(i, column + t.start(), ns + ".")
                     done["opens"] = done.get("opens", 0) + 1
-    touched = bool(
-        done["declared"] or done["namespaces"] or done["dotted"] or done.get("opens")
-    )
+    touched = bool(done["declared"] or done["namespaces"] or done["dotted"] or done.get("opens"))
     first = body_start(f.text)
     mark = OPEN_MARK.format(ns=ns)
-    if (
-        mark_open
-        and (touched or _uses_roots(f, roots))
-        and first < len(f.text)
-        and mark not in f.text[first]
-    ):
+    if mark_open and (touched or _uses_roots(f, roots)) and first < len(f.text) and mark not in f.text[first]:
         f.insert(first, 0, mark)
         done["opened"] = True
     return done
@@ -250,9 +246,7 @@ def qualify_manifest(root: Path, roots: set[str], ns: str) -> int:
         rec = json.loads(line) if line.strip() else None
         if rec and head_of(rec.get("name", "")) in roots:
             f = Lines(rec["statement"])
-            qualify_roots_in_file(
-                f, roots, ns, mark_open=False
-            )  # a record's statement is the declaration alone: no header, no `open`
+            qualify_roots_in_file(f, roots, ns, mark_open=False)  # a record's statement is the declaration alone: no header, no `open`
             rec["statement"] = "\n".join(f.text)
             rec["name"] = f"{ns}.{rec['name']}"
             line = json.dumps(rec, ensure_ascii=False) + "\n"
@@ -297,9 +291,7 @@ def qualify_library(lib_dir: Path, roots: set[str], ns: str) -> dict:
         new += f"-- Tengoku: root names of this library moved to {ns} so they do not collide with other libraries (generated)\n"
         path.write_text(new, encoding="utf-8")
     report["unresolved"] = sorted(roots - seen)
-    report["renamed"] = sorted(
-        renamed
-    )  # the roots the module pass renamed: what the manifest follows
+    report["renamed"] = sorted(renamed)  # the roots the module pass renamed: what the manifest follows
     return report
 
 
@@ -308,11 +300,7 @@ def manifest_namespace(manifest: Path) -> str | None:
     for ln in manifest.read_text(encoding="utf-8").splitlines():
         if ln.strip():
             parts = (json.loads(ln).get("module") or "").split(".")
-            return (
-                ".".join(parts[:2])
-                if len(parts) > 2 and parts[0] == "Tengoku"
-                else None
-            )
+            return ".".join(parts[:2]) if len(parts) > 2 and parts[0] == "Tengoku" else None
     return None
 
 
@@ -329,16 +317,12 @@ def apply(tree: Path, roots_dir: Path) -> dict:
         out[lib] = qualify_library(lib_dir, roots, ns)
         for manifest in sorted((tree / "data" / "intake").glob("*/manifest.jsonl")):
             if manifest_namespace(manifest) == ns:
-                out[lib]["manifest_records"] = qualify_manifest(
-                    manifest.parent, set(out[lib]["renamed"]), ns
-                )
+                out[lib]["manifest_records"] = qualify_manifest(manifest.parent, set(out[lib]["renamed"]), ns)
     return out
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
-    )
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
     a = sub.add_parser("apply")
     a.add_argument("--tree", type=Path, required=True)

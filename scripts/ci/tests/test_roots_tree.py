@@ -1,6 +1,8 @@
 """scripts/roots_tree.py: the tree's libraries get their root-namespace names qualified, inside existing lines, once, and nothing else changes."""
 
 import json
+import random
+import re
 import sys
 import tempfile
 import unittest
@@ -140,6 +142,57 @@ class RootsTree(unittest.TestCase):
     def test_the_umbrella_is_untouched(self):
         rt.apply(self.tree, self.roots)
         self.assertEqual((self.tree / "Tengoku" / "Foo.lean").read_text(encoding="utf-8"), "import Tengoku.Foo.Bar\n")
+
+
+OLD_OPEN_LINE = re.compile(
+    r"^(?P<pre>\s*(?:@\[[^\]]*\]\s*)?open\s+(?:scoped\s+)?)(?P<args>[^()]*?)(?P<post>\s+(?:hiding|renaming)\b.*|\s+in\s*|\s*\(.*)?\s*$"
+)
+
+
+class OpenLines(unittest.TestCase):
+    """open_args is the factory's OPEN_LINE regular expression without its backtracking: the same arguments, at the same column, on every well-formed `open` line"""
+
+    def test_well_formed_lines_agree_with_the_regular_expression(self):
+        random.seed(11)
+        words = ["Foo", "Bar.baz", "X", "«a b»", "Nat", "Polynomial", "MvPolynomial.C", "x₁", "y'"]
+        for _ in range(20000):
+            line = (
+                random.choice(["", "@[simp] ", "  "])
+                + "open "
+                + random.choice(["", "scoped "])
+                + " ".join(random.choice(words) for _ in range(random.randint(1, 4)))
+            )
+            line += random.choice(
+                [
+                    "",
+                    " ",
+                    " in",
+                    " in ",
+                    " hiding " + random.choice(words),
+                    " renaming " + random.choice(words) + " → " + random.choice(words),
+                    " (" + random.choice(words) + ")",
+                ]
+            )
+            m = OLD_OPEN_LINE.match(line)
+            old = (m.end("pre"), m.group("args")) if m else None
+            self.assertEqual(rt.open_args(line), old, line)
+
+    def test_what_is_not_an_open_line_is_not_one(self):
+        for line in ["def X : Nat := 1", "opened Foo", "-- open Foo", "namespace Foo", ""]:
+            self.assertIsNone(rt.open_args(line), line)
+
+    def test_an_open_of_a_root_namespace_follows(self):
+        with tempfile.TemporaryDirectory() as t:
+            tree = Path(t)
+            (tree / "Tengoku" / "Foo").mkdir(parents=True)
+            (tree / "Tengoku" / "Foo" / "A.lean").write_text(
+                "module\n\npublic import Tengoku\n\npublic section\n\nnamespace Helper\ndef inner : Nat := 3\nend Helper\n\nopen scoped Helper Nat\n",
+                encoding="utf-8",
+            )
+            (tree / "roots").mkdir()
+            (tree / "roots" / "Foo.txt").write_text("roots: 1 declarations of the library x\nroot: Helper\n", encoding="utf-8")
+            rt.apply(tree, tree / "roots")
+            self.assertIn("open scoped Tengoku.Foo.Helper Nat", (tree / "Tengoku" / "Foo" / "A.lean").read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

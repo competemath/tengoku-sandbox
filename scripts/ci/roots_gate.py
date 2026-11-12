@@ -20,18 +20,12 @@ import re
 import sys
 
 ROOT_PREFIX = "root: "  # a name Lean prints with guillemets (`«foo bar»`) has a space in it: everything after the prefix is the name
-SUMMARY = re.compile(
-    r"^roots: (\d+) declarations"
-)  # the scanner's own count, printed first: a report without it is not a report
+SUMMARY = re.compile(r"^roots: (\d+) declarations")  # the scanner's own count, printed first: a report without it is not a report
 
 
 def root_lines(report: str) -> list[str]:
     """the names of the `root: NAME` lines of a leakscan report, in order (a name twice is two lines)"""
-    names = (
-        ln[len(ROOT_PREFIX) :].strip()
-        for ln in report.splitlines()
-        if ln.startswith(ROOT_PREFIX)
-    )
+    names = (ln[len(ROOT_PREFIX) :].strip() for ln in report.splitlines() if ln.startswith(ROOT_PREFIX))
     return [n for n in names if n]
 
 
@@ -55,9 +49,7 @@ def judge(report: str, required: bool, shown: int = 20) -> tuple[int, str]:
             else f"the leak report counts {summary} root declaration(s) and lists {len(lines)}"
         )
         return (1 if required else 0), f"roots: not checked: {why}" + (
-            "\nerror: roots are required and the group cannot be shown to have none"
-            if required
-            else " (TENGOKU_ROOTS_REQUIRED is not 1)"
+            "\nerror: roots are required and the group cannot be shown to have none" if required else " (TENGOKU_ROOTS_REQUIRED is not 1)"
         )
     roots = roots_of(report)
     if not roots:
