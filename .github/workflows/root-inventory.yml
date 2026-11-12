@@ -43,7 +43,10 @@ jobs:
           git merge-base --is-ancestor HEAD origin/main || { echo "::error::$(git rev-parse HEAD) is not on main"; exit 1; }
       - name: elan
         run: |
-          curl -sSfL https://raw.githubusercontent.com/leanprover/elan/0e36a07b9bbcc5381fa6250df109f9a4f94d7bac/elan-init.sh | sh -s -- -y --default-toolchain none   # the installer at a fixed commit (as promote.yml)
+          # the installer at a fixed commit (as promote.yml), fetched over HTTPS (TLS 1.2 or later) only and checked against its SHA-256 before anything runs
+          curl --proto '=https' --tlsv1.2 -sSfL -o "$RUNNER_TEMP/elan-init.sh" https://raw.githubusercontent.com/leanprover/elan/0e36a07b9bbcc5381fa6250df109f9a4f94d7bac/elan-init.sh
+          echo "a620ff1641616222c8d37c54845492004bb84d6877cdbc944dd65c1aa685bf53  $RUNNER_TEMP/elan-init.sh" | sha256sum -c -
+          sh "$RUNNER_TEMP/elan-init.sh" -y --default-toolchain none
           echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
       - name: The compiled tree (the published cache, then whatever this commit has beyond it)
         env: { GH_TOKEN: "${{ github.token }}" }   # gh attestation verify
