@@ -5,7 +5,7 @@ public import Tengoku
 import Tengoku.Apap.APAP.Mathlib.Analysis.Normed.Ring.Basic
 
 @[expose] public section
-
+namespace Tengoku.Apap end Tengoku.Apap open Tengoku.Apap 
 open AddChar Function
 open scoped NNReal ENNReal Finset
 
@@ -20,13 +20,13 @@ the *chord-length* convention. The arc-length convention would instead be
 Note that this set **does not** uniquely determine `B` (in particular, it does not uniquely
 determine either `B.frequencies` or `B.width`). -/
 @[ext]
-structure BohrSet (G : Type*) [AddCommGroup G] where
+structure Tengoku.Apap.BohrSet (G : Type*) [AddCommGroup G] where
   frequencies : Finset (AddChar G ℂ)
   /-- The width of a Bohr set at a frequency. Note that this width corresponds to chord-length. -/
   ewidth : AddChar G ℂ → ℝ≥0∞
   mem_frequencies : ∀ ψ, ψ ∈ frequencies ↔ ewidth ψ < ⊤
 
-namespace BohrSet
+namespace Tengoku.Apap.BohrSet
 variable {G : Type*} [AddCommGroup G] {B : BohrSet G} {ψ : AddChar G ℂ} {x : G}
 
 def width (B : BohrSet G) (ψ : AddChar G ℂ) : ℝ≥0 := (B.ewidth ψ).toNNReal
@@ -341,10 +341,11 @@ lemma smul_add_smul_subset [Finite G] {B : BohrSet G} {ρ₁ ρ₂ : ℝ} (hρ�
   add_subset_of_ewidth fun ψ => by
     simp only [Pi.add_apply, ewidth_smul]; split <;> simp [add_nonneg, add_mul, *]
 
-end BohrSet
+end Tengoku.Apap.BohrSet
 
 -- variable {ρ : ℝ}
 
 -- lemma le_card_smul (hρ₀ : 0 < ρ) (hρ₁ : ρ < 1) :
 --     (ρ / 4) ^ B.rank * Nat.card B ≤ Nat.card ↥(ρ • B) := by
 --   sorry
+-- Tengoku: root names of this library moved to Tengoku.Apap so they do not collide with other libraries (generated)
