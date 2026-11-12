@@ -36,6 +36,8 @@ then composes those local facts and tracks the final normalization factor.
 -/
 
 @[expose] public section
+attribute [local simp] LatticeCrypto.Poly.get_map LatticeCrypto.Poly.get_zipWith
+
 
 namespace LatticeCrypto.NTTCert
 
