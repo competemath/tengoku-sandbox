@@ -5,7 +5,7 @@ public import Tengoku.Pfr.PFR.ForMathlib.FiniteRange.Defs
 public import Tengoku.Pfr.PFR.Mathlib.Probability.UniformOn
 
 public section
-
+namespace Tengoku.Pfr end Tengoku.Pfr open Tengoku.Pfr 
 open Function MeasureTheory Measure Set
 open scoped ENNReal
 
@@ -308,3 +308,4 @@ lemma isUniform_iff_map_eq_uniformOn [Finite H] {Ω : Type*} [mΩ : MeasurableSp
     simp
 
 end ProbabilityTheory
+-- Tengoku: root names of this library moved to Tengoku.Pfr so they do not collide with other libraries (generated)

@@ -3,7 +3,7 @@ module
 public import Tengoku
 
 public section
-
+namespace Tengoku.Pfr end Tengoku.Pfr open Tengoku.Pfr 
 open MeasureTheory ProbabilityMeasure Topology Metric Filter Set ENNReal NNReal
 open scoped BoundedContinuousFunction Topology ENNReal NNReal
 
@@ -35,7 +35,7 @@ lemma continuous_pmf_apply' (i : X) :
     Continuous fun μ : ProbabilityMeasure X ↦ (μ : Measure X).real {i} :=
   continuous_probabilityMeasure_apply_of_isClopen (s := {i}) <| isClopen_discrete _
 
-lemma continuous_pmf_apply (i : X) : Continuous fun μ : ProbabilityMeasure X ↦ μ {i} := by
+lemma Tengoku.Pfr.continuous_pmf_apply (i : X) : Continuous fun μ : ProbabilityMeasure X ↦ μ {i} := by
   -- KK: The coercion fight here is one reason why I now prefer ℝ-valued and not ℝ≥0-valued probas.
   convert continuous_real_toNNReal.comp (continuous_pmf_apply' i)
   ext
@@ -75,3 +75,4 @@ lemma ProbabilityMeasure.tendsto_iff_forall_apply_tendsto_ennreal {L : Filter ι
       (𝓝 ((μ : Measure X) {a})) := by
   rw [ProbabilityMeasure.tendsto_iff_forall_apply_tendsto]
   simp [← ennreal_coeFn_eq_coeFn_toMeasure, ENNReal.tendsto_coe]
+-- Tengoku: root names of this library moved to Tengoku.Pfr so they do not collide with other libraries (generated)

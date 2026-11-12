@@ -4,7 +4,7 @@ public import Tengoku
 public import Tengoku.Pfr.PFR.ForMathlib.FiniteRange.Defs
 
 public section
-
+namespace Tengoku.Pfr end Tengoku.Pfr open Tengoku.Pfr 
 open MeasureTheory Set
 
 namespace ProbabilityTheory
@@ -30,3 +30,4 @@ lemma sum_meas_smul_cond_fiber' {X : Ω → α} (hX : Measurable X) [finX : Fini
       aesop (add simp [PairwiseDisjoint, Set.Pairwise, Function.onFun, disjoint_left])
 
 end ProbabilityTheory
+-- Tengoku: root names of this library moved to Tengoku.Pfr so they do not collide with other libraries (generated)
