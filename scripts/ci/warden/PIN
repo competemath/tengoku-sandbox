@@ -1,0 +1,9 @@
+# Vendored byte for byte from https://github.com/competemath/tengoku-warden at commit 8e78f4f1e2b204f7c81da3b155d54e7502086420   # pragma: allowlist secret (a commit id)
+# Refresh from that repository, never by hand: copy warden/<name>.py here, run `sha256sum <name>.py`, update this file and the commit above.
+# scripts/ci/tests/test_warden_vendor.py fails when a file differs from its hash. Check with: sha256sum -c PIN (the comment lines are ignored).
+f3a049289f524edde69b3721d659bc95de798a5897f89cae62cffdc73ff97c31  __init__.py
+ebd987ebdb4f407d60d4bf18213294cd672106357d58be1d9dc9b224de5e7796  eligibility.py
+759a6ab49e94868610469652deb2e7f191b661280dbabbe82b789d9b193b3f86  ownership.py
+499c889e11f9e4a3840555941ffe6578db043d8693f3d4785023209db3115b87  safegit.py
+ed146754ff464fabb68b175b92a7cd7e397a3244f4d149f1a41f95a567cc13aa  scope.py
+1754a129053e18e64e8de6193b41b0b2b85c37f15270de30b26b81cbbd8cc07e  secretscan.py

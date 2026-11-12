@@ -1,0 +1,19 @@
+{
+  "human": [
+    "/Tengoku.lean",
+    "/Tengoku/",
+    "/lean-toolchain",
+    "/lakefile.toml",
+    "/lake-manifest.json",
+    "/scripts/",
+    "/TengokuExtract.lean",
+    "/TengokuAxioms.lean",
+    "/.github/",
+    "/schemas/",
+    "/.pre-commit-config.yaml",
+    "/pyproject.toml",
+    "/data/trusted/"
+  ],
+  "agent": ["*"],
+  "review": []
+}

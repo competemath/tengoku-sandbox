@@ -388,13 +388,22 @@ jobs:
       # Compiling the candidates runs the PR's Lean. It happens with no network (a new network namespace), no
       # sight of the runner's processes (a new PID namespace with its own /proc) and an empty environment, so
       # it can reach neither GitHub's cache service nor a token; the job ends right after, so nothing persists.
+      # The first command inside the seal is its self-test (scripts/ci/sandbox_selftest.py, docs/agent-security.md): from inside, it checks that
+      # there is no route out, that this is a PID namespace of its own with nothing in the environment, and that the runner's credentials, its command
+      # files, the downloaded actions and the Docker socket are out of reach. A step that is not sealed stops there, before the PR's Lean starts;
+      # otherwise the self-test runs the vacuity check in its place.
+      # The seal is the runner's own user in new network, PID and mount namespaces, and on a hosted runner that user can write /usr/local/bin and /opt,
+      # append to the files GITHUB_ENV/GITHUB_PATH are read from, change the downloaded actions' code, and connect to the Docker socket (a unix socket
+      # is addressed by path, so the network namespace does not stop it): the self-test found all four on its first run (pr-tests.yml, sealed-selftest).
+      # scripts/ci/seal_harden.sh closes them for this step only, inside its own mount namespace, before it drops to the user.
       - name: vacuity (sealed)
         env: { BODY: "${{ github.event.pull_request.body }}" }
         run: |
           printf '%s' "$BODY" > body.txt
-          sudo unshare --net --pid --fork --mount-proc runuser -u "$(id -un)" -- \
+          sudo unshare --net --pid --fork --mount-proc sh scripts/ci/seal_harden.sh "$(id -un)" -- \
             env -i HOME="$HOME" PATH="$HOME/.elan/bin:/usr/local/bin:/usr/bin:/bin" LANG=C.UTF-8 \
-            TENGOKU_CI_ROOT="$GITHUB_WORKSPACE" python3 scripts/ci/vacuity.py "$BASE" "$HEAD" body.txt
+            TENGOKU_CI_ROOT="$GITHUB_WORKSPACE" \
+            python3 scripts/ci/sandbox_selftest.py --allow-env TENGOKU_CI_ROOT -- python3 scripts/ci/vacuity.py "$BASE" "$HEAD" body.txt
 
   # The workflow rules (scripts/ci/workflow_rules.py): main's checker reads the workflow and action files
   # the PR adds or changes from the PR's commit, and verifies their pins against GitHub (impostor commits).
