@@ -1,0 +1,29 @@
+# check	severity	name	a word the detail must contain
+# the in-process part of `mutants`: Lean's kernel on every mutant of the fixture's four proofs (numbered across the module, theorems by name;
+# the operator is in the detail). The kernels' agreement on the same mutants is tested by scripts/jinshi/selftest.py's appended block.
+mutants	info	JinshiFixtures.comm_app_mut1	reject
+mutants	info	JinshiFixtures.comm_app_mut2	reject
+mutants	info	JinshiFixtures.comm_app_mut3	reject
+mutants	info	JinshiFixtures.comm_app_mut4	reject
+mutants	info	JinshiFixtures.comm_app_mut5	accept
+mutants	info	JinshiFixtures.five_le_seven_mut6	reject
+mutants	info	JinshiFixtures.five_le_seven_mut7	reject
+mutants	info	JinshiFixtures.five_le_seven_mut8	accept
+mutants	info	JinshiFixtures.five_le_seven_mut9	accept
+mutants	info	JinshiFixtures.five_le_seven_mut10	reject
+mutants	info	JinshiFixtures.five_le_seven_mut11	reject
+mutants	info	JinshiFixtures.five_le_seven_mut12	reject
+mutants	info	JinshiFixtures.five_le_seven_mut13	accept
+mutants	info	JinshiFixtures.refl_four_mut14	reject
+mutants	info	JinshiFixtures.refl_four_mut15	accept
+mutants	info	JinshiFixtures.refl_four_mut16	accept
+mutants	info	JinshiFixtures.refl_four_mut17	reject
+mutants	info	JinshiFixtures.refl_four_mut18	reject
+mutants	info	JinshiFixtures.refl_four_mut19	reject
+mutants	info	JinshiFixtures.refl_four_mut20	accept
+mutants	info	JinshiFixtures.trans_app_mut21	reject
+mutants	info	JinshiFixtures.trans_app_mut22	reject
+mutants	info	JinshiFixtures.trans_app_mut23	reject
+mutants	info	JinshiFixtures.trans_app_mut24	reject
+mutants	info	JinshiFixtures.trans_app_mut25	reject
+mutants	info	JinshiFixtures.trans_app_mut26	accept

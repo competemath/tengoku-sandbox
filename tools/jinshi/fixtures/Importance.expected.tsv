@@ -1,0 +1,2 @@
+# in-degree is counted over the whole environment: base_fact is used by two proofs of this fixture; the leaves are quiet
+importance	info	JinshiFixtures.base_fact	used by 2

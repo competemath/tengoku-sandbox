@@ -22,6 +22,11 @@ on:
         description: "Only these modules, comma-separated (a rehearsal); empty: the whole round"
         required: false
         default: ""
+      nanoda:
+        description: "Build and use nanoda as mutants' fourth kernel judge (adds a Rust + lean4export build to every shard; off unless you actually want it this round)"
+        required: false
+        default: false
+        type: boolean
 permissions: {}
 concurrency:
   group: jinshi
@@ -33,6 +38,10 @@ env:
   TENGOKU_REPO: ${{ github.repository }}
   LEAN4LEAN_COMMIT: 8223d223ed98661882e95d9d6a7126df7097cd76   # pragma: allowlist secret (a commit id: digama0/lean4lean, 2026-08-29)
   BATTERIES_COMMIT: d54dddc581e08be364c278052863524bff7a99a9   # pragma: allowlist secret (a commit id: the Batteries the tree seeded, SEED.md)
+  # the same pair, and the same pins, independent-check.yml already builds for the nightly whole-tree check (scripts/jinshi/nanoda.py
+  # runs them per mutant instead); opt-in here too (JINSHI_LEAN4EXPORT, NANODA_BIN), unset leaves mutants.py's nanoda column off
+  LEAN4EXPORT_COMMIT: 483e011449cce37c3f8ad5e2aae434cbb1d2e53c  # pragma: allowlist secret (a commit, not a secret)
+  NANODA_COMMIT: 3a2407216ee84a75f9e1aead6803d0578be06ae7  # pragma: allowlist secret (a commit, not a secret)
 jobs:
   plan:
     runs-on: ubuntu-latest
@@ -103,6 +112,26 @@ jobs:
           PY
           (cd "$RUNNER_TEMP/lean4lean" && lake build lean4lean 2>&1 | tail -1)
           echo "JINSHI_LEAN4LEAN=$RUNNER_TEMP/lean4lean/.lake/build/bin/lean4lean" >> "$GITHUB_ENV"
+      # lean4export and nanoda, the same pair and the same pins independent-check.yml already builds for the nightly whole-tree
+      # check: scripts/jinshi/nanoda.py runs them per mutant instead, the fourth kernel of mutants.py's differential fuzzing, next
+      # to lean4lean above. JINSHI_LEAN4EXPORT and NANODA_BIN unset: mutants.py's judge() never adds the nanoda column (see its
+      # docstring) — a step that failed here would still leave the round's other examinations and kernels unaffected
+      - name: lean4export and nanoda, at their pinned commits
+        # gated: this clones and builds a Rust crate and a small Lean project on EVERY shard, unconditionally, the first
+        # time it was wired in -- 2-5 extra minutes of real compute per shard, paid on every round dispatch whether or not
+        # that round even runs `mutants`, let alone wants its fourth judge. Built only when the maintainer opts in AND the
+        # round's own checks actually include `mutants` (nanoda has nothing to judge otherwise).
+        if: ${{ inputs.nanoda == true && contains(inputs.checks, 'mutants') }}
+        env: { LEAN4EXPORT_COMMIT: "${{ env.LEAN4EXPORT_COMMIT }}", NANODA_COMMIT: "${{ env.NANODA_COMMIT }}" }
+        run: |
+          git clone -q https://github.com/leanprover/lean4export "$RUNNER_TEMP/lean4export"
+          git -C "$RUNNER_TEMP/lean4export" checkout -q "$LEAN4EXPORT_COMMIT"
+          (cd "$RUNNER_TEMP/lean4export" && lake build 2>&1 | tail -2)
+          echo "JINSHI_LEAN4EXPORT=$RUNNER_TEMP/lean4export/.lake/build/bin/lean4export" >> "$GITHUB_ENV"
+          git clone -q https://github.com/ammkrn/nanoda_lib "$RUNNER_TEMP/nanoda"
+          git -C "$RUNNER_TEMP/nanoda" checkout -q "$NANODA_COMMIT"
+          (cd "$RUNNER_TEMP/nanoda" && cargo build --release --locked 2>&1 | tail -2)
+          echo "NANODA_BIN=$RUNNER_TEMP/nanoda/target/release/nanoda_bin" >> "$GITHUB_ENV"
       - name: The self-test (the fixtures, against Lean's own library; shard 0 only)
         if: matrix.shard == 0
         run: python3 scripts/jinshi/selftest.py

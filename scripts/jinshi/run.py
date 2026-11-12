@@ -20,6 +20,11 @@ On a built tree (scripts/cache.sh get; lake build Tengoku.All; lake build tengok
                 default, or set to 0 (no limit), is a module that compiles only with extra budget (fragile under any toolchain change:
                 warn); `debug.*` options and `autoImplicit true` are warn; a linter switched off is info. No Lean runs.
   env           tengoku-jinshi over the round's modules in one process: the examinations the executable lists (--list).
+  mutants       off by default (`--checks` must name it): `tengoku-jinshi --check mutants --mutants-out DIR/mutants` mutates the first
+                theorems of each module (eight operators at fixed positions, Jinshi/Mutants.lean), judges every mutant with Lean's kernel
+                in-process and writes it unchecked as a module of its own; then scripts/jinshi/mutants.py has leanchecker and lean4lean
+                judge each one, plus nanoda (scripts/jinshi/nanoda.py) when NANODA_BIN and JINSHI_LEAN4EXPORT name their binaries.
+                Kernels that disagree on a mutant: fail (one of them has a bug; the module is the reproducer).
 
 Writes DIR/<check>.jsonl (one finding per line, the same shape for every check) and DIR/summary.md. Exit 0 always: the summary is the
 verdict, the workflow decides. `--modules FILE` (one module name per line) replaces the round's list (a rehearsal on a few modules).
@@ -47,10 +52,8 @@ UNKNOWN = re.compile(
     re.M,
 )
 ERROR = re.compile(r"^(?P<file>[^:\n]+):(?P<line>\d+):(?P<col>\d+): error(?:\([^)]*\))?: (?P<msg>.*)$", re.M)
-DECL = re.compile(
-    r"^\s*(?:@\[[^\]]*\]\s*)*(?:(?:private|protected|noncomputable|nonrec|public|meta|unsafe|partial)\s+)*(?:theorem|lemma|def|abbrev|instance|structure|class|inductive|opaque|axiom)\s+([^\s:({\[⦃]+)",
-    re.M,
-)
+# the one DECL pattern: decl_at() (declaration attribution for a diagnostic's line) and the
+# cascade-suppression filter below both use this.
 DECL = re.compile(
     r"^\s*(?:@\[[^\]]*\]\s*)?(?:(?:private|protected|noncomputable|unsafe|partial|nonrec|scoped|local)\s+)*"
     r"(?:theorem|lemma|def|structure|inductive|class|abbrev|instance|opaque|axiom)\s+([\w.'!?]+)",
@@ -170,6 +173,81 @@ def decl_at(text: str, line: int) -> str:
     return best
 
 
+# --- autoimplicit near-miss: is a silently auto-bound name a typo of something already in scope? ---
+# A near-miss is reported only as an enrichment of the existing finding's detail string (never a
+# severity change): it is a hint for a human triaging a round's fails, not a verdict.
+IDENT = re.compile(r"[A-Za-zΑ-Ωα-ω_][A-Za-z0-9_'!?₀-₉]*")
+_KEYWORDS = {
+    "theorem", "lemma", "def", "abbrev", "instance", "structure", "class", "inductive", "opaque", "axiom",
+    "private", "protected", "noncomputable", "unsafe", "partial", "nonrec", "scoped", "local", "where", "deriving",
+    "by", "do", "let", "have", "fun", "match", "with", "if", "then", "else", "from", "show", "suffices", "calc",
+    "Type", "Prop", "Sort", "True", "False", "Nat", "Int", "sorry", "in", "open", "import", "namespace", "end",
+    "variable", "variables", "section", "universe", "mut", "mutual", "set_option", "attribute",
+}
+VARIABLE_LINE = re.compile(r"^\s*variables?\s*(?:\([^)]*\)|\{[^}]*\}|⦃[^⦄]*⦄|\[[^\]]*\])*", re.M)
+
+
+def _levenshtein(a: str, b: str) -> int:
+    if a == b:
+        return 0
+    if len(a) > len(b):
+        a, b = b, a
+    prev = list(range(len(a) + 1))
+    for i, cb in enumerate(b, 1):
+        cur = [i] + [0] * len(a)
+        for j, ca in enumerate(a, 1):
+            cur[j] = min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (ca != cb))
+        prev = cur
+    return prev[-1]
+
+
+def near_miss(ident: str, candidates: set[str]) -> tuple[str, int] | None:
+    """the UNIQUE closest candidate to `ident` within a length-scaled edit-distance budget, or None.
+
+    Deterministic by construction: every candidate at the best distance is collected, and a result is
+    returned only when exactly one achieves it. A tie between two equally-plausible candidates (both
+    `n` and `h` are one edit from `m`) is genuinely ambiguous, not a confident "likely meant X", so it
+    is reported as no match rather than an arbitrary pick -- the first version of this picked whichever
+    tied candidate happened to come first in a `set`'s iteration order, which is nondeterministic across
+    runs; a dedicated regression test for exactly a tie now guards this (see selftest.py).
+    """
+    budget = 1 if len(ident) <= 3 else 2
+    by_distance: dict[int, list[str]] = {}
+    for c in sorted(candidates):
+        if c == ident or c in _KEYWORDS or ident in _KEYWORDS:
+            continue
+        d = _levenshtein(ident, c)
+        if d <= budget:
+            by_distance.setdefault(d, []).append(c)
+    if not by_distance:
+        return None
+    d = min(by_distance)
+    tied = by_distance[d]
+    return (tied[0], d) if len(tied) == 1 else None
+
+
+def candidates_in_scope(text: str, line: int) -> set[str]:
+    """identifiers plausibly already in scope at `line`: every identifier in the enclosing
+    declaration's own source span, plus every name bound by a `variable`/`variables` line earlier in
+    the file (the common case: a shared `variable` was renamed or removed, and a later declaration
+    still spells the old name, which auto-binds instead of erroring)."""
+    starts = sorted(m.start() for m in DECL.finditer(text))
+    offset = 0
+    for i, ln in enumerate(text.split("\n"), 1):
+        if i == line:
+            break
+        offset += len(ln) + 1
+    enclosing = max((s for s in starts if s <= offset), default=None)
+    end = min((s for s in starts if s > (enclosing if enclosing is not None else -1)), default=len(text))
+    span = text[enclosing:end] if enclosing is not None else ""
+    names = {m.group(0) for m in IDENT.finditer(span)}
+    for vm in VARIABLE_LINE.finditer(text):
+        if vm.start() >= offset:
+            continue
+        names |= {m.group(0) for m in IDENT.finditer(vm.group(0))}
+    return names - _KEYWORDS
+
+
 def autoimplicit_findings(path: Path, module: str, lake: bool = False, timeout: int = 1800) -> list[dict]:
     if not path.is_file():
         return [
@@ -239,6 +317,7 @@ def autoimplicit_findings(path: Path, module: str, lake: bool = False, timeout: 
         if u:
             ident = u.group("ident")
             greek = bool(GREEK.match(ident))  # a Greek letter is the idiom for a type variable: quantified on purpose, almost always
+            miss = near_miss(ident, candidates_in_scope(text, line))
             out.append(
                 {
                     "check": "autoimplicit",
@@ -247,7 +326,8 @@ def autoimplicit_findings(path: Path, module: str, lake: bool = False, timeout: 
                     "name": name,
                     "line": line,
                     "detail": f"with autoImplicit off: {m.group('msg').strip()} — Lean quantified `{ident}` in this declaration silently"
-                    + (" (a Greek letter: a type variable by convention; check it is one)" if greek else ""),
+                    + (" (a Greek letter: a type variable by convention; check it is one)" if greek else "")
+                    + (f" (one edit from `{miss[0]}`, already in scope here: likely a typo, not an intentional free variable)" if miss else ""),
                 }
             )
         else:
@@ -566,6 +646,17 @@ def main() -> int:
         print(f"env: {len(fs)} findings in {timings['env']:.0f} s", flush=True)
         for check in {f["check"] for f in fs}:
             flush(check)
+    if "mutants" in checks:
+        t = time.time()
+        from mutants import generate, judge  # noqa: E402
+
+        mdir = a.out / "mutants"
+        gen = generate(modules, mdir, timeout=3600)
+        fs, verdicts = judge(mdir, jobs=a.jobs)
+        results["mutants"] = [f for f in gen if not f["detail"].startswith("lean: ")] + fs
+        timings["mutants"] = time.time() - t
+        flush("mutants")
+        print(f"mutants: {len(verdicts)} mutants judged, {len(results['mutants'])} findings in {timings['mutants']:.0f} s", flush=True)
 
     for check, fs in results.items():
         with (a.out / f"{check}.jsonl").open("w", encoding="utf-8") as fh:
