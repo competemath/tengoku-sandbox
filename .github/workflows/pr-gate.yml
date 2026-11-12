@@ -106,7 +106,7 @@ jobs:
       - name: The PR's commits, as data (the checks are main's)
         run: git fetch -q --no-tags --filter=blob:none origin "+$PR_REF:refs/remotes/origin/pr-head" && git cat-file -e "$HEAD^{commit}"
       - name: credits
-        run: python3 scripts/ci/credits.py "$BASE" "$HEAD" ${{ needs.classify.outputs.class == 'promotion' && '--promotion' || '' }} ${{ needs.classify.outputs.class == 'restructure' && '--restructure' || '' }}
+        run: python3 scripts/ci/credits.py "$BASE" "$HEAD" ${{ needs.classify.outputs.class == 'promotion' && '--promotion' || '' }} ${{ needs.classify.outputs.class == 'restructure' && '--restructure' || '' }} ${{ needs.classify.outputs.class == 'roots' && '--roots' || '' }}
 
   # GOALS.md: its shape, real references, and the AI reviewer writing only Suggestions (docs/goals.md).
   goals:

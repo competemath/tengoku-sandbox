@@ -22,6 +22,9 @@ CREDIT = re.compile(r"(Authors?:|@author|\bCredit|Copyright|\"source_url\"|\"add
 # (the README's record-shape block carried `"source_url": "..."`) is not a provenance line.
 CREDIT_MD = re.compile(r"(Authors?:|@author|Copyright)", re.I)
 base, head = sys.argv[1], sys.argv[2]
+roots = (
+    "--roots" in sys.argv
+)  # a roots PR renames declarations: a manifest record whose provenance is untouched (everything but name and statement) has lost no credit
 promotion = "--promotion" in sys.argv  # the bot moves staging records to trusted: the credit travels with them
 restructure = (
     "--restructure" in sys.argv
@@ -70,6 +73,33 @@ def moved_in_markdown(path: str, text: str) -> bool:
     return True
 
 
+def provenance_key(text: str) -> str | None:
+    """A manifest record without its name and statement: what carries the credit (source, authors, toolchain, …); None when the line is not a JSON object."""
+    try:
+        rec = json.loads(text)
+    except Exception:
+        return None
+    if not isinstance(rec, dict):
+        return None
+    rec.pop("name", None)
+    rec.pop("statement", None)
+    return json.dumps(rec, sort_keys=True, ensure_ascii=False)
+
+
+roots_gained: dict[str, Counter[str]] = {}
+
+
+def renamed_record(path: str, text: str) -> bool:
+    """Whether this removed manifest line has a successor in the PR that differs in name and statement only (each gained record covers one removal)."""
+    if path not in roots_gained:
+        roots_gained[path] = Counter(k for _, t in added_lines(base, head, path) if (k := provenance_key(t)) is not None)
+    key = provenance_key(text)
+    if key is None or roots_gained[path][key] <= 0:
+        return False
+    roots_gained[path][key] -= 1
+    return True
+
+
 hits = []
 for st, p in changed_files(base, head):
     if st == "A" or match(p, EXEMPT) or (st == "D" and deregistered(base, p)):
@@ -78,6 +108,8 @@ for st, p in changed_files(base, head):
     kept = moved_lines(p) if st == "D" else set()
     for no, text in removed_lines(base, head, p):
         if not rx.search(text) or text in kept or moved_in_markdown(p, text):
+            continue
+        if roots and re.fullmatch(r"data/intake/[^/]+/manifest\.jsonl", p) and renamed_record(p, text):
             continue
         if promotion and match(p, ["data/staging/*.jsonl", "data/staging/*/*.jsonl"]):
             try:
