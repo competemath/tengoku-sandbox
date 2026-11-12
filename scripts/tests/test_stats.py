@@ -82,6 +82,39 @@ class StatsTest(unittest.TestCase):
         self.assertEqual(s["totals"], {"trusted": 5, "staging": 1, "tentative": 5, "all": 11, "tentative_already_trusted": 2})
         self.assertNotIn("tentative_already_trusted", s["libraries"]["beta"])  # nothing trusted to compare with
 
+    def test_each_trusted_theorem_accounts_for_one_tentative_record_only(self):
+        """The same statement in two namespaces, or a name repeated in a file, is not removed more often than the tree holds it."""
+        write(
+            self.root / "data/tentative/eps.jsonl",
+            [
+                {"name": "lemma1", "statement": "theorem lemma1 : True"},  # one namespace's
+                {"name": "lemma1", "statement": "theorem lemma1 : True"},  # another namespace's: a different theorem
+                {"name": "dup", "statement": "theorem dup : 1 = 1"},
+                {"name": "dup", "statement": "theorem dup : 2 = 2"},  # a different theorem under the same bare name
+            ],
+        )
+        write(self.root / "data/intake/eps/manifest.jsonl", [{"name": "A.lemma1", "statement": "theorem lemma1 : True"}])
+        write(self.root / "data/trusted/eps.jsonl", [{"name": "dup", "statement": "theorem dup : 1 = 1"}])
+        s = stats.collect(self.root)
+        e = s["libraries"]["eps"]
+        self.assertEqual((e["trusted"], e["tentative"], e["tentative_already_trusted"]), (2, 2, 2))
+
+    def test_a_last_line_without_a_newline_is_no_record_for_the_count_or_the_subtraction(self):
+        """count_lines counts newlines, so the subtraction must read records by the same boundary: no negative tentative count."""
+        write(
+            self.root / "data/intake/zeta/manifest.jsonl",
+            [{"name": "Z.a", "statement": "theorem a : True"}, {"name": "Z.b", "statement": "theorem b : True"}],
+        )
+        tentative = self.root / "data/tentative/zeta.jsonl"
+        tentative.parent.mkdir(parents=True, exist_ok=True)
+        tentative.write_text(
+            json.dumps({"name": "a", "statement": "theorem a : True"}) + "\n" + json.dumps({"name": "b", "statement": "theorem b : True"})
+        )  # the second record has no newline
+        s = stats.collect(self.root)
+        z = s["libraries"]["zeta"]
+        self.assertEqual((z["tentative"], z["tentative_already_trusted"]), (0, 1))
+        self.assertGreaterEqual(s["totals"]["tentative"], 0)
+
     def test_empty_tree(self):
         empty = Path(tempfile.mkdtemp())
         s = stats.collect(empty)

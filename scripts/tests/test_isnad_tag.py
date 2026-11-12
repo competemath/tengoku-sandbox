@@ -44,6 +44,68 @@ def block(text, name):
     return text[start:i]
 
 
+class RootPrefixedNames(unittest.TestCase):
+    """`theorem _root_.A.B.c` declares exactly `A.B.c`. The tagger compared the written text with the name as it stands, found `_root_.` in front, called the theorem "generated" and skipped it:
+    the module stayed untagged and autotag_push refused the PR (Tengoku yamaguchi-papers part 3, ten modules, 6 Nov 2026)."""
+
+    NAMES = [
+        "A.c",
+        "A.B.c",
+        "AlgebraicGeometry.GeometricallyIntegral.of_isPullback_of_geometricallyIntegral",
+        "Foo.«b.c»",
+        "Foo.α_β",
+        "x",
+        "A.B.C.D.e'",
+        "Mathlib.Foo.bar_apply",
+    ]
+    NAMESPACES = ["", "X.", "X.Y.", "AlgebraicCurves.Geometry.Curves.Proofs.GeometricallyIntegral_of_isPullback_of_geometricallyIntegral."]
+
+    def test_grid(self):
+        cases = 0
+        for name in self.NAMES:
+            written = "_root_." + name
+            self.assertTrue(tag.declared_name_matches(name, written), name)
+            for ns in self.NAMESPACES:
+                cases += 1
+                # a name in a namespace written in full or as its last components is still found (the old rule), `_root_` or not
+                self.assertTrue(tag.declared_name_matches(ns + name, name))
+                self.assertTrue(tag.declared_name_matches(ns + name, ns + name))
+                # `_root_.` means no namespace: it never matches a name that has one in front
+                if ns:
+                    self.assertFalse(tag.declared_name_matches(ns + name, written), (ns, name))
+            # another name, a prefix, a suffix, or `_root_` twice, never matches
+            for other in (name + "x", "Q." + name, name.rsplit(".", 1)[-1] + "z", "_root_." + written, "_root_" + name):
+                cases += 1
+                self.assertFalse(tag.declared_name_matches(name, "_root_." + other) and other != name, (name, other))
+        self.assertGreaterEqual(cases, 60)
+
+    def test_the_real_module_of_part_3(self):
+        """`theorem _root_.AlgebraicGeometry.GeometricallyIntegral.of_isPullback_of_geometricallyIntegral` under two stacked `open ... in`, inside three namespaces
+        (Tengoku/YamaguchiPapers/Nyll/SchemeTheory/Morphisms/GeometricallyIntegralFieldDescent.lean): it is placed, and tagged."""
+        text = (
+            "namespace AlgebraicCurves.Geometry.Curves.Proofs\nnamespace GeometricallyIntegral_of_isPullback_of_geometricallyIntegral\n\n"
+            "open _root_.AlgebraicGeometry in\nopen GeometricallyIntegral_of_isPullback_of_geometricallyIntegral.AlgebraicGeometry in\n"
+            "theorem _root_.AlgebraicGeometry.GeometricallyIntegral.of_isPullback_of_geometricallyIntegral {X Y : Type} : True := trivial\n\n"
+            "end GeometricallyIntegral_of_isPullback_of_geometricallyIntegral\nend AlgebraicCurves.Geometry.Curves.Proofs\n"
+        )
+        line = text.split("\n").index(next(l for l in text.split("\n") if l.startswith("theorem "))) + 1
+        written = "_root_.AlgebraicGeometry.GeometricallyIntegral.of_isPullback_of_geometricallyIntegral"
+        it = tag.Item(
+            "AlgebraicGeometry.GeometricallyIntegral.of_isPullback_of_geometricallyIntegral",
+            (line, 0, line, 200),
+            (line, len("theorem "), line, len("theorem ") + len(written)),
+            TAG,
+        )
+        placed, skipped = tag.locate(text, [it])
+        self.assertEqual(skipped, [])
+        self.assertEqual(len(placed), 1)
+        new, counts, more = tag.tag_text(text, [it])
+        self.assertEqual(counts["created"], 1)
+        self.assertEqual(more, [])
+        self.assertIn(TAG, new)
+        self.assertTrue(tag.equivalent(text, new))
+
+
 class Fixture(unittest.TestCase):
     def test_every_range_points_at_its_theorem_name(self):
         # the fixture and its ranges belong together: the text at each selection range is the declared name (but for the twin `ext` generated, which points at `ext`)
@@ -264,6 +326,31 @@ class Scanning(unittest.TestCase):
     def test_a_comment_that_is_never_closed_runs_to_the_end(self):
         self.assertEqual(tag.skip_block_comment("/- a /- b -/ c", 0), len("/- a /- b -/ c"))
 
+    def test_a_quoted_name_is_one_segment_and_hides_comment_marks(self):
+        self.assertEqual(self.kinds("theorem «a--b» : True := trivial\n"), ["code", "string", "code"])
+        self.assertEqual(self.kinds("theorem «a /-- b -/ c» : True := trivial\n"), ["code", "string", "code"])
+        self.assertEqual(self.kinds('theorem «a"b» : True := trivial\n'), ["code", "string", "code"])
+
+    def test_a_quoted_name_that_is_never_closed_runs_to_the_end(self):
+        self.assertEqual(self.kinds("theorem «a\n/-- d -/\n"), ["code", "string"])
+
+    def test_a_character_literal_is_one_segment_and_a_quote_in_it_opens_no_string(self):
+        self.assertEqual(self.kinds("def c := '\"'\n/-- d -/\n"), ["code", "string", "code", "doc", "code"])
+        self.assertEqual(self.kinds("def c := '-'\n"), ["code", "string", "code"])
+        self.assertEqual(self.kinds("def c := '\\''\n"), ["code", "string", "code"])
+        self.assertEqual(self.kinds("def c := '\\x41'\n"), ["code", "string", "code"])
+
+    def test_a_prime_or_the_image_notation_is_not_a_character_literal(self):
+        for code in ["theorem foo' (h' : f '' s = t) : s ⁻¹' t = u := by simp\n", "def c := f '' g '' h\n", "def c := a'b'\n"]:
+            self.assertEqual(self.kinds(code), ["code"], code)
+
+    def test_a_character_literal_in_front_of_a_docstring_does_not_hide_it(self):
+        text = "def c := '\"'\n\n/-- doc -/\ntheorem t0 : True := trivial\n"
+        new, counts, skipped = tag.tag_text(text, ranges_of(text, 1))
+        self.assertEqual((skipped, counts["replaced"] + counts["added"]), ([], 1), new)
+        self.assertEqual(new.count("/--"), 1, new)
+        self.assertIn(f"/-- doc\n{TAG}\n-/\ntheorem t0", new)
+
 
 def position(text, off):
     line_start = text.rfind("\n", 0, off) + 1
@@ -403,6 +490,9 @@ class Cli(unittest.TestCase):
             ("Tengoku.Seed", "seed"),
             ("Tengoku.Seed.Logic.Basic", "seed"),
             ("Tengoku.Native.X", "novel"),
+            ("Tengoku.Studied", "novel"),
+            ("Tengoku.Studied.Collatz.S0123456789ab", "novel"),
+            ("Tengoku.StudiedLike.X", "translated"),
             ("Tengoku.Flt.Basic", "translated"),
             ("Tengoku.SeedLike.X", "translated"),
             ("Tengoku.NativeThings", "translated"),
@@ -412,6 +502,15 @@ class Cli(unittest.TestCase):
 
     def test_module_names_map_to_files(self):
         self.assertEqual(isnad.module_file("A.B.C", Path("/r")), Path("/r/A/B/C.lean"))
+
+    def test_a_module_name_that_could_leave_the_root_is_refused(self):
+        """2026-10-08 (Sonar S8707): `.etc.passwd` became the absolute path /etc/passwd.lean (a leading dot is an empty component, and joining an absolute path
+        drops the root), and the file was read or rewritten. Module names come from --module."""
+        for bad in (".etc.passwd", "A..B", "A.", "", "A/B", "A\\B", "A\0B"):
+            with self.assertRaises(ValueError, msg=repr(bad)):
+                isnad.module_file(bad, Path("/r"))
+        for good in ("A", "Tengoku.Seed.Algebra.AddConstMap.Equiv", "A.B'", "A.«x y»"):
+            self.assertTrue(str(isnad.module_file(good, Path("/r"))).startswith("/r/"), good)
 
     def test_the_plan_joins_records_and_ranges_by_module_and_name(self):
         plan, skipped = isnad.plan_tags(*fixture_inputs("Tengoku.Seed.X"))

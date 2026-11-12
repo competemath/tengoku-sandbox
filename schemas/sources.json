@@ -109,7 +109,67 @@
     "https://github.com/schildep/verified-polygon-intersection",
     "https://github.com/VTrelat/ZFLean",
     "https://github.com/Verified-zkEVM/clean",
-    "https://github.com/Verified-zkEVM/zkLean"
+    "https://github.com/Verified-zkEVM/zkLean",
+    "https://github.com/PierreSenellart/descriptive-complexity",
+    "https://github.com/szymtor/immerman-vardi",
+    "https://github.com/szymtor/fagin",
+    "https://github.com/SamuelSchlesinger/complexitylib",
+    "https://github.com/leanprover/cslib",
+    "https://github.com/Jiyuan-Tan/CausalSmith",
+    "https://github.com/serhatemrecoban/LeanInfoTheory",
+    "https://github.com/openai/math",
+    "https://github.com/b-mehta/PrimeCert",
+    "https://github.com/alerad/leancert",
+    "https://github.com/lana-agents/belyi",
+    "https://github.com/lana-agents/formal-schemes",
+    "https://github.com/lana-agents/elliptic-curves",
+    "https://github.com/lana-agents/tempered-fundamental-groups",
+    "https://github.com/lana-agents/oka",
+    "https://github.com/lana-agents/orbicurve-cores",
+    "https://github.com/lana-agents/pi1",
+    "https://github.com/lana-agents/heights",
+    "https://github.com/lana-agents/genl",
+    "https://github.com/lana-agents/tate-curves-theta",
+    "https://github.com/lana-agents/iut",
+    "https://github.com/alonamaloh/schoenflies-lean",
+    "https://github.com/n-yamaguchi-0729/ClassFieldTheory",
+    "https://github.com/BennyAvelin/AbsorptionCutoff",
+    "https://github.com/abenenson/rellich-kondrachov",
+    "https://github.com/ahhwuhu/zeta_3_irrational",
+    "https://github.com/harfe/fixed-point-theorems-lean4",
+    "https://github.com/adamtopaz/acl_geom",
+    "https://github.com/asving/splitting-density-rationality",
+    "https://github.com/stksk310/NS-P23-Lean",
+    "https://github.com/Vlado-V/chopped-plane-point-ideals",
+    "https://github.com/riccardobrasca/KummerCriterion",
+    "https://github.com/n-yamaguchi-0729/YamaguchiPapersFormalization",
+    "https://github.com/frenzymath/MiyaokaMori-CharZero",
+    "https://github.com/resolutionorg/hironaka",
+    "https://github.com/vaca22/grothendieck-riemann-roch",
+    "https://github.com/chris-dare-dev/derived-alg-geo-lean",
+    "https://github.com/macgregor-sudo/albert-frame-triple-invariants",
+    "https://github.com/mhogrefe/azurite",
+    "https://github.com/itpplasma/stafford38-formal",
+    "https://github.com/fukubillueda-web/epsilon_SML",
+    "https://github.com/WangFrankie/QuadraticNumberFields",
+    "https://github.com/apellis/dg-lean",
+    "https://github.com/haruhisa-enomoto/magnitude-conjecture",
+    "https://github.com/haruhisa-enomoto/quotient-submodule-equidistribution",
+    "https://github.com/thebookersmith/hodge-structures-lean4",
+    "https://github.com/laurentbartholdi/theorem-a-fp-groups",
+    "https://github.com/DongzheZheng/Kurosh-Problem-at-GK-Dimension-Two",
+    "https://github.com/jayyswan/hasse-minkowski",
+    "https://github.com/RBarish-UTokyo/NPCompleteness-Lean4",
+    "https://github.com/pmaronow/at-palomar",
+    "https://github.com/satchlj/general_stoch_to_det",
+    "https://github.com/randyxian08/jsp000937-lean",
+    "https://github.com/yawara/t3-model-companion",
+    "https://github.com/hongjin-he/erdos-lean",
+    "https://github.com/long-mathematics/entropy-constrained-missing-mass",
+    "https://github.com/jtraverso/asymptotic-triangle-packing",
+    "https://github.com/eengad/deletion-codes-lean",
+    "https://github.com/NERV-WMY/pi2-lean",
+    "https://github.com/long-mathematics/duistermaat-van-der-kallen-nonvanishing"
   ],
   "licences": {
     "https://github.com/leanprover-community/mathlib4": "Apache-2.0",
@@ -220,7 +280,78 @@
     "https://github.com/schildep/verified-polygon-intersection": "MIT",
     "https://github.com/VTrelat/ZFLean": "Apache-2.0",
     "https://github.com/Verified-zkEVM/clean": "MIT",
-    "https://github.com/Verified-zkEVM/zkLean": "BSD-3-Clause"
+    "https://github.com/Verified-zkEVM/zkLean": "BSD-3-Clause",
+    "https://github.com/PierreSenellart/descriptive-complexity": "Apache-2.0",
+    "https://github.com/szymtor/immerman-vardi": "Apache-2.0",
+    "https://github.com/szymtor/fagin": "Apache-2.0",
+    "https://github.com/SamuelSchlesinger/complexitylib": "Apache-2.0",
+    "https://github.com/leanprover/cslib": "Apache-2.0",
+    "https://github.com/Jiyuan-Tan/CausalSmith": "Apache-2.0",
+    "https://github.com/serhatemrecoban/LeanInfoTheory": "Apache-2.0",
+    "https://github.com/openai/math": "Apache-2.0",
+    "https://github.com/b-mehta/PrimeCert": "MIT",
+    "https://github.com/alerad/leancert": "Apache-2.0",
+    "https://github.com/lana-agents/belyi": "Apache-2.0",
+    "https://github.com/lana-agents/formal-schemes": "Apache-2.0",
+    "https://github.com/lana-agents/elliptic-curves": "Apache-2.0",
+    "https://github.com/lana-agents/tempered-fundamental-groups": "Apache-2.0",
+    "https://github.com/lana-agents/oka": "Apache-2.0",
+    "https://github.com/lana-agents/orbicurve-cores": "Apache-2.0",
+    "https://github.com/lana-agents/pi1": "Apache-2.0",
+    "https://github.com/lana-agents/heights": "Apache-2.0",
+    "https://github.com/lana-agents/genl": "Apache-2.0",
+    "https://github.com/lana-agents/tate-curves-theta": "Apache-2.0",
+    "https://github.com/lana-agents/iut": "Apache-2.0",
+    "https://github.com/alonamaloh/schoenflies-lean": "Apache-2.0",
+    "https://github.com/n-yamaguchi-0729/ClassFieldTheory": "Apache-2.0",
+    "https://github.com/BennyAvelin/AbsorptionCutoff": "Apache-2.0",
+    "https://github.com/abenenson/rellich-kondrachov": "Apache-2.0",
+    "https://github.com/ahhwuhu/zeta_3_irrational": "Apache-2.0",
+    "https://github.com/harfe/fixed-point-theorems-lean4": "MIT",
+    "https://github.com/adamtopaz/acl_geom": "Apache-2.0",
+    "https://github.com/asving/splitting-density-rationality": "Apache-2.0",
+    "https://github.com/stksk310/NS-P23-Lean": "Apache-2.0",
+    "https://github.com/Vlado-V/chopped-plane-point-ideals": "Apache-2.0",
+    "https://github.com/riccardobrasca/KummerCriterion": "Apache-2.0",
+    "https://github.com/n-yamaguchi-0729/YamaguchiPapersFormalization": "Apache-2.0",
+    "https://github.com/frenzymath/MiyaokaMori-CharZero": "Apache-2.0",
+    "https://github.com/resolutionorg/hironaka": "Apache-2.0",
+    "https://github.com/vaca22/grothendieck-riemann-roch": "Apache-2.0",
+    "https://github.com/chris-dare-dev/derived-alg-geo-lean": "MIT",
+    "https://github.com/macgregor-sudo/albert-frame-triple-invariants": "Apache-2.0",
+    "https://github.com/mhogrefe/azurite": "Apache-2.0",
+    "https://github.com/itpplasma/stafford38-formal": "Apache-2.0",
+    "https://github.com/fukubillueda-web/epsilon_SML": "Apache-2.0",
+    "https://github.com/WangFrankie/QuadraticNumberFields": "Apache-2.0",
+    "https://github.com/chris-dare-dev/derived-alg-geo-lean/blob/af19c7943a8e9e346a5c26eea7ce41f17b3a7983/DerivedAlgGeo/CategoryTheory/Triangulated/TStructure/ImageFactorisation.lean": "Apache-2.0",
+    "https://github.com/chris-dare-dev/derived-alg-geo-lean/blob/af19c7943a8e9e346a5c26eea7ce41f17b3a7983/DerivedAlgGeo/CategoryTheory/Triangulated/StabilityCondition/Foundation/Deformation/SeminormComparison.lean": "Apache-2.0",
+    "https://github.com/chris-dare-dev/derived-alg-geo-lean/blob/af19c7943a8e9e346a5c26eea7ce41f17b3a7983/DerivedAlgGeo/CategoryTheory/Triangulated/StabilityCondition/Foundation/Deformation/LocalInjectivity.lean": "Apache-2.0",
+    "https://github.com/chris-dare-dev/derived-alg-geo-lean/blob/af19c7943a8e9e346a5c26eea7ce41f17b3a7983/DerivedAlgGeo/CategoryTheory/Triangulated/StabilityCondition/Foundation/Deformation/LocalComparison.lean": "Apache-2.0",
+    "https://github.com/chris-dare-dev/derived-alg-geo-lean/blob/af19c7943a8e9e346a5c26eea7ce41f17b3a7983/DerivedAlgGeo/CategoryTheory/Triangulated/StabilityCondition/Foundation/Deformation/ConnectedComponent.lean": "Apache-2.0",
+    "https://github.com/chris-dare-dev/derived-alg-geo-lean/blob/af19c7943a8e9e346a5c26eea7ce41f17b3a7983/DerivedAlgGeo/CategoryTheory/Triangulated/StabilityCondition/Foundation/Deformation/LocalHomeomorphism.lean": "Apache-2.0",
+    "https://github.com/chris-dare-dev/derived-alg-geo-lean/blob/af19c7943a8e9e346a5c26eea7ce41f17b3a7983/DerivedAlgGeo/CategoryTheory/Triangulated/PostnikovTower.lean": "Apache-2.0",
+    "https://github.com/chris-dare-dev/derived-alg-geo-lean/blob/af19c7943a8e9e346a5c26eea7ce41f17b3a7983/DerivedAlgGeo/CategoryTheory/Triangulated/StabilityCondition/Weak/Foundation/Slicing.lean": "Apache-2.0",
+    "https://github.com/chris-dare-dev/derived-alg-geo-lean/blob/af19c7943a8e9e346a5c26eea7ce41f17b3a7983/DerivedAlgGeo/CategoryTheory/Triangulated/StabilityCondition/Weak/Foundation/IntervalCategory.lean": "Apache-2.0",
+    "https://github.com/chris-dare-dev/derived-alg-geo-lean/blob/af19c7943a8e9e346a5c26eea7ce41f17b3a7983/DerivedAlgGeo/CategoryTheory/Triangulated/StabilityCondition/Foundation/PreStabilityCondition.lean": "Apache-2.0",
+    "https://github.com/chris-dare-dev/derived-alg-geo-lean/blob/af19c7943a8e9e346a5c26eea7ce41f17b3a7983/DerivedAlgGeo/CategoryTheory/Triangulated/StabilityCondition/Foundation/StabilityCondition.lean": "Apache-2.0",
+    "https://github.com/apellis/dg-lean": "Apache-2.0",
+    "https://github.com/haruhisa-enomoto/magnitude-conjecture": "Apache-2.0",
+    "https://github.com/haruhisa-enomoto/quotient-submodule-equidistribution": "Apache-2.0",
+    "https://github.com/thebookersmith/hodge-structures-lean4": "Apache-2.0",
+    "https://github.com/laurentbartholdi/theorem-a-fp-groups": "Apache-2.0",
+    "https://github.com/DongzheZheng/Kurosh-Problem-at-GK-Dimension-Two": "MIT",
+    "https://github.com/jayyswan/hasse-minkowski": "Apache-2.0",
+    "https://github.com/RBarish-UTokyo/NPCompleteness-Lean4": "Apache-2.0",
+    "https://github.com/pmaronow/at-palomar": "MIT",
+    "https://github.com/satchlj/general_stoch_to_det": "Apache-2.0",
+    "https://github.com/randyxian08/jsp000937-lean": "MIT",
+    "https://github.com/yawara/t3-model-companion": "Apache-2.0",
+    "https://github.com/hongjin-he/erdos-lean": "Apache-2.0",
+    "https://github.com/long-mathematics/entropy-constrained-missing-mass": "MIT",
+    "https://github.com/jtraverso/asymptotic-triangle-packing": "Apache-2.0",
+    "https://github.com/eengad/deletion-codes-lean": "Apache-2.0",
+    "https://github.com/NERV-WMY/pi2-lean": "Apache-2.0",
+    "https://github.com/long-mathematics/duistermaat-van-der-kallen-nonvanishing": "MIT"
   },
   "corpora": {
     "equational-theories": {
@@ -1011,6 +1142,338 @@
       "roots": [
         "zkLean"
       ]
+    },
+    "descriptive-complexity": {
+      "repo": "https://github.com/PierreSenellart/descriptive-complexity",
+      "commit": "969cad44c807cf247826ee9a2f1eb880c47f15cb",
+      "roots": [
+        "DescriptiveComplexity"
+      ]
+    },
+    "immerman-vardi": {
+      "repo": "https://github.com/szymtor/immerman-vardi",
+      "commit": "82ef67e68fab884dc4cff117a1b871567bdaaafd",
+      "path": "proofs",
+      "roots": [
+        "Lax979537Proofs"
+      ]
+    },
+    "fagin": {
+      "repo": "https://github.com/szymtor/fagin",
+      "commit": "ce4e9721bbcb28cd16bcaf208f37b40e5b45fe8f",
+      "path": "proofs",
+      "roots": [
+        "Lax678846Proofs"
+      ]
+    },
+    "complexitylib": {
+      "repo": "https://github.com/SamuelSchlesinger/complexitylib",
+      "commit": "a0993e7b75440f65cac83134d17350198b2ab108",
+      "roots": [
+        "Complexitylib"
+      ]
+    },
+    "cslib": {
+      "repo": "https://github.com/leanprover/cslib",
+      "commit": "e806c8e639ed114bae022841ee2a3e92c0082dbe",
+      "roots": [
+        "Cslib"
+      ]
+    },
+    "causalean": {
+      "repo": "https://github.com/Jiyuan-Tan/CausalSmith",
+      "commit": "e298f64908520f29348e3f480b72db63d37dd574",
+      "roots": [
+        "Causalean"
+      ]
+    },
+    "leaninfotheory": {
+      "repo": "https://github.com/serhatemrecoban/LeanInfoTheory",
+      "commit": "bbead98abfd2ac94f95b615652365a65228e49c5",
+      "roots": [
+        "LeanInfoTheory"
+      ]
+    },
+    "openai-math": {
+      "repo": "https://github.com/openai/math",
+      "commit": "1581d4cbdd69a0faf34b2089614fe2a814316a6a",
+      "path": "lean",
+      "roots": [
+        "OAI",
+        "ComparatorChallenges"
+      ]
+    },
+    "acl-geom": {
+      "repo": "https://github.com/adamtopaz/acl_geom",
+      "commit": "293b8c387bf868940b0d16dd9b6b67f1710ba887",
+      "roots": [
+        "AclGeom",
+        "GroupConfig",
+        "AclGeomBook"
+      ]
+    },
+    "splitting-density-rationality": {
+      "repo": "https://github.com/asving/splitting-density-rationality",
+      "commit": "df3f13cb808e32168dd3595c8b32c70823fcf824",
+      "roots": [
+        "SurfaceBlowup",
+        "Tests"
+      ]
+    },
+    "ns-p23": {
+      "repo": "https://github.com/stksk310/NS-P23-Lean",
+      "commit": "cb782617f12909107480ccfd51d4450d05c8e5c3",
+      "roots": [
+        "P23"
+      ]
+    },
+    "chopped-plane-point-ideals": {
+      "repo": "https://github.com/Vlado-V/chopped-plane-point-ideals",
+      "commit": "4200d41342404e66f177d067763c0d1c1dd2d768",
+      "roots": [
+        "ChoppedPlane",
+        "Solution"
+      ]
+    },
+    "kummer-criterion": {
+      "repo": "https://github.com/riccardobrasca/KummerCriterion",
+      "commit": "a7fde210158e10171e083eeaffee4a093bcdf5a3",
+      "roots": [
+        "KummerCriterion"
+      ]
+    },
+    "yamaguchi-papers": {
+      "repo": "https://github.com/n-yamaguchi-0729/YamaguchiPapersFormalization",
+      "commit": "df1776498cd4725feb2cb2711bbb273945b3c8d4",
+      "roots": [
+        "Nyll"
+      ]
+    },
+    "miyaoka-mori-charzero": {
+      "repo": "https://github.com/frenzymath/MiyaokaMori-CharZero",
+      "commit": "19bb10861c147ef393d002cdb03489130b653880",
+      "roots": [
+        "MiyaokaMori"
+      ]
+    },
+    "hironaka": {
+      "repo": "https://github.com/resolutionorg/hironaka",
+      "commit": "044d89c9455859446fc5e986667319f910e15f4b",
+      "roots": [
+        "Hironaka",
+        "HironakaExamples"
+      ]
+    },
+    "grothendieck-riemann-roch": {
+      "repo": "https://github.com/vaca22/grothendieck-riemann-roch",
+      "commit": "053ea2fbd24c2f675a28393a4e7b7af9fe4ae626",
+      "roots": [
+        "RiemannRoch"
+      ]
+    },
+    "derived-alg-geo-lean": {
+      "repo": "https://github.com/chris-dare-dev/derived-alg-geo-lean",
+      "commit": "af19c7943a8e9e346a5c26eea7ce41f17b3a7983",
+      "roots": [
+        "DerivedAlgGeo"
+      ]
+    },
+    "albert-frame-triple-invariants": {
+      "repo": "https://github.com/macgregor-sudo/albert-frame-triple-invariants",
+      "commit": "dd06ef5d423a0e4a5d814d2c221e999b98887ee1",
+      "roots": [
+        "AlbertLean",
+        "FrameInvariants",
+        "OneBit"
+      ]
+    },
+    "azurite": {
+      "repo": "https://github.com/mhogrefe/azurite",
+      "commit": "14454e33ec582c001f23b6c65689d13d56a721dc",
+      "roots": [
+        "Azurite"
+      ]
+    },
+    "stafford38-formal": {
+      "repo": "https://github.com/itpplasma/stafford38-formal",
+      "commit": "5a5b0edcbb02a57d5a53fe8929ccde88cb3b6af1",
+      "roots": [
+        "Stafford38",
+        "proofs"
+      ]
+    },
+    "epsilon-sml": {
+      "repo": "https://github.com/fukubillueda-web/epsilon_SML",
+      "commit": "5b55d3f6e7c053f733afb1be523e532d212d94d0",
+      "roots": [
+        "LanglandsSecondMainLemma"
+      ]
+    },
+    "quadratic-number-fields": {
+      "repo": "https://github.com/WangFrankie/QuadraticNumberFields",
+      "commit": "b02cc08db24a29c8a4e88af95848d8dae969a9fc",
+      "roots": [
+        "QuadraticNumberFields",
+        "QNFMathlib",
+        "FormClassGroup",
+        "BinaryQuadraticForms",
+        "ImaginaryClassNumberOne",
+        "Examples"
+      ]
+    },
+    "dg-lean": {
+      "repo": "https://github.com/apellis/dg-lean",
+      "commit": "161db4ede65f2dd359263a301c33ec39036988eb",
+      "roots": [
+        "DG"
+      ]
+    },
+    "magnitude-conjecture": {
+      "repo": "https://github.com/haruhisa-enomoto/magnitude-conjecture",
+      "commit": "127bbee7284d729d593b67c88fa36e7d9eedc450",
+      "roots": [
+        "Challenge",
+        "MagnitudeConjecture",
+        "Solution"
+      ]
+    },
+    "quotient-submodule-equidistribution": {
+      "repo": "https://github.com/haruhisa-enomoto/quotient-submodule-equidistribution",
+      "commit": "20ee4b964a9174b15304ac96485beeb73be113d8",
+      "roots": [
+        "MainResults",
+        "QuotientSubmoduleEquidistribution"
+      ]
+    },
+    "hodge-structures-lean4": {
+      "repo": "https://github.com/thebookersmith/hodge-structures-lean4",
+      "commit": "34b95abdcf49fbe107884e1f65202107c7a2e52c",
+      "roots": [
+        "Challenge",
+        "ChallengeExt",
+        "HodgePilot",
+        "Solution",
+        "SolutionExt"
+      ]
+    },
+    "theorem-a-fp-groups": {
+      "repo": "https://github.com/laurentbartholdi/theorem-a-fp-groups",
+      "commit": "8970db6b7cc8ec2567dae486e48f34cf9226fe58",
+      "roots": [
+        "RequestProject"
+      ]
+    },
+    "kurosh-problem-at-gk-dimension-two": {
+      "repo": "https://github.com/DongzheZheng/Kurosh-Problem-at-GK-Dimension-Two",
+      "commit": "755cfd4aa1a018f0e8a9d31b62fe7904a3e350e7",
+      "roots": [
+        "CriticalGK2",
+        "Verification"
+      ]
+    },
+    "hasse-minkowski": {
+      "repo": "https://github.com/jayyswan/hasse-minkowski",
+      "commit": "47f0e9b5cba6e6354b882bc5856a11962ba61f4a",
+      "roots": [
+        "HasseMinkowski"
+      ]
+    },
+    "npcompleteness-lean4": {
+      "repo": "https://github.com/RBarish-UTokyo/NPCompleteness-Lean4",
+      "commit": "3e603e795b44fedcf7d6dd65b7d1e30547ead925",
+      "roots": [
+        "Audit",
+        "Challenge",
+        "Complexity",
+        "Examples",
+        "Solution"
+      ]
+    },
+    "at-palomar": {
+      "repo": "https://github.com/pmaronow/at-palomar",
+      "commit": "915bca99f46bad65629ef35c8be4bf8fc962af9a",
+      "roots": [
+        "BrownianMotion",
+        "Challenge",
+        "Common",
+        "KolmogorovExtension4",
+        "Lemmas",
+        "Paper",
+        "ParisiFormula",
+        "Solution",
+        "SpinGlassFoundations",
+        "StochasticCalculus",
+        "Targets"
+      ]
+    },
+    "general-stoch-to-det": {
+      "repo": "https://github.com/satchlj/general_stoch_to_det",
+      "commit": "a82d50c1554e6ed8681fbdf8ec2563ff7d6dee4c",
+      "roots": [
+        "stoch_to_det"
+      ]
+    },
+    "jsp000937-lean": {
+      "repo": "https://github.com/randyxian08/jsp000937-lean",
+      "commit": "4d7493e7e730597877c38bd750bf02839863b68a",
+      "roots": [
+        "Erdos1153"
+      ]
+    },
+    "t3-model-companion": {
+      "repo": "https://github.com/yawara/t3-model-companion",
+      "commit": "b264b4a23d3f208a62ade1611a3473c8a72d7b34",
+      "roots": [
+        "Challenge",
+        "Solution",
+        "T3"
+      ]
+    },
+    "erdos-lean": {
+      "repo": "https://github.com/hongjin-he/erdos-lean",
+      "commit": "efede9693a3192e324bc092e5510f16a2aff1804",
+      "roots": [
+        "ErdosLean"
+      ]
+    },
+    "entropy-constrained-missing-mass": {
+      "repo": "https://github.com/long-mathematics/entropy-constrained-missing-mass",
+      "commit": "cfc6f0e70596b36c2309cccbb931a1c84f63ad7f",
+      "roots": [
+        "EntropyConstrainedMissingMass"
+      ]
+    },
+    "asymptotic-triangle-packing": {
+      "repo": "https://github.com/jtraverso/asymptotic-triangle-packing",
+      "commit": "760e503972aad8ca9da7904ce72e5cce405f5991",
+      "roots": [
+        "Challenge",
+        "LeanPool",
+        "Solution"
+      ]
+    },
+    "deletion-codes-lean": {
+      "repo": "https://github.com/eengad/deletion-codes-lean",
+      "commit": "24d093a4db95895a7206d8a23dbe2d7922258701",
+      "roots": [
+        "DeletionCode"
+      ]
+    },
+    "pi2-lean": {
+      "repo": "https://github.com/NERV-WMY/pi2-lean",
+      "commit": "89a161a4f6526bea4605fdf6b2b1156e34ca7d11",
+      "roots": [
+        "Row12",
+        "Row12EulerSupport",
+        "Row12GaussGauge"
+      ]
+    },
+    "duistermaat-van-der-kallen-nonvanishing": {
+      "repo": "https://github.com/long-mathematics/duistermaat-van-der-kallen-nonvanishing",
+      "commit": "20f13044f15fd445845bf33fe74e24c3a7424598",
+      "roots": [
+        "DuistermaatVanDerKallen"
+      ]
     }
   },
   "$comment_translations": "Sources that are existing formal libraries: a record from one of these is a translation. Anything else is original work.",
@@ -1122,6 +1585,14 @@
     "https://github.com/schildep/verified-polygon-intersection",
     "https://github.com/VTrelat/ZFLean",
     "https://github.com/Verified-zkEVM/clean",
-    "https://github.com/Verified-zkEVM/zkLean"
+    "https://github.com/Verified-zkEVM/zkLean",
+    "https://github.com/PierreSenellart/descriptive-complexity",
+    "https://github.com/szymtor/immerman-vardi",
+    "https://github.com/szymtor/fagin",
+    "https://github.com/SamuelSchlesinger/complexitylib",
+    "https://github.com/leanprover/cslib",
+    "https://github.com/Jiyuan-Tan/CausalSmith",
+    "https://github.com/serhatemrecoban/LeanInfoTheory",
+    "https://github.com/openai/math"
   ]
 }

@@ -41,8 +41,8 @@ challenged or blocked by the platform before it reaches the API, with a `403` or
 |---|---|
 | `name` | the declaration's full name, as in Lean |
 | `statement` | its type, fully elaborated |
-| `status` | `trusted` — compiled by the tree's own toolchain; `staging` — a verified translation not yet built into the tree; `tentative` — a real proof from its source, not yet re-verified here |
-| `library` | the source it came from (`mathlib`, `carleson`, …) |
+| `status` | `trusted` — compiled by the library's own toolchain; `staging` — merged and checked by the merge queue, awaiting promotion (which builds it again); `tentative` — a real proof from its source, awaiting re-verification here |
+| `library` | the registered source it came from (`mathlib`, `carleson`, …) |
 | `sourceUrl` | where the declaration lives, proof included: for `trusted` entries the line in the tree's Lean source (`Tengoku/…`, `Init/…`), for the rest the line in the library it was harvested from |
 | `id` | stable within one index build only; don't persist it |
 
@@ -54,7 +54,7 @@ today; the proof is at `sourceUrl`.
 - **Know the name?** Put it in `q`; it comes back first.
 - **Don't?** Describe it. The index matches meaning as well as text:
   `q=continuous image of compact is compact`.
-- **Prefer `trusted`.** It is what the tree actually compiles. `tentative` is
+- **Prefer `trusted`.** It is what the library actually compiles. `tentative` is
   real mathematics from a real source that nobody has re-verified on this
   toolchain yet.
 - **As prover context:** `statement` is the type to state or `exact`, and

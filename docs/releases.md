@@ -61,10 +61,9 @@ cat tengoku-cache.tar.zst.part-* | zstd -d | tar -x -C "$checkout/.lake"
 `scripts/cache.sh get` does the same for a checkout of the repository, and refuses parts without an attestation
 when `TENGOKU_VERIFY=require`.
 
-## What a release does and does not promise
+## What a release promises
 
 It promises that the files are exactly what the release workflow produced from the named commit of `main`, that
 the cache was compiled from that commit by the nightly build, and that the bill of materials lists what the tree
 was made from. The commit itself passed every gate on its way to `main`. The nightly build and the independent
-check (`.github/workflows/independent-check.yml`) compile and re-check the tree; a release does not by itself re-run
-them.
+check (`.github/workflows/independent-check.yml`) compile and re-check the tree.

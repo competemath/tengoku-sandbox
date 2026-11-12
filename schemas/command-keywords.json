@@ -1,5 +1,5 @@
 {
- "about": "Every keyword that can start a command in the tree's Lean (the leading tokens of the `command` parser category, with the seeded packages loaded). scripts/ci/allowlist.py reads a word at column 0 as a command only if it is on this list: any other word there continues the command above (`termination_by`, `by`, `fun`, a proof term), and Lean itself refuses it if it does not. Regenerate with `lake env lean --run tools/CommandKeywords.lean | python3 scripts/ci/cmdkw_check.py --write` when the seed changes; the nightly build compares.",
+ "about": "Every keyword that can start a command in the tree's Lean (the leading tokens of the `command` parser category, with the seeded packages loaded). scripts/ci/allowlist.py reads a word at column 0 as a command only if it is on this list: any other word there continues the command above (`termination_by`, `by`, `fun`, a proof term), and Lean itself refuses it if it does not. Regenerate with `kw=$(mktemp schemas/.kw.XXXXXX) && lake env lean --run tools/CommandKeywords.lean | python3 scripts/ci/cmdkw_check.py --emit > \"$kw\" && mv \"$kw\" schemas/command-keywords.json` when the seed changes; the nightly build compares.",
  "lean": "leanprover/lean4:v4.34.0-rc2",
  "commands": [
   "#adaptation_note",

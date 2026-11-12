@@ -1,5 +1,11 @@
 # Top-ups: following main merge by merge
 
+> **Superseded in the merge queue (the delta store, docs/testing.md "The delta store").** The queue no longer builds or publishes a cumulative
+> top-up: each merge publishes one small attested delta (`scripts/lake_cache.py`). Nothing produces top-ups any more, so `topup-promote.yml` has
+> nothing to promote and a service that follows the pointer's top-up (`TENGOKU_TOPUPS=1`) stays on the nightly cache, up to a day behind main,
+> until `scripts/pin.sh` applies deltas instead (see the pull request that introduced the delta store). The files below are kept, unused, so that
+> reverting that pull request restores this design exactly.
+
 The nightly build publishes one big cache of the compiled library (several GB).
 That is enough for a person who clones the tree once a day. It is not enough
 for the proof services, which must know about a theorem minutes after it is

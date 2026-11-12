@@ -9,7 +9,7 @@
 name: lake-cache-tests
 on:
   pull_request:
-    paths: [scripts/lake_cache.py, scripts/tests/test_lake_cache*.py, .github/workflows/lake-cache-tests.yml, .github/workflows/queue-gate.yml, scripts/cache.sh, scripts/pin.sh]
+    paths: [scripts/lake_cache.py, scripts/ci/_git.py, scripts/tests/test_lake_cache*.py, .github/workflows/lake-cache-tests.yml, .github/workflows/queue-gate.yml, scripts/cache.sh, scripts/pin.sh]
   workflow_dispatch:
     inputs:
       real_tree:

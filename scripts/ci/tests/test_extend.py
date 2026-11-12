@@ -55,7 +55,7 @@ class Extend(unittest.TestCase):
             r.write("Tengoku/FxLib/Fx/A.lean", module("a"))
             r.write("Tengoku/FxLib.lean", f"import {self.A}\n")
             r.write("data/intake/fx-lib/manifest.jsonl", record("a", self.A))
-            r.write("data/intake/fx-lib/report.json", json.dumps({"library": "fx-lib", "part": 1}) + "\n")
+            r.write("data/intake/fx-lib/report.json", json.dumps({"library": "fx-lib", "part": 1, "gate2_unjudged": []}) + "\n")
         r.commit("the tree, part 1 in it")
         r.git("checkout", "-q", "main")
         r.git("merge", "-q", "--ff-only", "pr")
@@ -67,7 +67,10 @@ class Extend(unittest.TestCase):
         r.write("Tengoku/FxLib.lean", umbrella if umbrella is not None else f"import {self.A}\nimport {self.B}\n")
         old = (r.dir / "data/intake/fx-lib/manifest.jsonl").read_text() if (r.dir / "data/intake/fx-lib/manifest.jsonl").exists() else ""
         r.write("data/intake/fx-lib/manifest.jsonl", old + (manifest if manifest is not None else record("b", self.B)))
-        r.write("data/intake/fx-lib/parts/002.json", report if report is not None else json.dumps({"library": "fx-lib", "part": 2}) + "\n")
+        r.write(
+            "data/intake/fx-lib/parts/002.json",
+            report if report is not None else json.dumps({"library": "fx-lib", "part": 2, "gate2_unjudged": []}) + "\n",
+        )
         for p, s in (extra or {}).items():
             r.write(p, s)
         r.commit("part 2 of fx-lib")
@@ -97,7 +100,7 @@ class Extend(unittest.TestCase):
         r.write("Tengoku/FxLib/Fx/A.lean", module("a"))
         r.write("Tengoku/FxLib.lean", f"import {self.A}\n")
         r.write("data/intake/fx-lib/manifest.jsonl", record("a", self.A))
-        r.write("data/intake/fx-lib/report.json", json.dumps({"library": "fx-lib", "part": 1}) + "\n")
+        r.write("data/intake/fx-lib/report.json", json.dumps({"library": "fx-lib", "part": 1, "gate2_unjudged": []}) + "\n")
         r.write("Tengoku/All.lean", "import Tengoku.Lib\nimport Tengoku.FxLib\n")
         r.commit("part 1")
         rc, out = r.gate("queue_targets.py")
@@ -109,7 +112,7 @@ class Extend(unittest.TestCase):
         r.write("Tengoku/FxLib/Fx/A.lean", module("a"))
         r.write("Tengoku/FxLib.lean", f"import {self.A}\n")
         r.write("data/intake/fx-lib/manifest.jsonl", record("a", self.A))
-        r.write("data/intake/fx-lib/report.json", json.dumps({"library": "fx-lib", "part": 1}) + "\n")
+        r.write("data/intake/fx-lib/report.json", json.dumps({"library": "fx-lib", "part": 1, "gate2_unjudged": []}) + "\n")
         r.write("Tengoku/All.lean", "import Tengoku.Lib\nimport Tengoku.FxLib\n")
         r.commit("part 1")
         rc, out = r.gate("classify.py", env=BOT)
@@ -133,7 +136,7 @@ class Extend(unittest.TestCase):
             "Tengoku/FxLib/Fx/B.lean": module("b", f"import {self.A}\n").encode(),
             "Tengoku/FxLib.lean": f"import {self.A}\nimport {self.B}\n".encode(),
             "manifest.jsonl": record("b", self.B).encode(),  # the part's lines only, not the tree's
-            "report.json": (json.dumps({"library": "fx-lib", "part": 2}) + "\n").encode(),
+            "report.json": (json.dumps({"library": "fx-lib", "part": 2, "gate2_unjudged": []}) + "\n").encode(),
         }
         with tarfile.open(tar) as t:
             self.assertEqual(sorted(t.getnames()), sorted(want))
@@ -144,7 +147,7 @@ class Extend(unittest.TestCase):
         r.write("Tengoku/FxLib/Fx/B.lean", module("b"))
         r.write("Tengoku/FxLib.lean", f"import {self.B}\n")
         r.write("data/intake/fx-lib/manifest.jsonl", record("b", self.B))
-        r.write("data/intake/fx-lib/parts/002.json", json.dumps({"library": "fx-lib", "part": 2}) + "\n")
+        r.write("data/intake/fx-lib/parts/002.json", json.dumps({"library": "fx-lib", "part": 2, "gate2_unjudged": []}) + "\n")
         r.write("Tengoku/All.lean", "import Tengoku.Lib\nimport Tengoku.FxLib\n")
         r.commit("a new library claiming to be part 2")
         rc, out = self.check(r)
@@ -162,7 +165,7 @@ class Extend(unittest.TestCase):
 
     def test_a_part_already_in_the_tree_cannot_come_again(self):
         r = self.repo()
-        r.write("data/intake/fx-lib/parts/002.json", json.dumps({"library": "fx-lib", "part": 2}) + "\n")
+        r.write("data/intake/fx-lib/parts/002.json", json.dumps({"library": "fx-lib", "part": 2, "gate2_unjudged": []}) + "\n")
         r.write("Tengoku/FxLib/Fx/B.lean", module("b", f"import {self.A}\n"))
         r.write("Tengoku/FxLib.lean", f"import {self.A}\nimport {self.B}\n")
         r.write("data/intake/fx-lib/manifest.jsonl", record("a", self.A) + record("b", self.B))
@@ -173,14 +176,16 @@ class Extend(unittest.TestCase):
         r.write("Tengoku/FxLib/Fx/C.lean", module("c"))
         r.write("Tengoku/FxLib.lean", f"import {self.A}\nimport {self.B}\nimport Tengoku.FxLib.Fx.C\n")
         r.write("data/intake/fx-lib/manifest.jsonl", record("a", self.A) + record("b", self.B) + record("c", "Tengoku.FxLib.Fx.C"))
-        r.write("data/intake/fx-lib/parts/002.json", json.dumps({"library": "fx-lib", "part": 2}) + "\n")  # modified, not added
+        r.write(
+            "data/intake/fx-lib/parts/002.json", json.dumps({"library": "fx-lib", "part": 2, "gate2_unjudged": []}) + "\n"
+        )  # modified, not added
         r.commit("part 2 again")
         rc, out = r.gate("intake_check.py", "main", "pr2")
         self.assertNotEqual(rc, 0)
 
     def test_the_report_names_its_part_and_library(self):
         for report, why in (
-            (json.dumps({"library": "fx-lib", "part": 3}) + "\n", "says part 3"),
+            (json.dumps({"library": "fx-lib", "part": 3, "gate2_unjudged": []}) + "\n", "says part 3"),
             (json.dumps({"library": "other", "part": 2}) + "\n", "of 'other'"),
             ("not json\n", "not a JSON report"),
         ):
@@ -330,7 +335,9 @@ class Extend(unittest.TestCase):
 
     def test_two_parts_in_one_pr_are_refused(self):
         r = self.repo()
-        self.part2(r, extra={"data/intake/fx-lib/parts/003.json": json.dumps({"library": "fx-lib", "part": 3}) + "\n"})
+        self.part2(
+            r, extra={"data/intake/fx-lib/parts/003.json": json.dumps({"library": "fx-lib", "part": 3, "gate2_unjudged": []}) + "\n"}
+        )
         rc, out = self.check(r)
         self.assertNotEqual(rc, 0)
         self.assertIn("adds one part", out)

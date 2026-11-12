@@ -8,7 +8,8 @@
 /Tengoku.lean            @mikael-bashir @mikaelbashir14096545
 /Tengoku/                @mikael-bashir @mikaelbashir14096545   # the seed and the tree's own files; the content lane below takes the libraries out
 # THE CONTENT LANE (user's decision 2026-10-10): the library folders and their umbrella files carry translations and proofs, and need no human owner; a library's
-# FIRST part also adds its line to Tengoku/All.lean, which stays owned, so the first shard of every translation job is read by a person. Later parts (they
+# FIRST part also adds its line to Tengoku/All.lean, which is in the lane too since 2026-10-10 (user: automate it all; the gates decide: classify accepts an intake or extend PR from the
+# bot or the intake App only, and refuses every other PR that touches All.lean as 'derived'). Later parts (they
 # change only the library's own folder, umbrella and data/intake) and the bot's staging records flow on the gates alone once the ruleset counts no plain approval.
 # Registering a source, the seed, every tool, workflow, schema and script stay owned. Later lines win, so the lines that give ownership back come after these.
 /Tengoku/*/
@@ -17,9 +18,10 @@
 /Tengoku/Native/
 /Tengoku/Native.lean
 /Tengoku/Seed/           @mikael-bashir @mikaelbashir14096545
-/Tengoku/All.lean        @mikael-bashir @mikaelbashir14096545   # a library's first part adds its line here: a person reads it
+/Tengoku/All.lean         # a library's first part adds its line here: no owner; the gate (classify.py, intake_check.py) is what stands between a PR and this file
 # What the bots and the lane write, and the documents: no owner (the tests below say which paths).
 /data/intake/
+/data/studied/
 /data/staging/
 /data/tentative/
 /data/stats.json
@@ -37,6 +39,9 @@
 /.pre-commit-config.yaml @mikael-bashir @mikaelbashir14096545
 /pyproject.toml          @mikael-bashir @mikaelbashir14096545
 /data/trusted/           @mikael-bashir @mikaelbashir14096545
+# A RAZE PR (docs/pr-classes.md, section 8) takes modules out of the tree: the files it deletes are in the content lane above, so its marker is what a code owner has to review. The default
+# line owns it already; this line says so, and test_codeowners.py holds it.
+/data/raze/              @mikael-bashir @mikaelbashir14096545
 
 # CI tests and CI configuration: the maintainer's SECOND account only. The main account (which an agent may drive) owns none of these, so its approval does
 # not count for a change to them; and nobody approves their own pull request. Later lines win, so this section is last on purpose. Covered: every workflow
