@@ -38,7 +38,7 @@ class RootsPR(Repo):
 
     def apply(self, rid="r1"):
         subprocess.run(
-            [sys.executable, "scripts/roots_tree.py", "apply", "--tree", ".", "--roots", f"data/roots/{rid}"],
+            [sys.executable, "scripts/roots_tree.py", "apply"],
             cwd=self.dir,
             check=True,
             capture_output=True,

@@ -12,15 +12,12 @@ differs from what anyone can regenerate in a clean checkout by one line, or touc
 
 from __future__ import annotations
 
-import io
 import re
+import subprocess
 import sys
-import tarfile
-import tempfile
-from pathlib import Path
 
-from _git import ROOT, changed_files, fail, run, run_bytes
-from restructure_check import blob_ids, commit_of, differences
+from _git import ROOT, changed_files, fail, run
+from restructure_check import commit_of
 
 REPORT = re.compile(r"data/roots/([A-Za-z0-9][A-Za-z0-9._-]*)/([A-Za-z][A-Za-z0-9]*)\.txt")
 MANIFEST = re.compile(r"data/intake/[^/]+/manifest\.jsonl")
@@ -44,29 +41,37 @@ def base_manifests(base: str) -> list[str]:
     return [p for p in run("ls-tree", "-r", "--name-only", base, "data/intake").splitlines() if MANIFEST.fullmatch(p)]
 
 
-def extract(base: str, paths: list[str], dest: Path) -> None:
-    archive = run_bytes("archive", base, *paths)
-    with tarfile.open(fileobj=io.BytesIO(archive)) as tar:
-        tar.extractall(
-            dest, **({"filter": "data"} if hasattr(tarfile, "data_filter") else {})
-        )  # the base commit's own files, in a private directory
-
-
-def owned_head(head: str, libs: list[str], manifests: list[str]) -> dict[str, tuple[str, str]]:
-    """path -> (mode, blob) of the modules of the libraries and of the manifests, as the PR has them."""
+def listing(rev: str, libs: list[str], manifests: list[str]) -> dict[str, str]:
+    """path -> mode of the files of the libraries and of the manifests, at a revision"""
     state = {}
-    for entry in filter(None, run("ls-tree", "-r", "-z", head, "--", *(f"Tengoku/{lib}" for lib in libs), *manifests).split("\0")):
+    for entry in filter(None, run("ls-tree", "-r", "-z", rev, "--", *(f"Tengoku/{lib}" for lib in libs), *manifests).split("\0")):
         meta, path = entry.split("\t", 1)
-        mode, _kind, blob = meta.split()
-        state[path] = (mode, blob)
+        state[path] = meta.split()[0]
     return state
 
 
-def owned_expected(tree: Path, libs: list[str], manifests: list[str]) -> dict[str, tuple[str, str]]:
-    files = sorted(
-        p for p in [*(f for lib in libs for f in (tree / "Tengoku" / lib).rglob("*")), *(tree / m for m in manifests)] if p.is_file()
-    )
-    return {p.relative_to(tree).as_posix(): ("100644", blob) for p, blob in zip(files, blob_ids(files))}
+def read_blobs(rev: str, paths: list[str]) -> dict[str, bytes]:
+    """The contents of files at a revision, in one `git cat-file --batch` (git objects only: nothing is written to disk)."""
+    request = "".join(f"{rev}:{p}\n" for p in paths).encode()
+    out = subprocess.run(["git", "cat-file", "--batch"], cwd=ROOT, input=request, capture_output=True, check=True).stdout
+    blobs: dict[str, bytes] = {}
+    at = 0
+    for path in paths:
+        end = out.index(b"\n", at)
+        header = out[at:end].split()
+        if len(header) != 3 or header[1] != b"blob":
+            fail(f"{path}: not a file at {rev}")
+        size = int(header[2])
+        blobs[path] = out[end + 1 : end + 1 + size]
+        at = end + 1 + size + 1
+    return blobs
+
+
+def differences(expected: dict[str, bytes], actual: dict[str, bytes]) -> list[str]:
+    errors = [f"{p}: the PR does not have it" for p in sorted(expected.keys() - actual.keys())]
+    errors += [f"{p}: the PR has a file the script does not produce" for p in sorted(actual.keys() - expected.keys())]
+    errors += [f"{p}: differs from the script's output" for p in sorted(expected.keys() & actual.keys()) if expected[p] != actual[p]]
+    return errors
 
 
 def main(base: str, head: str) -> None:
@@ -94,19 +99,20 @@ def main(base: str, head: str) -> None:
         fail(
             f"a roots PR adds its reports and modifies modules of their libraries and the intake manifests, nothing else; also: {', '.join(stray[:10])}"
         )
-    missing = [lib for lib in libs if not run("ls-tree", "--name-only", base, f"Tengoku/{lib}", check=False).strip()]
+    base_modes = listing(base, libs, manifests)
+    missing = [lib for lib in libs if not any(p.startswith(f"Tengoku/{lib}/") for p in base_modes)]
     if missing:
         fail(f"no such library at the base: {', '.join(missing)}")
-    with tempfile.TemporaryDirectory() as tmp:
-        tree = Path(tmp) / "tree"
-        reports_dir = Path(tmp) / "reports"
-        reports_dir.mkdir()
-        tree.mkdir()
-        extract(base, [*(f"Tengoku/{lib}" for lib in libs), *manifests], tree)
-        for lib, path in reports.items():
-            (reports_dir / f"{lib}.txt").write_text(run("show", f"{head}:{path}"), encoding="utf-8")
-        done = roots_tree.apply(tree, reports_dir)
-        errors = differences(owned_expected(tree, libs, manifests), owned_head(head, libs, manifests))
+    # the base's files of the libraries and the manifests, as text, and the transformation of the BASE's script on them
+    base_blobs = read_blobs(base, sorted(base_modes))
+    files = {p: b.decode("utf-8", errors="surrogateescape") for p, b in base_blobs.items()}
+    texts = {lib: run("show", f"{head}:{path}") for lib, path in reports.items()}
+    changed, done = roots_tree.qualify_files(files, texts)
+    expected = {p: changed[p].encode("utf-8", errors="surrogateescape") if p in changed else b for p, b in base_blobs.items()}
+    head_modes = listing(head, libs, manifests)
+    head_blobs = read_blobs(head, sorted(head_modes))
+    errors = differences(expected, head_blobs)
+    errors += [f"{p}: its mode changed" for p in sorted(base_modes.keys() & head_modes.keys()) if base_modes[p] != head_modes[p]]
     if errors:
         fail("roots PR: " + "; ".join(errors[:10]) + (f"; and {len(errors) - 10} more" if len(errors) > 10 else ""))
     print(
