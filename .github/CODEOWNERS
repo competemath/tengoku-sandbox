@@ -37,6 +37,8 @@
 /.pre-commit-config.yaml @mikael-bashir @mikaelbashir14096545
 /pyproject.toml          @mikael-bashir @mikaelbashir14096545
 /data/trusted/           @mikael-bashir @mikaelbashir14096545
+# A ROOTS PR (docs/pr-classes.md, section 11) is recomputed from the reports it adds under data/roots/: those reports are what a code owner reviews (the default line owns them already).
+/data/roots/             @mikael-bashir @mikaelbashir14096545
 
 # CI tests and CI configuration: the maintainer's SECOND account only. The main account (which an agent may drive) owns none of these, so its approval does
 # not count for a change to them; and nobody approves their own pull request. Later lines win, so this section is last on purpose. Covered: every workflow
