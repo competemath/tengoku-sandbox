@@ -5,7 +5,9 @@ Scripts, workflows and schemas are exempt: they mention the marker keys by
 name (a fixture record in selftest.sh tripped this in the sandbox). Seeded
 modules, data, docs and licences are covered. One exception: deleting the whole data
 file of a source taken off the allowlist (_git.deregistered), whose records must leave
-the tree with their credits."""
+the tree with their credits. The other: a RAZE PR (scripts/ci/raze_check.py judges it) takes the modules of an intake library out of the tree, and their credit lines go with them:
+the files it deletes, and the manifest lines of the modules whose files it deletes (the corrected bundle that brings the modules back carries its own).
+A ROOTS PR (scripts/ci/roots_check.py judges it) renames declarations: a manifest record that changes in its name and statement only, with every other field (source_url, authors, …) as it was, has lost no credit."""
 
 from __future__ import annotations
 
@@ -14,21 +16,66 @@ import re
 import sys
 from collections import Counter
 
-from _git import added_lines, blob, changed_files, deregistered, fail, match, removed_lines
+from _git import added_lines, blob, changed_files, deregistered, fail, match, module_stem, removed_lines
 
-EXEMPT = ["scripts/*", ".github/*", "schemas/*", "*.py", "*.sh", "*.toml", "*.yml", "*.yaml", "*.json"]
+EXEMPT = ["scripts/*", ".github/*", "schemas/*", "*.py", "*.sh", "*.toml", "*.yml", "*.yaml", "*.json", "README.md"]
+# "README.md" is the ROOT file only (the pattern has no wildcard): the project's front page is prose, and a rewrite of the paragraph that explains the
+# `Author:` convention was refused as a removed credit (tengoku#559, the maintainer's decision). A README.md anywhere else is covered, and a credit line
+# moved INTO the root README is not kept (an exempt file is no home for a credit).
 CREDIT = re.compile(r"(Authors?:|@author|\bCredit|Copyright|\"source_url\"|\"added_by\"|\"author\"|\"authors\")", re.I)
 # In Markdown only the human attribution markers count: a JSON key inside a code example
 # (the README's record-shape block carried `"source_url": "..."`) is not a provenance line.
 CREDIT_MD = re.compile(r"(Authors?:|@author|Copyright)", re.I)
 base, head = sys.argv[1], sys.argv[2]
-roots = (
-    "--roots" in sys.argv
-)  # a roots PR renames declarations: a manifest record whose provenance is untouched (everything but name and statement) has lost no credit
 promotion = "--promotion" in sys.argv  # the bot moves staging records to trusted: the credit travels with them
 restructure = (
     "--restructure" in sys.argv
 )  # the seed moves into Tengoku/Seed/: a credit line is not removed while it is in the file at its new path
+raze = "--raze" in sys.argv  # a removal of intake modules: the credit lines of what is deleted go with it (and nothing else)
+roots = (
+    "--roots" in sys.argv
+)  # a roots PR renames declarations: a manifest record whose provenance is untouched (everything but name and statement) has lost no credit
+razed_files: set[str] = set()
+if raze:
+    razed_files = {p for st, p in changed_files(base, head) if st == "D" and re.fullmatch(r"Tengoku/.+\.lean", p)}
+
+
+def provenance_key(text: str) -> str | None:
+    """A manifest record without its name and statement: what carries the credit (source, authors, toolchain, …); None when the line is not a JSON object."""
+    try:
+        rec = json.loads(text)
+    except Exception:
+        return None
+    if not isinstance(rec, dict):
+        return None
+    rec.pop("name", None)
+    rec.pop("statement", None)
+    return json.dumps(rec, sort_keys=True, ensure_ascii=False)
+
+
+roots_gained: dict[str, Counter[str]] = {}
+
+
+def renamed_record(path: str, text: str) -> bool:
+    """Whether this removed manifest line has a successor in the PR that differs in name and statement only (each gained record covers one removal)."""
+    if path not in roots_gained:
+        roots_gained[path] = Counter(k for _, t in added_lines(base, head, path) if (k := provenance_key(t)) is not None)
+    key = provenance_key(text)
+    if key is None or roots_gained[path][key] <= 0:
+        return False
+    roots_gained[path][key] -= 1
+    return True
+
+
+def razed_record(text: str) -> bool:
+    """Whether this removed manifest line is the record of a module whose file this PR deletes."""
+    try:
+        mod = json.loads(text).get("module")
+    except Exception:
+        return False
+    return isinstance(mod, str) and f"{module_stem(mod)}.lean" in razed_files
+
+
 # A record whose credit line still exists anywhere at HEAD is fine, even if the exact bytes
 # changed (the promote bot rewrites a staging file's remaining records when it lifts one out,
 # which can reorder or reformat lines it never touched content-wise — found live: two records
@@ -73,41 +120,34 @@ def moved_in_markdown(path: str, text: str) -> bool:
     return True
 
 
-def provenance_key(text: str) -> str | None:
-    """A manifest record without its name and statement: what carries the credit (source, authors, toolchain, …); None when the line is not a JSON object."""
-    try:
-        rec = json.loads(text)
-    except Exception:
-        return None
-    if not isinstance(rec, dict):
-        return None
-    rec.pop("name", None)
-    rec.pop("statement", None)
-    return json.dumps(rec, sort_keys=True, ensure_ascii=False)
-
-
-roots_gained: dict[str, Counter[str]] = {}
-
-
-def renamed_record(path: str, text: str) -> bool:
-    """Whether this removed manifest line has a successor in the PR that differs in name and statement only (each gained record covers one removal)."""
-    if path not in roots_gained:
-        roots_gained[path] = Counter(k for _, t in added_lines(base, head, path) if (k := provenance_key(t)) is not None)
-    key = provenance_key(text)
-    if key is None or roots_gained[path][key] <= 0:
-        return False
-    roots_gained[path][key] -= 1
-    return True
+def terminator_split(text: str) -> str:
+    """The line without a docstring terminator at its end (`... credit. -/` is `... credit.`), or "" when it does not end with one."""
+    core = text.rstrip()
+    return core[:-2].rstrip() if core.endswith("-/") and len(core) > 2 else ""
 
 
 hits = []
 for st, p in changed_files(base, head):
     if st == "A" or match(p, EXEMPT) or (st == "D" and deregistered(base, p)):
         continue
+    if raze and st == "D" and (p in razed_files or re.fullmatch(r"data/intake/[^/]+/.+", p)):
+        continue  # a deleted module, or the data of a whole library that is razed
     rx = CREDIT_MD if p.endswith(".md") else CREDIT
     kept = moved_lines(p) if st == "D" else set()
+    # A docstring that gets a line added at its end (the isnad tagger's `@isnad1 ...`) loses its ` -/` on the line that carried it; if that line carries a marker (an ordinary "credit" in
+    # the sentence, tengoku#539), it counts as changed, though its text is still there. A line whose text survives VERBATIM as a gained line, with only the terminator gone, has lost nothing.
+    # Per occurrence, as the Markdown move above: one gained line covers one removal.
+    gained: Counter[str] = Counter()
+    if p.endswith(".lean") and st != "D":
+        gained.update(t.rstrip() for _, t in added_lines(base, head, p))
     for no, text in removed_lines(base, head, p):
         if not rx.search(text) or text in kept or moved_in_markdown(p, text):
+            continue
+        core = terminator_split(text)
+        if core and gained[core] > 0:
+            gained[core] -= 1
+            continue
+        if raze and re.fullmatch(r"data/intake/[^/]+/manifest\.jsonl", p) and razed_record(text):
             continue
         if roots and re.fullmatch(r"data/intake/[^/]+/manifest\.jsonl", p) and renamed_record(p, text):
             continue

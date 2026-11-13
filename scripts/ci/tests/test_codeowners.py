@@ -149,8 +149,8 @@ class OwnerOnly(unittest.TestCase):
             self.assertEqual(owners_of(p, self.rules), [SECOND], p)
 
     def test_the_content_lane_has_no_owner_and_the_machinery_of_the_tree_keeps_both(self):
-        """The first part of a library edits Tengoku/All.lean (owned: a person reads it); everything a later part touches in the tree is the library's own folder and umbrella.
-        Native is in the lane on purpose (the user counts novel proofs as content)."""
+        """The first part of a library edits Tengoku/All.lean (no owner since 2026-10-10: the gates decide who may edit it); everything a later part touches in the tree is the library's own folder
+        and umbrella. Native is in the lane on purpose (the user counts novel proofs as content)."""
         both = [MAIN, SECOND]
         for p in (
             "Tengoku/Formalbook/FormalBook/Chapter_08.lean",
@@ -161,10 +161,18 @@ class OwnerOnly(unittest.TestCase):
             "Tengoku/Native.lean",
             "data/intake/formalbook/manifest.jsonl",
             "data/stats.json",
+            "Tengoku/All.lean",
         ):
             self.assertEqual(owners_of(p, self.rules), [], p)
-        for p in ("Tengoku/All.lean", "Tengoku/Seed/Logic/Basic.lean", "Tengoku.lean", "lean-toolchain", "scripts/seed.py"):
+        for p in ("Tengoku/Seed/Logic/Basic.lean", "Tengoku.lean", "lean-toolchain", "scripts/seed.py"):
             self.assertEqual(owners_of(p, self.rules), both, p)
+
+    def test_a_raze_marker_needs_a_code_owner_although_what_it_deletes_is_in_the_lane(self):
+        """A raze PR (scripts/ci/raze_check.py) deletes library modules and edits an umbrella and a manifest, all of which have no owner: its marker data/raze/<id>.json is the file that makes a person review it."""
+        both = [MAIN, SECOND]
+        self.assertEqual(owners_of("data/raze/openai-math-1.json", self.rules), both)
+        for p in ("Tengoku/OpenaiMath/OAI/X.lean", "Tengoku/OpenaiMath.lean", "data/intake/openai-math/manifest.jsonl", "Tengoku/All.lean"):
+            self.assertEqual(owners_of(p, self.rules), [], p)
 
     def test_every_file_that_is_not_content_or_bot_data_is_owned_even_when_nobody_listed_it(self):
         """A review (2026-10-10) found machinery with no rule: the leak-scan, isnad and Jinshi roots, tools/*.py, .gitleaks.toml, the widget tree. The default line owns all of it, and anything new."""

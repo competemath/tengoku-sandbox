@@ -1,0 +1,30 @@
+{
+ "source": "competemath/tengoku#779 (prime-gaps-186): merge-queue runs 43306897671 and 43313465453, job queue-build (ejected 21:31 and 22:09 UTC, 12 Nov 2026); autotag-build run 43294803428 (same module, no swap, passed); emissary-archangel bump-sharded run 43285567502 verify (with 48 GB swap)",
+ "queue_build_log": [
+  "2026-11-12T21:12:31.6985465Z after seeding: /dev/root       145G   54G   92G  37% /",
+  "2026-11-12T21:12:31.6988287Z after seeding: 31G\t.lake/build",
+  "2026-11-12T21:12:53.7788478Z building: Tengoku.PrimeGaps186 ",
+  "2026-11-12T21:28:57.7920534Z ##[error]The runner has received a shutdown signal. This can happen when the runner service is stopped, or a manually started runner is canceled.",
+  "2026-11-12T21:28:57.7922963Z ##[error]Process completed with exit code 143."
+ ],
+ "autotag_built": [
+  "2026-11-12T20:21:31.1476887Z ✔ [8773/8773] Built Tengoku.PrimeGaps186.PrimeGaps186 (1279s)",
+  "2026-11-12T20:48:59.5799808Z ✔ [8773/8773] Built Tengoku.PrimeGaps186.PrimeGaps186 (1244s)"
+ ],
+ "factory_verify_with_swap": [
+  "19:27:28 used=104G avail=41G mem_avail_kb=4309264 swap_used_kb=2600468",
+  "19:28:28 used=104G avail=41G mem_avail_kb=2730104 swap_used_kb=2600364"
+ ],
+ "nightly_pack": [
+  "before pack: /dev/root       145G   58G   87G  40% /",
+  "before pack: 33G\t.lake/build",
+  "after pack: /dev/root       145G   67G   78G  47% /"
+ ],
+ "queue_build_log_second": [
+  "2026-11-12T21:54:25.9685935Z after seeding: /dev/root       145G   54G   92G  37% /",
+  "2026-11-12T21:54:25.9686424Z after seeding: 31G\t.lake/build",
+  "2026-11-12T21:54:56.8674712Z building: Tengoku.PrimeGaps186 ",
+  "2026-11-12T22:07:14.4786890Z ##[error]Process completed with exit code 143.",
+  "2026-11-12T22:07:14.4791044Z ##[error]The runner has received a shutdown signal. This can happen when the runner service is stopped, or a manually started runner is canceled."
+ ]
+}

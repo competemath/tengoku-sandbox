@@ -47,6 +47,44 @@ sc name-with-space fail data-rules/records yes gate "Exploratory: a name contain
 sc tentative-append pass - yes gate "A tentative record (data/tentative)." "mkdir -p data/tentative/equational-theories; rec tent status=tentative > data/tentative/equational-theories/t.jsonl"
 sc two-libraries pass - yes queue "Records for two libraries; mathlib has no corpus (data only)." "mkdir -p $D data/staging/mathlib; rec twoA > $D/twoA.jsonl; rec twoB library=mathlib source_url=https://github.com/leanprover-community/mathlib4/blob/x/Mathlib/Foo.lean source_path=@del context=@del > data/staging/mathlib/twoB.jsonl"
 sc bigger-append pass - yes queue "300 records in one file, one source path." "mkdir -p $D; for i in \$(seq 1 300); do rec big\$i; done > $D/big.jsonl"
+# --- statement corrections: an appended line that replaces the text of a tentative record; it may cut or re-split the text, never add or reword
+correct() { # $1 = cut | add | space | unknown ; appends one correction line to the tentative file of the first suitable record
+  python3 - "$1" <<'PY'
+import glob, json, sys
+mode = sys.argv[1]
+trusted = set()
+for g in glob.glob("data/trusted/**/*.jsonl", recursive=True):
+    for line in open(g, encoding="utf-8"):
+        if '"name"' in line:
+            try:
+                trusted.add(json.loads(line)["name"])
+            except (ValueError, KeyError, TypeError):
+                pass
+for path in sorted(glob.glob("data/tentative/*.jsonl")):
+    for line in open(path, encoding="utf-8"):
+        try:
+            r = json.loads(line)
+        except ValueError:
+            continue
+        n, st, pr = r.get("name"), r.get("statement"), r.get("proof")
+        if not (isinstance(n, str) and isinstance(st, str) and isinstance(pr, str)) or n in trusted or "statement_correction" in r:
+            continue
+        words = pr.split()
+        if len(words) < 4 or n.rsplit(".", 1)[-1] not in st or " " not in pr.strip() or "  " in pr or "\n" in pr:
+            continue
+        new = {"cut": (st, pr.rsplit(" ", 1)[0]), "add": (st, pr + " sorry"), "space": (st, pr.replace(" ", "  ", 1)), "unknown": (st, pr.rsplit(" ", 1)[0])}[mode]
+        name = "Nope.nope" if mode == "unknown" else n
+        c = {"statement_correction": name, "statement": new[0], "proof": new[1], "reason": "selftest", "by": "selftest", "at": "2026-11-13"}
+        open(path, "a", encoding="utf-8").write(json.dumps(c, ensure_ascii=False) + "\n")
+        sys.exit(0)
+sys.exit("no suitable tentative record")
+PY
+}
+sc correction-cut pass - yes gate "A statement correction that cuts the end off a tentative record's proof." "correct cut" '^\+\{"statement_correction"'
+sc correction-adds-text fail data-rules/records yes gate "A statement correction that adds a word." "correct add" '^\+\{"statement_correction"'
+sc correction-whitespace-inside fail data-rules/records yes gate "A statement correction that changes whitespace inside the proof." "correct space" '^\+\{"statement_correction"'
+sc correction-unknown-name fail data-rules/records yes gate "A statement correction for a name that is no record of the file." "correct unknown" '^\+\{"statement_correction"'
+sc correction-in-staging fail data-rules/records yes gate "A statement correction in a staging file (only tentative text can be corrected)." "printf '%s\n' '{\"statement_correction\": \"Selftest.x\", \"statement\": \"theorem Selftest.x : True\", \"proof\": \":= trivial\", \"reason\": \"selftest\", \"by\": \"selftest\", \"at\": \"2026-11-13\"}' >> $STAGING_FLAT" '^\+\{"statement_correction"'
 # --- tombstones
 sc tombstone-valid pass - yes gate "Tombstone for a trusted name." "printf '%s\n' '{\"tombstone\": \"$TRUSTED_NAME\", \"reason\": \"selftest\", \"by\": \"selftest\", \"at\": \"2026-09-15T00:00:00Z\"}' >> data/trusted/equational-theories.jsonl"
 sc tombstone-missing-target fail data-rules/records yes gate "Tombstone for a name that does not exist." "printf '%s\n' '{\"tombstone\": \"Nope.nope\", \"reason\": \"selftest\", \"by\": \"selftest\", \"at\": \"2026-09-15T00:00:00Z\"}' >> data/trusted/equational-theories.jsonl"

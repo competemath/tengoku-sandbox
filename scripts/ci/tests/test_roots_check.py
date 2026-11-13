@@ -151,6 +151,14 @@ class RootsCheck(unittest.TestCase):
         rc, out = r.gate("credits.py", "main", "pr", "--roots")
         self.assertEqual(rc, 1, out)
 
+    def test_a_mode_change_alone_is_refused(self):
+        r = self.good()
+        (r.dir / "Tengoku" / "Foo" / "Bar.lean").chmod(0o755)  # the script's own content, one module made executable
+        r.commit("mode")
+        rc, out = r.gate("roots_check.py")
+        self.assertEqual(rc, 1, out)
+        self.assertIn("its mode changed", out)
+
 
 if __name__ == "__main__":
     unittest.main()

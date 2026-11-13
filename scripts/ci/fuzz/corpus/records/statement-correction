@@ -1,0 +1,6 @@
+data/tentative/lib.jsonl
+{"name": "Lib.t", "statement": "theorem t : let x := 1; x = 1", "proof": ":= rfl", "status": "tentative", "library": "lib"}
+{"statement_correction": "Lib.t", "statement": "theorem t : let x := 1; x = 1 :=", "proof": "rfl", "reason": "split", "by": "t", "at": "2026-11-13"}
+{"statement_correction": "Lib.t", "statement": "theorem t : let x := 1; x = 1 :=", "proof": "rfl", "reason": "split", "by": "t", "at": "2026-11-13"}
+{"statement_correction": ["x"], "statement": 3}
+{"statement_correction": "Lib.t"}

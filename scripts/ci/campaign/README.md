@@ -7,7 +7,7 @@ gate and the merge queue decide what the design says they should. Read
 
 ```
 export TENGOKU_CAMPAIGN_REPO=competemath/tengoku-sandbox   # default
-scripts/ci/campaign/gate.sh      # 66 gate scenarios, each with a precondition check and an expected failing job
+scripts/ci/campaign/gate.sh      # 73 gate scenarios, each with a precondition check and an expected failing job
 scripts/ci/campaign/report.sh    # poll until every gate settles, print expectation vs outcome
 scripts/ci/campaign/queue.sh     # merge-queue scenarios (ejection classes, twelve clean PRs at once, a broken PR between clean ones, re-queue, bulk promotion, a disguised hand edit)
 scripts/ci/campaign/guard4.sh    # publish guard: a workflow file lands on main mid-build; the build must relaunch on the tip

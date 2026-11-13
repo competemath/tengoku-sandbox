@@ -88,6 +88,33 @@ class RootsGate(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("not checked", out)
 
+    def test_a_reported_auto_named_instance_is_exempt_even_when_required(self):
+        report = "roots: 2 declarations of the library x\nroot: instAddFoo\nroot: instMulFoo\nroot-instance: instAddFoo\nroot-instance: instMulFoo\n"
+        code, msg = rg.judge(report, True)
+        self.assertEqual(code, 0)
+        self.assertIn("none of the group's declarations", msg)
+        self.assertIn("exempt", msg)
+
+    def test_a_real_root_beside_instances_still_fails_and_is_the_one_listed(self):
+        report = "roots: 3 declarations of the library x\nroot: instAddFoo\nroot: X\nroot: instMulFoo\nroot-instance: instAddFoo\nroot-instance: instMulFoo\n"
+        code, msg = rg.judge(report, True)
+        self.assertEqual(code, 1)
+        self.assertIn("1 declaration(s)", msg)
+        self.assertIn(": X (2 auto-generated", msg)
+
+    def test_a_written_name_that_only_looks_generated_is_a_root(self):
+        # a def called instFoo is no instance (the scanner does not report it), an instance called inst_x has no generated shape: both are refused when required
+        report = "roots: 2 declarations of the library x\nroot: instFoo\nroot: inst_x\nroot-instance: inst_x\n"
+        code, msg = rg.judge(report, True)
+        self.assertEqual(code, 1)
+        self.assertIn("2 declaration(s)", msg)
+        self.assertNotIn("exempt", msg)
+
+    def test_the_shape_of_a_generated_name(self):
+        inst = {"instA", "inst_x", "instance", "instantiate", "inst", "Inst", "instFooBar"}
+        self.assertEqual({n for n in inst if rg.auto_named(n, inst)}, {"instA", "instFooBar"})
+        self.assertFalse(rg.auto_named("instFooBar", set()))  # not reported as an instance
+
 
 if __name__ == "__main__":
     unittest.main()
