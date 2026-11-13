@@ -5,7 +5,8 @@ tier (schemas/record.schema.json), status matches the tier, library matches
 the file, source on the allowlist (schemas/sources.json), no duplicate names
 in the PR or against trusted, tombstones point at existing names and carry a fixed category, a note on
 where to look instead points at a tombstoned name, a credit correction names a trusted record and links its
-evidence, file ≤ 50 MB, at most ten headline records per PR, each crediting its author."""
+evidence, a statement correction names a tentative record of the file and only moves text between its two fields or drops it from the end,
+file ≤ 50 MB, at most ten headline records per PR, each crediting its author."""
 
 from __future__ import annotations
 
@@ -97,6 +98,103 @@ def good_link(url: str) -> bool:
     return u.scheme in ("http", "https") and bool(u.hostname) and "." in (u.hostname or "") and not re.search(r"\s", url)
 
 
+SEAM = "\0"  # where a record's statement ends and its proof begins: the one place whitespace may differ
+
+
+def moves_only(old_stmt: str, old_proof: str, stmt: str, proof: str) -> bool:
+    """True when (stmt, proof) is the text of (old_stmt, old_proof) with the seam between the fields moved, or with the end cut off.
+    The characters are compared exactly; whitespace may differ only AT a seam (the extractor strips it there). A space inside a field
+    is part of what a statement says (`(a b : N)` is not `(ab : N)`; a newline ends a `--` comment), so it must be the same."""
+    old = old_stmt.rstrip() + SEAM + old_proof.lstrip()
+    new = stmt.rstrip() + SEAM + proof.lstrip()
+    if SEAM in old_stmt + old_proof + stmt + proof:
+        return False
+    i = j = 0
+    while j < len(new):
+        if new[j] == SEAM:  # the new seam: skip the whitespace the old text has here, and the old seam if it is here
+            j += 1
+            while i < len(old) and (old[i].isspace() or old[i] == SEAM):
+                i += 1
+        elif i < len(old) and old[i] == SEAM:  # the old seam, inside the new text: skip the whitespace the new text has here
+            i += 1
+            while j < len(new) and new[j].isspace():
+                j += 1
+        elif i < len(old) and new[j] == old[i]:
+            i += 1
+            j += 1
+        else:
+            return False
+    return True
+
+
+_FILES: dict[str, dict] = {}
+
+
+def tentative_file(p: str) -> dict:
+    """What the base holds of a tentative file: the current (statement, proof) of each name (the newest correction wins), and the names retracted."""
+    if p not in _FILES:
+        texts: dict[str, tuple[str, str]] = {}
+        tombstoned: set[str] = set()
+        for raw in (blob(base, p) or b"").decode("utf-8", "replace").splitlines():
+            try:
+                r = json.loads(raw)
+            except ValueError:
+                continue
+            if not isinstance(r, dict):
+                continue
+            if isinstance(r.get("tombstone"), str):
+                tombstoned.add(r["tombstone"])
+            elif isinstance(r.get("statement_correction"), str):
+                if isinstance(r.get("statement"), str) and isinstance(r.get("proof"), str):
+                    texts[r["statement_correction"]] = (r["statement"], r["proof"])
+            elif isinstance(r.get("name"), str) and isinstance(r.get("statement"), str) and isinstance(r.get("proof"), str):
+                texts[r["name"]] = (r["statement"], r["proof"])
+        _FILES[p] = {"texts": texts, "tombstoned": tombstoned, "corrected": set()}
+    return _FILES[p]
+
+
+def check_statement_correction(p: str, no: int, r: dict, t: str) -> list[str]:
+    """A statement correction (schemas/record.schema.json): an appended line that replaces the text of a tentative record, never the record itself."""
+    out = []
+    for k in schema["statement_correction"]["required"]:
+        if k not in r:
+            out.append(f"{p}:{no}: statement_correction missing {k}")
+    n = r.get("statement_correction")
+    if not isinstance(n, str):
+        return out + [f"{p}:{no}: statement_correction is the name of a record (a string)"]
+    if t != "tentative":
+        out.append(f"{p}:{no}: a statement_correction goes in data/tentative/ (staging and trusted records are compiled)")
+        return out
+    stmt, proof, reason = r.get("statement"), r.get("proof"), r.get("reason")
+    if not isinstance(stmt, str) or not isinstance(proof, str) or not stmt.strip():
+        return out + [f"{p}:{no}: statement and proof of a statement_correction are strings, the statement not empty"]
+    if not isinstance(reason, str) or not reason.strip() or "\n" in reason or len(reason) > 300:
+        out.append(f"{p}:{no}: reason is one line of at most 300 characters")
+    f = tentative_file(p)
+    if n not in f["texts"]:
+        return out + [f"{p}:{no}: statement_correction for {n}, which is no record of this file"]
+    if n in trusted_names():
+        out.append(f"{p}:{no}: {n} is already trusted; its text is the compiled one")
+    if n in f["tombstoned"]:
+        out.append(f"{p}:{no}: {n} is retracted; a correction for it would have no effect")
+    if n in f["corrected"]:
+        out.append(f"{p}:{no}: a second statement_correction of {n} in this PR (one per name; the newest wins across PRs)")
+    f["corrected"].add(n)
+    old_stmt, old_proof = f["texts"][n]
+    if (stmt, proof) == (old_stmt, old_proof):
+        out.append(f"{p}:{no}: the statement_correction of {n} changes nothing")
+    if not moves_only(old_stmt, old_proof, stmt, proof):
+        out.append(
+            f"{p}:{no}: the corrected text of {n} must be the current statement and proof with the seam between them moved, or the end cut off: the same characters, whitespace differing only at the seam"
+        )
+    a, b = stmt.rstrip(), old_stmt.rstrip()
+    if not (a.startswith(b) or b.startswith(a)):
+        out.append(f"{p}:{no}: the corrected statement of {n} and the current one must be one a prefix of the other")
+    if not re.search(r"(?<![\w'])" + re.escape(n.rsplit(".", 1)[-1]) + r"(?![\w'])", stmt):
+        out.append(f"{p}:{no}: statement does not declare {n} (its last component must appear; namespaces may come from context)")
+    return out
+
+
 for st, p in changed_files(base, head):
     if not match(
         p, ["data/tentative/*.jsonl", "data/staging/*.jsonl", "data/trusted/*.jsonl", "data/tentative/*/*.jsonl", "data/staging/*/*.jsonl"]
@@ -118,7 +216,11 @@ for st, p in changed_files(base, head):
         if not isinstance(r, dict):  # a number, string or list used to end the check in a traceback (scripts/ci/fuzz)
             errors.append(f"{p}:{no}: a record is a JSON object, not {type(r).__name__}")
             continue
-        if any(k in r for k in ("tombstone", "tombstone_note", "credit_correction")) and "at" in r and not AT_RE.fullmatch(str(r["at"])):
+        if (
+            any(k in r for k in ("tombstone", "tombstone_note", "credit_correction", "statement_correction"))
+            and "at" in r
+            and not AT_RE.fullmatch(str(r["at"]))
+        ):
             errors.append(f"{p}:{no}: at is a UTC date or time: YYYY-MM-DD or YYYY-MM-DDTHH:MM:SSZ (got {r['at']!r})")
         if "tombstone" in r:
             for k in schema["tombstone"]["required"]:
@@ -180,6 +282,9 @@ for st, p in changed_files(base, head):
                     errors.append(f"{p}:{no}: credit and evidence may not contain `-/` or `/-` (they are written into a Lean doc comment)")
                 if not good_link(str(r.get("evidence", ""))):
                     errors.append(f"{p}:{no}: evidence is an http(s) link to what shows the plagiarism")
+            continue
+        if "statement_correction" in r:
+            errors += check_statement_correction(p, no, r, t)
             continue
         req = schema["record"]["required"] + schema["record"].get("required_by_tier", {}).get(t, [])
         for k in req:
