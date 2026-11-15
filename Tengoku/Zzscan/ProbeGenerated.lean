@@ -13,5 +13,7 @@ open Tengoku.Zzscan
 local instance : Inhabited Foo := ⟨⟨0⟩⟩
 local instance : Small 0 := ⟨trivial⟩
 instance : Marked Nat := ⟨0⟩
+deriving instance Repr for Foo
 notation "probeℝ²" => (2 : Nat)
 infixl:65 " +probe+ " => Nat.add
+macro "probe_tac" : tactic => `(tactic| rfl)

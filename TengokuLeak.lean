@@ -57,11 +57,11 @@ structure Counts where
   notatScoped : Nat := 0
   /-- declarations of the library whose name has one component: nothing in the name says which library they belong to -/
   roots : Array Name := #[]
-  /-- those of `roots` that are instances: a name Lean generates for an anonymous `instance` is one, and no text declares it (reported as `root-instance:` lines). Global instances, and
+  /-- those of `roots` that are instances with a name Lean generated: an anonymous `instance`, whose name no text declares (reported as `root-instance:` lines). Global instances, and
   declarations whose type is a class: a `local instance` is one too, and leaves no entry in the instance table of the modules that import it -/
   rootInstances : Array Name := #[]
-  /-- those of `roots` that are syntax node kinds with the name Lean generates for a `notation`, `infix`, `syntax` or `macro` without one: the name of the syntax category, then the atoms
-  (`«termℝ²»`). No text declares it and no term refers to it (reported as `root-syntax:` lines) -/
+  /-- those of `roots` that are syntax node kinds with a name Lean generated: a `notation`, `infix`, `syntax` or `macro` without a name (`«termℝ²»`), which no text declares and no term
+  refers to (reported as `root-syntax:` lines) -/
   rootSyntax : Array Name := #[]
 
 def stripForall : Expr → Expr
@@ -189,6 +189,25 @@ def tokenKey (env : Environment) (decl : Name) : Option String := do
   let trailing := body.getAppFn.constName? == some ``ParserDescr.trailingNode
   return (if trailing then "trailing " else "leading ") ++ tok
 
+/-- the text a selection range covers on its first line, in the lines of its module's source -/
+def selected (lines : Array String) (r : DeclarationRange) : Option String :=
+  match lines[r.pos.line - 1]? with
+  | none => none
+  | some ln =>
+    let cs := ln.toList.drop r.pos.column
+    some (String.ofList (if r.endPos.line == r.pos.line then cs.take (r.endPos.column - r.pos.column) else cs))
+
+/-- Whether the source names the declaration where it declares it. The selection range of a declaration someone named holds that name (`def instFoo`, `instance instFoo : …`,
+`syntax (name := termFoo) …`); for a name Lean generated it holds the keyword (`instance`) or the whole command (`notation …`). With no source or no range nothing shows that Lean
+generated the name: it counts as written. -/
+def writtenName (lines? : Option (Array String)) (r? : Option DeclarationRanges) (n : Name) : Bool :=
+  match lines?, r? with
+  | some lines, some r =>
+    match selected lines r.selectionRange with
+    | some t => t == n.toString || t == n.toString (escape := false) || t.endsWith ("." ++ n.toString (escape := false))
+    | none => true
+  | _, _ => true
+
 def scan (pfxs : List Name) : CoreM (Array Leak × Counts) := do
   let env ← getEnv
   let idxs := (List.range env.header.moduleNames.size).filter fun i => pfxs.any (·.isPrefixOf env.header.moduleNames[i]!)
@@ -301,8 +320,12 @@ def scan (pfxs : List Name) : CoreM (Array Leak × Counts) := do
     for e in instanceExtension.ext.getModuleEntries env i do
       if let .global ie := e then
         if let some gn := ie.globalName? then instNames := instNames.insert gn
-  -- the names of the syntax categories (`term`, `tactic`, …, and the library's own): a generated node kind starts with one
-  let cats : List String := (Parser.parserExtension.getState env).categories.foldl (fun acc c _ => c.toString :: acc) []
+  -- the source of the library's modules (the scan runs under `lake env`, which sets LEAN_SRC_PATH): what a declaration's selection range holds there says whether someone wrote its name
+  let srcPath ← initSrcSearchPath
+  let mut sources : Array (Nat × Array String) := #[]
+  for i in idxs do
+    if let some file ← srcPath.findModuleWithExt "lean" env.header.moduleNames[i]! then
+      sources := sources.push (i, ((← IO.FS.readFile file).splitOn "\n").toArray)
   for (n, ci) in env.constants.map₁.toList do
     if let some m := env.getModuleIdxFor? n then
       if idxs.contains m && n.isAtomic && !n.isInternal && !n.hasMacroScopes then
@@ -312,9 +335,12 @@ def scan (pfxs : List Name) : CoreM (Array Leak × Counts) := do
           | some c => isClass env c
           | none => false
         let kind := ci.type.isConstOf ``Lean.ParserDescr || ci.type.isConstOf ``Lean.TrailingParserDescr
-        if instNames.contains n || ofClass then counts := { counts with rootInstances := counts.rootInstances.push n }
-        else if kind && cats.any (fun c => (n.toString (escape := false)).startsWith c) then
-          counts := { counts with rootSyntax := counts.rootSyntax.push n }
+        if instNames.contains n || ofClass || kind then
+          -- only a name Lean generated: one the source spells where it declares it (`instance instFoo`, `def instFoo : Monoid X`, `syntax (name := termFoo)`) is an ordinary root
+          let written := writtenName ((sources.find? (·.1 == m)).map (·.2)) (← findDeclarationRanges? n) n
+          if !written then
+            if kind then counts := { counts with rootSyntax := counts.rootSyntax.push n }
+            else counts := { counts with rootInstances := counts.rootInstances.push n }
   return (leaks, counts)
 
 def report (treePrefix : Name) (leaks : Array Leak) (c : Counts) : List String :=
