@@ -1,0 +1,7 @@
+# A toy package for .github/workflows/leakscan-tests.yml: two modules whose root-level names tengoku-leakscan must tell apart.
+name = "fixture"
+defaultTargets = ["Fixture"]
+
+[[lean_lib]]
+name = "Fixture"
+globs = ["Fixture.+"]

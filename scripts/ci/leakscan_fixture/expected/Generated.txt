@@ -1,0 +1,14 @@
+root-instance: instInhabitedFoo
+root-instance: instMarkedNat
+root-instance: instReprFoo
+root-instance: instSmallOfNatNat
+root-syntax: tacticFixture_tac
+root-syntax: «termFixtureℝ²»
+root-syntax: «term_+fixture+_»
+root: instInhabitedFoo
+root: instMarkedNat
+root: instReprFoo
+root: instSmallOfNatNat
+root: tacticFixture_tac
+root: «termFixtureℝ²»
+root: «term_+fixture+_»

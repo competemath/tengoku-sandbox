@@ -1,0 +1,15 @@
+root-instance: instTaggedNat
+root-syntax: «termFixture∂»
+root: fixtureNamedKind
+root: fixtureWritten
+root: instLooksGenerated
+root: instNamedLikeGenerated
+root: instQuotedDef
+root: instQuotedInstance
+root: instTaggedNat
+root: instWrittenInstance
+root: myTagged
+root: termHandWritten
+root: termNamedLikeGenerated
+root: termQuotedKind
+root: «termFixture∂»

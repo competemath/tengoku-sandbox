@@ -204,7 +204,9 @@ def writtenName (lines? : Option (Array String)) (r? : Option DeclarationRanges)
   match lines?, r? with
   | some lines, some r =>
     match selected lines r.selectionRange with
-    | some t => t == n.toString || t == n.toString (escape := false) || t.endsWith ("." ++ n.toString (escape := false))
+    | some t =>
+      -- as written the name may be quoted (`«instFoo»`) or spelled from the root (`_root_.instFoo`): it is in the text either way
+      (((t.replace "«" "").replace "»" "").splitOn (n.toString (escape := false))).length > 1
     | none => true
   | _, _ => true
 

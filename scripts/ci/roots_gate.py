@@ -11,9 +11,10 @@ TENGOKU_ROOTS_REQUIRED is the repository variable: `1` fails a group that has a 
 theirs until the tree's own fix of them has merged: the variable is turned on after that).
 
 A name Lean generates is listed, not refused: nobody writes it, no text declares it and no term refers to it, so nothing reads it two ways, and a second library that generates the same one
-fails the queue's build of the whole tree. There are two kinds. An instance name (of the shape `instFooBar`, on what the scanner reports as `root-instance:`: a global instance, or a
-declaration of a class, which is what a `local instance` leaves) (auto_named). A syntax node kind (`«termℝ²»`, what a `notation`, `infix`, `syntax` or `macro` without a name makes: the
-name of the syntax category, then the atoms; the scanner reports a kind of that shape as `root-syntax:`). The final inventory of 2026-11-14 had 47 of them in six libraries and no other root. Exit status: 0 nothing to report or not required; 1 required and at least one root name that is not one. The report goes to stdout (and the step summary).
+fails the queue's build of the whole tree. The scanner says which roots those are, from the source: a name is generated when the text does not spell it where it declares it. There are two
+kinds. An instance name (`root-instance:`: an anonymous `instance`, global or `local`, or a derived one), which must also have the shape Lean gives, `instFooBar` (auto_named). A syntax
+node kind (`root-syntax:`: `«termℝ²»`, what a `notation`, `infix`, `syntax` or `macro` without a name makes). A name someone wrote in that shape (`def instFoo : Monoid X`,
+`instance instFoo : …`, `syntax (name := termFoo) …`) is not reported as either and is an ordinary root. The final inventory of 2026-11-14 had 47 generated names in six libraries. Exit status: 0 nothing to report or not required; 1 required and at least one root name that is not one. The report goes to stdout (and the step summary).
 """
 
 from __future__ import annotations
