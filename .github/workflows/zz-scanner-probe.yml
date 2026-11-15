@@ -1,0 +1,38 @@
+# A probe, never merged: builds tengoku-leakscan as this branch has it, scans two small modules and shows what the roots guard says.
+name: scanner-probe
+on:
+  push:
+    branches: [probe/roots-generated-names]
+permissions: {}
+defaults:
+  run:
+    shell: bash
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions: { contents: read }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - name: elan
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSfL -o "$RUNNER_TEMP/elan-init.sh" https://raw.githubusercontent.com/leanprover/elan/0e36a07b9bbcc5381fa6250df109f9a4f94d7bac/elan-init.sh
+          echo "a620ff1641616222c8d37c54845492004bb84d6877cdbc944dd65c1aa685bf53  $RUNNER_TEMP/elan-init.sh" | sha256sum -c -
+          sh "$RUNNER_TEMP/elan-init.sh" -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: The scanner and the two probe modules compile
+        run: |
+          lake build tengoku-leakscan 2>&1 | tail -15
+          lake build Tengoku.Zzscan.ProbeGenerated Tengoku.Zzscan.ProbeWritten 2>&1 | tail -15
+      - name: Scan and judge
+        run: |
+          for m in ProbeGenerated ProbeWritten; do
+            echo "=================== $m: the report"
+            lake env .lake/build/bin/tengoku-leakscan --module "Tengoku.Zzscan.$m" --prefix "Tengoku.Zzscan.$m" > "$m.txt" 2>&1 || echo "scanner exit $?"
+            cat "$m.txt"
+            echo "------------------- $m: the guard, required"
+            set +e
+            TENGOKU_ROOTS_REQUIRED=1 python3 scripts/ci/roots_gate.py < "$m.txt"; echo "guard exit $?"
+            set -e
+          done
