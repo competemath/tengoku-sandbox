@@ -324,7 +324,7 @@ def scan (pfxs : List Name) : CoreM (Array Leak × Counts) := do
   let srcPath : System.SearchPath := ((← IO.getEnv "LEAN_SRC_PATH").map System.SearchPath.parse).getD ["."]
   let mut sources : Array (Nat × Array String) := #[]
   for i in idxs do
-    if let some file ← srcPath.findModuleWithExt "lean" env.header.moduleNames[i]! then
+    if let some file ← SearchPath.findModuleWithExt srcPath "lean" env.header.moduleNames[i]! then
       sources := sources.push (i, ((← IO.FS.readFile file).splitOn "\n").toArray)
   for (n, ci) in env.constants.map₁.toList do
     if let some m := env.getModuleIdxFor? n then
