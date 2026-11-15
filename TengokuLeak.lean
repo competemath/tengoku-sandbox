@@ -321,7 +321,7 @@ def scan (pfxs : List Name) : CoreM (Array Leak × Counts) := do
       if let .global ie := e then
         if let some gn := ie.globalName? then instNames := instNames.insert gn
   -- the source of the library's modules (the scan runs under `lake env`, which sets LEAN_SRC_PATH): what a declaration's selection range holds there says whether someone wrote its name
-  let srcPath ← initSrcSearchPath
+  let srcPath : System.SearchPath := ((← IO.getEnv "LEAN_SRC_PATH").map System.SearchPath.parse).getD ["."]
   let mut sources : Array (Nat × Array String) := #[]
   for i in idxs do
     if let some file ← srcPath.findModuleWithExt "lean" env.header.moduleNames[i]! then
