@@ -339,7 +339,7 @@ def scan (pfxs : List Name) : CoreM (Array Leak × Counts) := do
         let kind := ci.type.isConstOf ``Lean.ParserDescr || ci.type.isConstOf ``Lean.TrailingParserDescr
         if instNames.contains n || ofClass || kind then
           -- only a name Lean generated: one the source spells where it declares it (`instance instFoo`, `def instFoo : Monoid X`, `syntax (name := termFoo)`) is an ordinary root
-          let written := false
+          let written := writtenName ((sources.find? (·.1 == m)).map (·.2)) (← findDeclarationRanges? n) n
           if !written then
             if kind then counts := { counts with rootSyntax := counts.rootSyntax.push n }
             else counts := { counts with rootInstances := counts.rootInstances.push n }
