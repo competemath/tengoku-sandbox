@@ -1,6 +1,6 @@
 name: lose-runner
-# SANDBOX CAMPAIGN ONLY (tengoku#915): a job named like queue-gate's build job that really loses its runner, to see what GitHub reports and to run
-# scripts/ci/requeue_lost.py against a real lost-runner run. It exists only on the campaign branch.
+# SANDBOX CAMPAIGN ONLY (tengoku#915): a job named like queue-gate's build job whose VM goes away, to see what GitHub reports and to run
+# scripts/ci/requeue_lost.py against a real lost-runner run. It exists only on the campaign branch. (Killing only the runner processes ends as "cancelled" at the time limit, not as a lost runner.)
 on:
   push:
     branches: [campaign/requeue-lost]
@@ -8,12 +8,9 @@ permissions: {}
 jobs:
   queue-build:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 45
     steps:
       - name: before
-        run: echo "the runner is about to be killed"
-      - name: kill the runner
-        run: |
-          sudo pkill -9 -f Runner.Listener || true
-          sudo pkill -9 -f Runner.Worker || true
-          sleep 120
+        run: echo "the machine is about to go away"
+      - name: the machine goes away
+        run: sudo systemctl poweroff -f || sudo poweroff -f
