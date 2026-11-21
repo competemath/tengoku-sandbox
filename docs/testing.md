@@ -366,3 +366,5 @@ promotion run builds up to `max_files` source files' modules on the attested cac
 removals, and waits for its PR before the next batch. `scripts/promote-loop.sh` is the same thing for a laptop.
 
 <!-- deltas scenario -->
+
+cg campaign
