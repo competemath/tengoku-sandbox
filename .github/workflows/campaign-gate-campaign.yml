@@ -1,0 +1,44 @@
+# A change to the pipeline itself comes with a campaign, or with a waiver only the approver account can give (docs/campaign-gate.md).
+#
+# pull_request_target on purpose, as in pr-gate.yml: this file and scripts/ci/campaign_check.py run as they are on the BASE branch, so a pull request cannot weaken its own gate. Nothing of the
+# pull request is checked out or run: its file list and its reviews are read from the API. A change to this file takes effect only once merged.
+#
+# Making `campaign-gate` a REQUIRED check is a branch-protection (ruleset) setting of the repository, not something a workflow can do: until the owner adds it, this check reports but blocks nothing.
+# A waiver is a review written after this check ran: re-run the check (the script reads the reviews when it runs). A push voids the waiver, because the review is on the old commit.
+name: campaign-gate
+# SANDBOX COPY of .github/workflows/campaign-gate.yml for the campaign: pull_request on the campaign branch, approver = the agent account
+on:
+  pull_request:
+    branches: [camp-cg-1121]
+    types: [opened, synchronize, reopened]
+permissions: {}
+defaults:
+  run:
+    shell: bash
+concurrency:
+  group: campaign-gate-${{ github.event.pull_request.number || github.event.merge_group.head_ref }}
+  cancel-in-progress: true
+jobs:
+  campaign-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions: { contents: read, pull-requests: read }
+    steps:
+      - name: The merge queue entry was judged as a pull request
+        if: false
+        run: echo "judged on the pull request"
+      - if: github.event_name == 'pull_request'
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2
+        with: { egress-policy: audit }
+      - if: github.event_name == 'pull_request'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { ref: "${{ github.event.pull_request.base.ref }}", persist-credentials: false }
+      - name: A CI-class change needs a campaign or the approver's waiver
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+          APPROVER: mikael-bashir
+        run: python3 scripts/ci/campaign_check.py
