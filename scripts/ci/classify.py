@@ -127,3 +127,4 @@ cls = classes[0]
 print(f"class={cls} ({len(files)} files)")
 gh_output("class", cls)
 gh_output("files", " ".join(p for _, p in files))
+# cg campaign
